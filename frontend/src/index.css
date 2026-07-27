@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Nunito', 'Comic Sans MS', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7d2fe;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a5b4fc;
+}
+
+@layer components {
+.animate-gradient {
+  animation: gradientShift 8s ease infinite;
+  background-size: 200% 200%;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(5deg); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6); }
+}
+
+.slide-up { animation: slideUp 0.6s ease-out both; }
+.slide-up-delay-1 { animation: slideUp 0.6s ease-out 0.1s both; }
+.slide-up-delay-2 { animation: slideUp 0.6s ease-out 0.2s both; }
+.slide-up-delay-3 { animation: slideUp 0.6s ease-out 0.3s both; }
+
+.btn-primary {
+  @apply rounded-xl bg-violet-500 px-6 py-3 font-semibold text-white hover:bg-violet-600 disabled:opacity-60 transition-all duration-200 shadow-sm hover:shadow-md;
+}
+
+.btn-secondary {
+  @apply rounded-xl bg-slate-100 px-6 py-3 font-medium text-slate-700 hover:bg-slate-200 transition-all duration-200;
+}
+
+.card {
+  @apply rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow duration-200;
+}
+
+.input-field {
+  @apply w-full rounded-xl border border-slate-200 px-4 py-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 transition-colors;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium;
+}
+
+/* Glassmorphism card */
+.glass-card {
+  @apply rounded-2xl bg-white/90 backdrop-blur-lg border border-white/30 shadow-xl;
+}
+
+/* Multi-step form progress */
+.step-indicator {
+  @apply flex items-center justify-center gap-4;
+}
+
+.step-dot {
+  @apply h-10 w-10 rounded-full flex items-center justify-center text-lg transition-all duration-300;
+}
+
+.step-dot.active {
+  @apply bg-violet-500 text-white shadow-lg scale-110;
+}
+
+.step-dot.completed {
+  @apply bg-emerald-500 text-white;
+}
+
+.step-dot.inactive {
+  @apply bg-slate-200 text-slate-400;
+}
+
+/* Toast notification */
+.toast {
+  @apply fixed bottom-6 right-6 z-50 rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-3 text-sm font-medium slide-up;
+}
+
+.toast-success {
+  @apply bg-emerald-500 text-white;
+}
+
+.toast-error {
+  @apply bg-red-500 text-white;
+}
+
+.toast-info {
+  @apply bg-sky-500 text-white;
+}
+}
