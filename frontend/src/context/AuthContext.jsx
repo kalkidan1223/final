@@ -32,9 +32,11 @@ export function AuthProvider({ children }) {
 
   const registerParent = useCallback(async (payload) => {
     const { data } = await axiosClient.post('/auth/register/parent', payload);
-    setAccessToken(data.access_token);
-    setUser(data.user);
-    return data.user;
+    if (data.access_token) {
+      setAccessToken(data.access_token);
+      setUser(data.user);
+    }
+    return data;
   }, []);
 
   const registerStudent = useCallback(async (payload) => {

@@ -122,7 +122,6 @@ export default function Login() {
                     Password
                   </label>
                   <div className="relative group">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl transition group-focus-within:scale-110">🔒</span>
                     <input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
@@ -130,7 +129,7 @@ export default function Login() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 pl-12 pr-14 text-base text-slate-800 transition-all duration-300 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100 hover:border-slate-300"
+                      className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 pl-4 pr-14 text-base text-slate-800 transition-all duration-300 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100 hover:border-slate-300"
                     />
                     <button
                       type="button"

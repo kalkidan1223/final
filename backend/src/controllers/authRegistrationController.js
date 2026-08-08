@@ -38,8 +38,9 @@ async function publicUser(row) {
   return base;
 }
 
-async function logAudit(userId, action, entityType, entityId, oldValues, newValues, metadata) {
-  await query(
+async function logAudit(client, userId, action, entityType, entityId, oldValues, newValues, metadata) {
+  const q = client ? client.query : query;
+  await q(
     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [userId, action, entityType, entityId, oldValues || null, newValues || null, null, null, metadata || null]
@@ -98,9 +99,13 @@ async function registerParent(req, res, next) {
         ]
       );
 
-      await logAudit(null, 'PARENT_REGISTRATION', 'registration_request', result.rows[0].id, null, {
-        full_name: result.rows[0].full_name, email: result.rows[0].email,
-      });
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [null, 'PARENT_REGISTRATION', 'registration_request', result.rows[0].id, null, {
+          full_name: result.rows[0].full_name, email: result.rows[0].email,
+        }, null, null, null]
+      );
 
       await client.query('COMMIT');
       res.status(201).json({

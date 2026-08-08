@@ -76,6 +76,7 @@ export default function RegisterParent() {
   const [currentStep, setCurrentStep] = useState(0);
   const [errors, setErrors] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const [form, setForm] = useState({
     // Personal
@@ -84,7 +85,7 @@ export default function RegisterParent() {
     phone: '', alt_phone: '', email: '',
     password: '', confirm_password: '',
     occupation: '', relationship_to_child: '',
-    national_id: '', profile_image: null,
+    national_id: '',
     // Address
     country: '', region: '', city: '',
     sub_city: '', woreda: '', house_number: '', postal_code: '',
@@ -94,32 +95,11 @@ export default function RegisterParent() {
     terms_agreed: false, guardian_confirmed: false,
   });
 
-  const [childPreview, setChildPreview] = useState(null);
-
   function update(field) {
     return (e) => {
       const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
       setForm((f) => ({ ...f, [field]: value }));
     };
-  }
-
-  function handleFileChange(e) {
-    const file = e.target.files[0];
-    if (file) {
-      const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-      if (!validTypes.includes(file.type)) {
-        setErrors((prev) => [...prev, 'Profile picture must be JPG, PNG, or WEBP']);
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        setErrors((prev) => [...prev, 'Profile picture must be under 5MB']);
-        return;
-      }
-      setForm((f) => ({ ...f, profile_image: file }));
-      const reader = new FileReader();
-      reader.onloadend = () => setChildPreview(reader.result);
-      reader.readAsDataURL(file);
-    }
   }
 
   const age = calculateAge(form.date_of_birth);
@@ -142,6 +122,16 @@ export default function RegisterParent() {
       if (form.password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.password))
         errs.push('Password must be 8+ chars, with uppercase, lowercase, number, and special character');
       if (form.password !== form.confirm_password) errs.push('Passwords do not match');
+    } else if (step === 1) {
+      if (!form.country) errs.push('Country is required');
+      if (!form.region) errs.push('Region is required');
+      if (!form.city) errs.push('City is required');
+      if (!form.occupation) errs.push('Occupation is required');
+      if (!form.relationship_to_child) errs.push('Relationship to child is required');
+      if (!form.emergency_contact_name) errs.push('Emergency contact name is required');
+      if (!form.emergency_contact_relationship) errs.push('Emergency contact relationship is required');
+      if (!form.emergency_contact_phone || !/^\d{10,15}$/.test(form.emergency_contact_phone)) errs.push('Emergency contact phone must be 10-15 digits');
+    } else if (step === 2) {
       if (!form.terms_agreed) errs.push('You must agree to the Terms and Conditions');
       if (!form.guardian_confirmed) errs.push('You must confirm you are the legal guardian');
     }
@@ -166,9 +156,19 @@ export default function RegisterParent() {
     setErrors([]);
     setSubmitting(true);
     try {
-      const payload = { ...form, date_of_birth: form.date_of_birth || null };
+      const allErrors = [
+        ...validateStep(0),
+        ...validateStep(1),
+        ...validateStep(2),
+      ];
+      if (allErrors.length > 0) {
+        setErrors(allErrors);
+        return;
+      }
+      const full_name = `${form.first_name} ${form.middle_name} ${form.last_name}`.trim();
+      const payload = { ...form, full_name, date_of_birth: form.date_of_birth || null };
       await registerParent(payload);
-      navigate('/parent/dashboard');
+      setSubmitted(true);
     } catch (err) {
       const apiErrors = err.response?.data?.errors || [err.response?.data?.error || 'Registration failed'];
       setErrors(apiErrors);
@@ -239,7 +239,16 @@ export default function RegisterParent() {
                 </div>
               )}
 
-              {/* Step 0: Personal Info */}
+              {submitted ? (
+                <div className="text-center py-10 slide-up">
+                  <div className="text-6xl mb-4">📬</div>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Registration Submitted!</h2>
+                  <p className="text-slate-600 mb-6">Your parent account is now pending administrator approval. You will be able to log in once an admin reviews and approves your registration.</p>
+                  <Link to="/login" className="inline-block rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-bold text-white shadow-lg transition hover:scale-105">Go to Login</Link>
+                </div>
+              ) : (
+                <>
+                  {/* Step 0: Personal Info */}
               {currentStep === 0 && (
                 <div className="space-y-6 slide-up">
                   <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">👤 Personal Information</h2>
@@ -300,13 +309,8 @@ export default function RegisterParent() {
                     <input placeholder="Occupation *" required value={form.occupation} onChange={update('occupation')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400" />
                     <input placeholder="Relationship to Child *" required value={form.relationship_to_child} onChange={update('relationship_to_child')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400" />
                   </div>
-                  <input placeholder="National ID (Optional)" value={form.national_id} onChange={update('national_id')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
-                  <div>
-                    <label className="mb-1 block text-sm font-bold text-slate-700">Profile Picture</label>
-                    <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={handleFileChange} className="w-full rounded-xl border-2 border-dashed border-slate-300 py-3 px-4 text-sm text-slate-500 file:mr-4 file:rounded-lg file:bg-teal-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-teal-700 hover:file:bg-teal-100" />
-                    {childPreview && <img src={childPreview} alt="Preview" className="mt-3 h-24 w-24 rounded-xl object-cover border-2 border-slate-200" />}
-                  </div>
-                </div>
+                   <input placeholder="National ID (Optional)" value={form.national_id} onChange={update('national_id')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
+                 </div>
               )}
 
               {/* Step 2: Consent & Submit */}
@@ -351,6 +355,8 @@ export default function RegisterParent() {
                   </button>
                 )}
               </div>
+              </>
+            )}
             </form>
           </div>
         </main>

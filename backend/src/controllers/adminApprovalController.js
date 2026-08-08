@@ -15,8 +15,9 @@ function refreshCookieOptions() {
   };
 }
 
-async function logAudit(userId, action, entityType, entityId, oldValues, newValues, metadata) {
-  await query(
+async function logAudit(client, userId, action, entityType, entityId, oldValues, newValues, metadata) {
+  const q = client ? client.query : query;
+  await q(
     `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [userId, action, entityType, entityId, oldValues || null, newValues || null, null, null, metadata || null]
@@ -118,9 +119,11 @@ async function approveParentRegistration(req, res, next) {
         [req.user.id, notes || null, id]
       );
 
-      await logAudit(
-        req.user.id, 'APPROVE_PARENT_REGISTRATION', 'registration_request', id,
-        { status: 'pending' }, { status: 'approved', user_id: user.id }
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [req.user.id, 'APPROVE_PARENT_REGISTRATION', 'registration_request', id,
+         { status: 'pending' }, { status: 'approved', user_id: user.id }, null, null, null]
       );
 
       await client.query('COMMIT');
@@ -168,8 +171,7 @@ async function rejectParentRegistration(req, res, next) {
       [reason, req.user.id, id]
     );
 
-    await logAudit(
-      req.user.id, 'REJECT_PARENT_REGISTRATION', 'registration_request', id,
+    await logAudit(null, req.user.id, 'REJECT_PARENT_REGISTRATION', 'registration_request', id,
       { status: 'pending' }, { status: 'rejected', reason }
     );
 
@@ -211,8 +213,7 @@ async function suspendParentRegistration(req, res, next) {
       [reason, req.user.id, id]
     );
 
-    await logAudit(
-      req.user.id, 'SUSPEND_PARENT_REGISTRATION', 'registration_request', id,
+    await logAudit(null, req.user.id, 'SUSPEND_PARENT_REGISTRATION', 'registration_request', id,
       { status: 'pending' }, { status: 'suspended', reason }
     );
 
@@ -365,9 +366,11 @@ async function approveStudentRegistration(req, res, next) {
         [req.user.id, notes || null, id]
       );
 
-      await logAudit(
-        req.user.id, 'APPROVE_STUDENT_REGISTRATION', 'student_registration_request', id,
-        { status: 'pending' }, { status: 'approved', user_id: user.id }
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [req.user.id, 'APPROVE_STUDENT_REGISTRATION', 'student_registration_request', id,
+         { status: 'pending' }, { status: 'approved', user_id: user.id }, null, null, null]
       );
 
       await client.query('COMMIT');
@@ -411,8 +414,7 @@ async function rejectStudentRegistration(req, res, next) {
       [reason, req.user.id, id]
     );
 
-    await logAudit(
-      req.user.id, 'REJECT_STUDENT_REGISTRATION', 'student_registration_request', id,
+    await logAudit(null, req.user.id, 'REJECT_STUDENT_REGISTRATION', 'student_registration_request', id,
       { status: 'pending' }, { status: 'rejected', reason }
     );
 
