@@ -137,7 +137,7 @@ CREATE INDEX idx_audit_created ON audit_logs(created_at);
 -- ----------------------------------------------------------------------------
 CREATE TABLE user_sessions (
     id              BIGSERIAL PRIMARY KEY,
-    user_id         BIGINT NOT NULL REFERENCES users(id) ON_DELETE CASCADE,
+    user_id         BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash      VARCHAR(255) NOT NULL,
     device_info     TEXT,
     ip_address      VARCHAR(45),
