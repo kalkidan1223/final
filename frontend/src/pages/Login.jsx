@@ -2,6 +2,41 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+const ROLE_HOME = {
+  admin: '/admin/dashboard',
+  instructor: '/instructor/courses',
+  parent: '/parent/dashboard',
+  student: '/student/dashboard',
+};
+
+function MailIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <rect x="2" y="4" width="20" height="16" rx="3" />
+      <path d="m3 7 9 6 9-6" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <rect x="4" y="10" width="16" height="11" rx="2.5" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+function EyeIcon({ off }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <line x1="3" y1="3" x2="21" y2="21" />}
+    </svg>
+  );
+}
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -11,16 +46,14 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setSubmitting(true);
-    setLoading(true);
     try {
       const user = await login(email, password);
-      navigate('/admin/dashboard');
+      navigate(ROLE_HOME[user.role] || '/');
     } catch (err) {
       const msg = err.response?.data?.error || 'Something went wrong. Please try again.';
       setError(msg);
@@ -29,7 +62,6 @@ export default function Login() {
       }
     } finally {
       setSubmitting(false);
-      setLoading(false);
     }
   }
 
@@ -104,7 +136,7 @@ export default function Login() {
                     Email Address
                   </label>
                   <div className="relative group">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl transition group-focus-within:scale-110">📧</span>
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-violet-500"><MailIcon /></span>
                     <input
                       id="email"
                       type="email"
@@ -113,6 +145,7 @@ export default function Login() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 pl-12 pr-4 text-base text-slate-800 transition-all duration-300 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100 hover:border-slate-300"
+                      autoComplete="email"
                     />
                   </div>
                 </div>
@@ -122,7 +155,7 @@ export default function Login() {
                     Password
                   </label>
                   <div className="relative group">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl transition group-focus-within:scale-110">🔒</span>
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition group-focus-within:text-violet-500"><LockIcon /></span>
                     <input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
@@ -131,13 +164,16 @@ export default function Login() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 pl-12 pr-14 text-base text-slate-800 transition-all duration-300 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100 hover:border-slate-300"
+                      autoComplete="current-password"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-200"
                     >
-                      {showPassword ? '🙈' : '👁️'}
+                      <EyeIcon off={showPassword} />
                     </button>
                   </div>
                 </div>
@@ -162,7 +198,7 @@ export default function Login() {
                   disabled={submitting}
                   className="w-full rounded-2xl bg-gradient-to-r from-violet-500 to-sky-500 py-4 text-lg font-bold text-white shadow-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:from-violet-600 hover:to-sky-600 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed"
                 >
-                  {loading ? (
+                  {submitting ? (
                     <span className="flex items-center justify-center gap-3">
                       <svg className="h-6 w-6 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
