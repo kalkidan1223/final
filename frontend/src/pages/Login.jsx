@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ROLE_HOME } from '../utils/roles';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { user, loading: authLoading, login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate(ROLE_HOME[user.role] || '/', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -19,8 +26,8 @@ export default function Login() {
     setSubmitting(true);
     setLoading(true);
     try {
-      const user = await login(email, password);
-      navigate('/admin/dashboard');
+      const loggedInUser = await login(email, password);
+      navigate(ROLE_HOME[loggedInUser.role] || '/');
     } catch (err) {
       const msg = err.response?.data?.error || 'Something went wrong. Please try again.';
       setError(msg);

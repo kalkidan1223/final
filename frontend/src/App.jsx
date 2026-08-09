@@ -29,13 +29,7 @@ import StudentCourseDetail from './pages/student/StudentCourseDetail';
 import StudentLessonDetail from './pages/student/StudentLessonDetail';
 import QuizTake from './pages/student/QuizTake';
 import ActivitySubmit from './pages/student/ActivitySubmit';
-
-const ROLE_HOME = {
-  admin: '/admin/dashboard',
-  instructor: '/instructor/courses',
-  parent: '/parent/dashboard',
-  student: '/student/dashboard',
-};
+import { ROLE_HOME } from './utils/roles';
 
 function Root() {
   const { user, loading } = useAuth();

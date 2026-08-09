@@ -1,180 +1,272 @@
-import { useEffect, useState } from 'react';
-import Layout from '../../components/Layout';
+import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import AdminLayout from '../../components/AdminLayout';
+import { useAuth } from '../../context/AuthContext';
 import axiosClient from '../../api/axiosClient';
 
-function StatCard({ label, value, accent, icon }) {
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition">
-      <div className="flex items-center gap-3 mb-3">
-        <span className="text-3xl">{icon}</span>
-        <p className="text-sm text-slate-500">{label}</p>
+function StatCard({ label, value, accent, icon, to, highlight }) {
+  const inner = (
+    <div
+      className={`rounded-2xl bg-white p-5 shadow-sm border transition hover:shadow-md ${
+        highlight ? 'border-amber-200 ring-2 ring-amber-100' : 'border-slate-100'
+      } ${to ? 'cursor-pointer hover:border-violet-200' : ''}`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-2xl">{icon}</span>
+        {highlight && value > 0 && (
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+            Action needed
+          </span>
+        )}
       </div>
       <p className={`text-3xl font-bold ${accent}`}>{value}</p>
+      <p className="text-sm text-slate-500 mt-1">{label}</p>
     </div>
+  );
+
+  if (to) {
+    return <Link to={to} className="block no-underline">{inner}</Link>;
+  }
+  return inner;
+}
+
+function QuickAction({ to, icon, title, description, color }) {
+  const colors = {
+    amber: 'bg-amber-50 hover:bg-amber-100 text-amber-700',
+    violet: 'bg-violet-50 hover:bg-violet-100 text-violet-700',
+    sky: 'bg-sky-50 hover:bg-sky-100 text-sky-700',
+    emerald: 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700',
+  };
+  return (
+    <Link
+      to={to}
+      className={`flex items-center gap-4 rounded-xl p-4 transition group ${colors[color]}`}
+    >
+      <span className="text-2xl group-hover:scale-110 transition-transform">{icon}</span>
+      <div>
+        <p className="font-semibold">{title}</p>
+        <p className="text-sm opacity-80">{description}</p>
+      </div>
+      <span className="ml-auto opacity-50 group-hover:opacity-100 transition">→</span>
+    </Link>
   );
 }
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', qualification: '' });
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  async function loadStats() {
-    setLoading(true);
-    const { data } = await axiosClient.get('/admin/dashboard');
-    setStats(data);
-    setLoading(false);
-  }
+  const loadStats = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
+    setError('');
+    try {
+      const { data } = await axiosClient.get('/admin/dashboard');
+      setStats(data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not load dashboard data.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [loadStats]);
 
   function countFor(rows, key) {
-    return rows?.find((r) => r.role === key || r.status === key)?.count || 0;
+    const row = rows?.find((r) => r.role === key || r.status === key);
+    return row ? Number(row.count) : 0;
   }
 
-  async function handleCreateInstructor(e) {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setSubmitting(true);
-    try {
-      await axiosClient.post('/admin/instructors', form);
-      setSuccess(`Instructor account created for ${form.full_name}`);
-      setForm({ full_name: '', email: '', password: '', qualification: '' });
-    } catch (err) {
-      const apiErrors = err.response?.data?.errors || [err.response?.data?.error || 'Could not create account'];
-      setError(apiErrors.join(', '));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  const totalUsers = stats?.users_by_role?.reduce((sum, r) => sum + r.count, 0) || 0;
-  const totalPublished = stats?.courses_by_status?.find((r) => r.status === 'published')?.count || 0;
+  const totalUsers = stats?.users_by_role?.reduce((sum, r) => sum + Number(r.count), 0) || 0;
+  const pendingApprovals =
+    (stats?.pending_parent_registrations || 0) + (stats?.pending_student_registrations || 0);
+  const pendingSubmissions = countFor(stats?.submissions_by_status, 'pending');
+  const publishedCourses = countFor(stats?.courses_by_status, 'published');
 
   return (
-    <Layout>
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-slate-800 mb-8">🎓 Admin Dashboard</h1>
+    <AdminLayout>
+      <div className="max-w-6xl">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
+            <p className="text-slate-500 mt-1">
+              Welcome back, {user?.full_name?.split(' ')[0] || 'Admin'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadStats(true)}
+            disabled={refreshing || loading}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition"
+          >
+            {refreshing ? 'Refreshing…' : '↻ Refresh'}
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-6 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => loadStats()}
+              className="font-semibold underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {pendingApprovals > 0 && !loading && (
+          <Link
+            to="/admin/approval"
+            className="mb-6 flex items-center gap-3 rounded-xl bg-amber-50 border border-amber-200 px-5 py-4 hover:bg-amber-100 transition no-underline"
+          >
+            <span className="text-2xl">⚠️</span>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-800">
+                {pendingApprovals} registration{pendingApprovals !== 1 ? 's' : ''} awaiting review
+              </p>
+              <p className="text-sm text-amber-600">
+                {stats.pending_parent_registrations} parent
+                {stats.pending_parent_registrations !== 1 ? 's' : ''},{' '}
+                {stats.pending_student_registrations} student
+                {stats.pending_student_registrations !== 1 ? 's' : ''} — click to review
+              </p>
+            </div>
+            <span className="text-amber-600 font-semibold">Review →</span>
+          </Link>
+        )}
 
         {loading ? (
-          <p className="text-slate-500 text-center py-10">Loading dashboard…</p>
-        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-2xl bg-white p-5 border border-slate-100 animate-pulse">
+                <div className="h-8 w-8 bg-slate-200 rounded mb-3" />
+                <div className="h-8 w-16 bg-slate-200 rounded mb-2" />
+                <div className="h-4 w-24 bg-slate-100 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : stats ? (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
-              <StatCard label="Total Users" value={totalUsers} accent="text-violet-600" icon="👥" />
-              <StatCard label="Published Courses" value={totalPublished} accent="text-emerald-600" icon="📚" />
-              <StatCard label="Active Students" value={stats.active_students} accent="text-amber-600" icon="🎓" />
-              <StatCard label="Pending Submissions" value={countFor(stats.submissions_by_status, 'pending')} accent="text-rose-600" icon="📋" />
-              <StatCard label="Parents" value={countFor(stats.users_by_role, 'parent')} accent="text-emerald-600" icon="👨‍👩‍👧" />
-              <StatCard label="Instructors" value={countFor(stats.users_by_role, 'instructor')} accent="text-sky-600" icon="👨‍🏫" />
-              <StatCard label="Graded Submissions" value={countFor(stats.submissions_by_status, 'graded')} accent="text-emerald-600" icon="✅" />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <StatCard
+                label="Pending Approvals"
+                value={pendingApprovals}
+                accent="text-amber-600"
+                icon="✅"
+                to="/admin/approval"
+                highlight={pendingApprovals > 0}
+              />
+              <StatCard
+                label="Active Students"
+                value={stats.active_students}
+                accent="text-sky-600"
+                icon="🎓"
+                to="/admin/students"
+              />
+              <StatCard
+                label="Total Users"
+                value={totalUsers}
+                accent="text-violet-600"
+                icon="👥"
+                to="/admin/users"
+              />
+              <StatCard
+                label="Published Courses"
+                value={publishedCourses}
+                accent="text-emerald-600"
+                icon="📚"
+                to="/admin/courses"
+              />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <form onSubmit={handleCreateInstructor} className="rounded-2xl bg-white p-8 shadow-sm border border-slate-100">
-                <h2 className="text-xl font-semibold text-slate-700 mb-6 flex items-center gap-2">
-                  <span className="text-2xl">➕</span> Create an Instructor Account
-                </h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Full Name</label>
-                    <input
-                      required
-                      placeholder="Enter full name"
-                      value={form.full_name}
-                      onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-                    <input
-                      required
-                      type="email"
-                      placeholder="instructor@school.edu"
-                      value={form.email}
-                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Temporary Password</label>
-                    <input
-                      required
-                      type="password"
-                      placeholder="At least 8 characters"
-                      value={form.password}
-                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Qualification (optional)</label>
-                    <input
-                      placeholder="e.g. B.Sc. Mathematics"
-                      value={form.qualification}
-                      onChange={(e) => setForm((f) => ({ ...f, qualification: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                    />
-                  </div>
-                  {error && <p className="text-sm text-rose-600">{error}</p>}
-                  {success && <p className="text-sm text-emerald-600">{success}</p>}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full rounded-xl bg-violet-500 px-6 py-3 font-semibold text-white hover:bg-violet-600 disabled:opacity-60 transition text-lg"
-                  >
-                    {submitting ? 'Creating…' : '✨ Create Instructor'}
-                  </button>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+                <h2 className="text-lg font-semibold text-slate-700 mb-4">Quick Actions</h2>
+                <div className="space-y-3">
+                  <QuickAction
+                    to="/admin/approval"
+                    icon="✅"
+                    title="Review Approvals"
+                    description="Approve or reject parent & student registrations"
+                    color="amber"
+                  />
+                  <QuickAction
+                    to="/admin/instructors"
+                    icon="👨‍🏫"
+                    title="Manage Instructors"
+                    description="Create accounts and manage instructor access"
+                    color="violet"
+                  />
+                  <QuickAction
+                    to="/admin/courses"
+                    icon="📚"
+                    title="Manage Courses"
+                    description="Publish, archive, or review course content"
+                    color="emerald"
+                  />
+                  <QuickAction
+                    to="/admin/users"
+                    icon="👥"
+                    title="Manage Users"
+                    description="Activate, deactivate, or view all accounts"
+                    color="sky"
+                  />
                 </div>
-              </form>
+              </div>
 
-              <div className="rounded-2xl bg-white p-8 shadow-sm border border-slate-100">
-                <h2 className="text-xl font-semibold text-slate-700 mb-6 flex items-center gap-2">
-                  <span className="text-2xl">⚡</span> Quick Actions
-                </h2>
-                <div className="space-y-4">
-                  <a href="/admin/users" className="flex items-center gap-4 rounded-xl bg-violet-50 p-4 hover:bg-violet-100 transition group">
-                    <span className="text-3xl group-hover:scale-110 transition">👥</span>
-                    <div>
-                      <p className="font-semibold text-violet-700">Manage Users</p>
-                      <p className="text-sm text-violet-500">Activate, deactivate, or view all user accounts</p>
-                    </div>
-                  </a>
-                  <a href="/admin/students" className="flex items-center gap-4 rounded-xl bg-sky-50 p-4 hover:bg-sky-100 transition group">
-                    <span className="text-3xl group-hover:scale-110 transition">🎓</span>
-                    <div>
-                      <p className="font-semibold text-sky-700">Manage Students</p>
-                      <p className="text-sm text-sky-500">Oversee all student accounts and progress</p>
-                    </div>
-                  </a>
-                  <a href="/admin/courses" className="flex items-center gap-4 rounded-xl bg-emerald-50 p-4 hover:bg-emerald-100 transition group">
-                    <span className="text-3xl group-hover:scale-110 transition">📚</span>
-                    <div>
-                      <p className="font-semibold text-emerald-700">Manage Courses</p>
-                      <p className="text-sm text-emerald-500">Publish, archive, or delete courses</p>
-                    </div>
-                  </a>
-                  <a href="/admin/analytics" className="flex items-center gap-4 rounded-xl bg-amber-50 p-4 hover:bg-amber-100 transition group">
-                    <span className="text-3xl group-hover:scale-110 transition">📈</span>
-                    <div>
-                      <p className="font-semibold text-amber-700">View Analytics</p>
-                      <p className="text-sm text-amber-500">Detailed platform performance insights</p>
-                    </div>
-                  </a>
-                </div>
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+                <h2 className="text-lg font-semibold text-slate-700 mb-4">Platform Overview</h2>
+                <dl className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                    <dt className="text-sm text-slate-500">Parents</dt>
+                    <dd className="font-semibold text-slate-800">
+                      {countFor(stats.users_by_role, 'parent')}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                    <dt className="text-sm text-slate-500">Instructors</dt>
+                    <dd className="font-semibold text-slate-800">
+                      {countFor(stats.users_by_role, 'instructor')}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-50">
+                    <dt className="text-sm text-slate-500">Pending Submissions</dt>
+                    <dd className="font-semibold text-slate-800">{pendingSubmissions}</dd>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <dt className="text-sm text-slate-500">Draft Courses</dt>
+                    <dd className="font-semibold text-slate-800">
+                      {countFor(stats.courses_by_status, 'draft')}
+                    </dd>
+                  </div>
+                </dl>
+
+                {stats.recent_instructors?.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-slate-100">
+                    <h3 className="text-sm font-semibold text-slate-600 mb-3">Recent Instructors</h3>
+                    <ul className="space-y-2">
+                      {stats.recent_instructors.map((inst) => (
+                        <li key={inst.id} className="flex justify-between text-sm">
+                          <span className="text-slate-700">{inst.full_name}</span>
+                          <span className="text-slate-400 truncate ml-2 max-w-[140px]">{inst.email}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           </>
-        )}
+        ) : null}
       </div>
-    </Layout>
+    </AdminLayout>
   );
 }

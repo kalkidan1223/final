@@ -313,25 +313,29 @@ async function approveStudentRegistration(req, res, next) {
       const user = userResult.rows[0];
 
       const parentReg = await client.query(
-        'SELECT id FROM registration_requests WHERE id = $1',
+        'SELECT email, status FROM registration_requests WHERE id = $1',
         [reg.parent_id]
       );
-      const parentId = parentReg.rows[0]?.id;
-
-      if (!parentId) {
+      if (parentReg.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Parent registration not found' });
       }
+      if (parentReg.rows[0].status !== 'approved') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Parent registration must be approved before approving the student' });
+      }
 
       const parentResult = await client.query(
-        'SELECT id FROM parents WHERE user_id = $1',
-        [parentId]
+        `SELECT p.id FROM parents p
+         JOIN users u ON u.id = p.user_id
+         WHERE u.email = $1`,
+        [parentReg.rows[0].email]
       );
       const parentRow = parentResult.rows[0];
 
       if (!parentRow) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Parent account not found' });
+        return res.status(400).json({ error: 'Parent account not found — approve the parent registration first' });
       }
 
       const ageGroupResult = await client.query(

@@ -18,11 +18,15 @@ This project combines:
 - Progress tracking and learning recommendations
 - Admin dashboard for approvals, users, and content oversight
 
+
+
 ## Tech Stack
 
 - Frontend: React, Vite, Tailwind CSS, React Router, Axios
 - Backend: Node.js, Express, PostgreSQL, JWT, bcrypt
 - Database: PostgreSQL with SQL migrations
+
+
 
 ## Project Structure
 
@@ -31,13 +35,19 @@ backend/     Backend API and database migrations
 frontend/    React application
 ```
 
+
+
 ## Getting Started
+
+
 
 ### 1. Prerequisites
 
 - Node.js 18+
 - PostgreSQL 14+
 - npm
+
+
 
 ### 2. Database Setup
 
@@ -50,6 +60,8 @@ psql -d learning_hub -f backend/migrations/002_auth_extension.sql
 psql -d learning_hub -f backend/migrations/003_auth_registration.sql
 ```
 
+
+
 ### 3. Backend Setup
 
 ```bash
@@ -59,7 +71,7 @@ npm install
 npm run dev
 ```
 
-The backend will run on http://localhost:5000.
+The backend will run on [http://localhost:5000](http://localhost:5000).
 
 ### 4. Frontend Setup
 
@@ -69,17 +81,31 @@ npm install
 npm run dev
 ```
 
-The frontend will run on http://localhost:5173.
+The frontend will run on [http://localhost:5173](http://localhost:5173).
 
 ### 5. Create an Admin User
 
-After the app is running, create an admin account manually in the database or through the setup flow described in the project documentation.
+After migrations are applied, seed the default admin account:
+
+```bash
+cd backend
+npm run seed:admin
+```
+
+Default credentials (override with `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env`):
+
+- **Email:** `admin@brana.edu`
+- **Password:** `Admin1234`
+
+Log in at [http://localhost:5173/login](http://localhost:5173/login) — you will be redirected to the admin dashboard.
 
 ## Development Notes
 
 - The AI recommendation module is rule-based and can be upgraded later.
 - File uploads are currently handled through URLs rather than cloud storage.
 - The project does not yet include automated tests.
+
+
 
 ## License
 

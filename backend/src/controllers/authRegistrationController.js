@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { pool, query } = require('../config/db');
-const { isValidEmail, isValidPassword, validateRegisterParent } = require('../utils/validators');
+const { isValidEmail, isValidPassword, validateRegisterParent, validateLogin } = require('../utils/validators');
 const { signAccessToken, signRefreshToken, hashToken } = require('../utils/jwt');
 const { v4: uuidv4 } = require('uuid');
 
@@ -174,7 +174,7 @@ async function login(req, res, next) {
     }
 
     await query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
-    await logAudit(user.id, 'LOGIN', 'user', user.id, null, { email: user.email });
+    await logAudit(null, user.id, 'LOGIN', 'user', user.id, null, { email: user.email });
 
     const accessToken = await issueTokenPair(res, user);
     res.json({ user: await publicUser(user), access_token: accessToken });
@@ -209,7 +209,7 @@ async function forgotPassword(req, res, next) {
       [user.id, token, expiresAt]
     );
 
-    await logAudit(user.id, 'PASSWORD_RESET_REQUEST', 'user', user.id, null, { email: user.email });
+    await logAudit(null, user.id, 'PASSWORD_RESET_REQUEST', 'user', user.id, null, { email: user.email });
 
     // In production, send email here. For now, return the token for testing.
     res.json({
@@ -245,7 +245,7 @@ async function resetPassword(req, res, next) {
 
     await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, pwRecord.user_id]);
     await query('UPDATE password_reset_tokens SET used = TRUE WHERE id = $1', [pwRecord.id]);
-    await logAudit(pwRecord.user_id, 'PASSWORD_RESET', 'user', pwRecord.user_id, null, { email: pwRecord.email });
+    await logAudit(null, pwRecord.user_id, 'PASSWORD_RESET', 'user', pwRecord.user_id, null, { email: pwRecord.email });
 
     res.json({ message: 'Password has been reset successfully. You can now log in with your new password.' });
   } catch (err) {
@@ -290,7 +290,7 @@ async function verifyEmail(req, res, next) {
     const record = result.rows[0];
     await query('UPDATE users SET is_active = TRUE WHERE id = $1', [record.user_id]);
     await query('UPDATE email_verification_tokens SET verified = TRUE WHERE id = $1', [record.id]);
-    await logAudit(record.user_id, 'EMAIL_VERIFIED', 'user', record.user_id, null, {});
+    await logAudit(null, record.user_id, 'EMAIL_VERIFIED', 'user', record.user_id, null, {});
 
     res.json({ message: 'Email verified successfully' });
   } catch (err) {

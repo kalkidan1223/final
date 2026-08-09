@@ -115,6 +115,22 @@ async function login(req, res, next) {
     );
 
     if (result.rows.length === 0) {
+      const regResult = await query(
+        'SELECT id, status FROM registration_requests WHERE email = $1',
+        [email.toLowerCase()]
+      );
+      if (regResult.rows.length > 0) {
+        const reg = regResult.rows[0];
+        if (reg.status === 'pending') {
+          return res.status(403).json({ error: 'Account pending administrator approval', code: 'PENDING_APPROVAL' });
+        }
+        if (reg.status === 'rejected') {
+          return res.status(403).json({ error: 'Your registration was rejected. Please contact the administrator.', code: 'REJECTED' });
+        }
+        if (reg.status === 'suspended') {
+          return res.status(403).json({ error: 'Your account has been suspended.', code: 'SUSPENDED' });
+        }
+      }
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 

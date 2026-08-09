@@ -17,12 +17,18 @@ function publicUser(row) {
 // ----------------------------------------------------------------------------
 async function createInstructor(req, res, next) {
   try {
-    const { full_name, email, password, bio, qualification, specialty } = req.body;
+    const { full_name, email, password, phone, bio, qualification, specialty } = req.body;
 
     const errors = [];
-    if (!full_name || full_name.trim().length < 2) errors.push('full_name is required');
-    if (!isValidEmail(email)) errors.push('a valid email is required');
-    if (!isValidPassword(password)) errors.push('password must be at least 8 characters and include a letter and a number');
+    if (!full_name || full_name.trim().length < 2) errors.push('Full name is required (at least 2 characters)');
+    if (!isValidEmail(email)) errors.push('A valid email address is required');
+    if (!isValidPassword(password)) errors.push('Password must be at least 8 characters and include a letter and a number');
+    if (!phone || !/^\d{10,15}$/.test(phone)) errors.push('Phone number is required (10-15 digits)');
+    if (!qualification || qualification.trim().length < 2) errors.push('Qualification is required');
+    if (!specialty || specialty.trim().length < 2) errors.push('Teaching specialty/subject is required');
+    if (bio && bio.trim().length > 0 && bio.trim().length < 10) {
+      errors.push('Bio must be at least 10 characters when provided');
+    }
     if (errors.length) return res.status(400).json({ errors });
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -31,21 +37,32 @@ async function createInstructor(req, res, next) {
       await client.query('BEGIN');
 
       const userResult = await client.query(
-        `INSERT INTO users (email, password_hash, role, full_name)
-         VALUES ($1, $2, 'instructor', $3)
-         RETURNING id, email, full_name, role`,
-        [email.toLowerCase(), passwordHash, full_name]
+        `INSERT INTO users (email, password_hash, role, full_name, phone)
+         VALUES ($1, $2, 'instructor', $3, $4)
+         RETURNING id, email, full_name, role, phone`,
+        [email.toLowerCase(), passwordHash, full_name.trim(), phone]
       );
       const user = userResult.rows[0];
 
-      await client.query(
+      const instructorResult = await client.query(
         `INSERT INTO instructors (user_id, bio, qualification, specialty)
-         VALUES ($1, $2, $3, $4)`,
-        [user.id, bio || null, qualification || null, specialty || null]
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, bio, qualification, specialty, created_at`,
+        [user.id, bio?.trim() || null, qualification.trim(), specialty.trim()]
       );
+      const instructor = instructorResult.rows[0];
 
       await client.query('COMMIT');
-      res.status(201).json({ user });
+      res.status(201).json({
+        user,
+        instructor: {
+          id: instructor.id,
+          bio: instructor.bio,
+          qualification: instructor.qualification,
+          specialty: instructor.specialty,
+          created_at: instructor.created_at,
+        },
+      });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -379,7 +396,7 @@ async function listInstructors(req, res, next) {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
-      `SELECT u.id, u.email, u.full_name, u.phone, u.is_active, u.last_login_at, u.created_at,
+      `SELECT i.id, u.id AS user_id, u.email, u.full_name, u.phone, u.is_active, u.last_login_at, u.created_at,
               i.bio, i.qualification, i.specialty
        FROM users u
        JOIN instructors i ON i.user_id = u.id
