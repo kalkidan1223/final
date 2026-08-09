@@ -7,6 +7,7 @@ const lessonsController = require('../controllers/lessonsController');
 const router = express.Router();
 
 router.post('/', requireAuth, authorize('instructor'), coursesController.createCourse);
+router.get('/my-dashboard', requireAuth, authorize('instructor'), coursesController.getMyInstructorDashboard);
 router.get('/', requireAuth, coursesController.listCourses);
 router.get('/:id', requireAuth, coursesController.getCourse);
 router.put('/:id', requireAuth, authorize('instructor', 'admin'), coursesController.updateCourse);

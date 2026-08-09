@@ -88,6 +88,9 @@ export default function AdminDashboard() {
     (stats?.pending_parent_registrations || 0) + (stats?.pending_student_registrations || 0);
   const pendingSubmissions = countFor(stats?.submissions_by_status, 'pending');
   const publishedCourses = countFor(stats?.courses_by_status, 'published');
+  const population = stats?.population || {};
+  const content = stats?.content || {};
+  const maxRegistrations = Math.max(1, ...(stats?.child_registrations || []).map((item) => Number(item.count)));
 
   return (
     <AdminLayout>
@@ -187,6 +190,17 @@ export default function AdminDashboard() {
               />
             </div>
 
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <StatCard label="Parents" value={content.total_parents || 0} accent="text-violet-600" icon="P" to="/admin/parents" />
+              <StatCard label="Exceptional Guardians" value={content.total_guardians || 0} accent="text-indigo-600" icon="G" to="/admin/parents" />
+              <StatCard label="Parent-Managed Children" value={population.parent_managed_children || 0} accent="text-emerald-600" icon="C" to="/admin/students" />
+              <StatCard label="Student Accounts" value={population.student_accounts || 0} accent="text-sky-600" icon="A" to="/admin/students" />
+              <StatCard label="Active Instructors" value={content.active_instructors || 0} accent="text-violet-600" icon="I" to="/admin/instructors" />
+              <StatCard label="Total Lessons" value={content.total_lessons || 0} accent="text-amber-600" icon="L" to="/admin/courses" />
+              <StatCard label="Learning Materials" value={content.total_materials || 0} accent="text-sky-600" icon="M" to="/admin/courses" />
+              <StatCard label="Total Quizzes" value={content.total_quizzes || 0} accent="text-emerald-600" icon="Q" to="/admin/analytics" />
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
                 <h2 className="text-lg font-semibold text-slate-700 mb-4">Quick Actions</h2>
@@ -262,6 +276,19 @@ export default function AdminDashboard() {
                     </ul>
                   </div>
                 )}
+              </div>
+
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+                <h2 className="text-lg font-semibold text-slate-700">Child Account Distribution</h2>
+                <p className="mt-1 text-sm text-slate-500">Approved children by access model.</p>
+                <div className="mt-5 space-y-4">
+                  {[
+                    ['Ages 5-9 · Parent Managed', population.ages_5_to_9 || 0, 'bg-emerald-500'],
+                    ['Ages 10-12 · Student Account', population.ages_10_to_12 || 0, 'bg-sky-500'],
+                  ].map(([label, value, color]) => <div key={label}><div className="mb-1 flex justify-between text-sm"><span className="text-slate-600">{label}</span><span className="font-semibold text-slate-800">{value}</span></div><div className="h-3 rounded-full bg-slate-100"><div className={`h-full rounded-full ${color}`} style={{ width: `${population.total_children ? (Number(value) / Number(population.total_children)) * 100 : 0}%` }} /></div></div>)}
+                </div>
+                <h3 className="mt-7 text-sm font-semibold text-slate-700">Recent child registrations</h3>
+                <div className="mt-4 flex h-24 items-end gap-2">{(stats.child_registrations || []).map((item) => <div key={item.day} className="flex flex-1 flex-col items-center gap-1"><div className="w-full rounded-t bg-violet-400" style={{ height: `${(Number(item.count) / maxRegistrations) * 76}px` }} title={`${item.day}: ${item.count}`} /><span className="text-[10px] text-slate-400">{new Date(item.day).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}</span></div>)}{stats.child_registrations?.length === 0 && <p className="text-sm text-slate-500">No recent child registrations.</p>}</div>
               </div>
             </div>
           </>

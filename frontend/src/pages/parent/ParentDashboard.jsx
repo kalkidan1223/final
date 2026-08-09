@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import axiosClient from '../../api/axiosClient';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ParentDashboard() {
+  const { user } = useAuth();
   const [children, setChildren] = useState([]);
   const [registrationRequests, setRegistrationRequests] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -10,7 +13,7 @@ export default function ParentDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
-  const [childForm, setChildForm] = useState({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '' });
+  const [childForm, setChildForm] = useState({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '', confirm_password: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -44,8 +47,11 @@ export default function ParentDashboard() {
     setError('');
     setSubmitting(true);
     try {
+      if (needsStudentAccount && childForm.password !== childForm.confirm_password) {
+        throw new Error('Student passwords do not match');
+      }
       await axiosClient.post('/students/registration-requests', childForm);
-      setChildForm({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '' });
+      setChildForm({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '', confirm_password: '' });
       setShowAddChild(false);
       await loadAll();
     } catch (err) {
@@ -60,6 +66,8 @@ export default function ParentDashboard() {
       (new Date() < new Date(new Date(childForm.date_of_birth).setFullYear(new Date().getFullYear())) ? 1 : 0))
     : null;
   const needsStudentAccount = calculatedAge !== null && calculatedAge >= 10;
+  const averageProgress = children.length ? Math.round(children.reduce((sum, child) => sum + Number(child.progress_percentage || 0), 0) / children.length) : 0;
+  const accountChildren = children.filter((child) => child.has_own_account).length;
 
   return (
     <Layout>
@@ -76,6 +84,15 @@ export default function ParentDashboard() {
             + Add Child
           </button>
         </div>
+
+        <section className="mb-8 rounded-3xl bg-gradient-to-r from-sky-600 to-blue-700 p-6 text-white shadow-lg">
+          <p className="text-sm font-semibold text-sky-100">Parent Portal</p>
+          <h2 className="mt-1 text-2xl font-bold">Welcome back, {user?.full_name?.split(' ')[0] || 'Parent'}!</h2>
+          <p className="mt-2 text-sm text-sky-100">Your family learning summary for today.</p>
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[['Approved children', children.length], ['Parent managed', children.length - accountChildren], ['Student accounts', accountChildren], ['Average progress', `${averageProgress}%`]].map(([label, value]) => <div key={label} className="rounded-2xl bg-white/15 p-3"><p className="text-xs text-sky-100">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div>)}
+          </div>
+        </section>
 
         {/* Tab Navigation */}
         <div className="flex gap-2 mb-8 border-b border-slate-200">
@@ -126,6 +143,7 @@ export default function ParentDashboard() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl bg-sky-50 p-4">
                           <input required type="email" placeholder="Student email" value={childForm.student_email} onChange={(e) => setChildForm((f) => ({ ...f, student_email: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
                           <input required type="password" placeholder="Student password" value={childForm.password} onChange={(e) => setChildForm((f) => ({ ...f, password: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input required type="password" placeholder="Confirm student password" value={childForm.confirm_password} onChange={(e) => setChildForm((f) => ({ ...f, confirm_password: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3 md:col-span-2" />
                         </div>
                       )}
                       {error && <p className="text-sm text-rose-600">{error}</p>}
@@ -141,7 +159,7 @@ export default function ParentDashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {children.map((child) => (
-                    <div key={child.id} className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-lg transition cursor-pointer" onClick={() => { setSelectedChild(child); setSelectedChildTab('progress'); }}>
+                    <div key={child.id} className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-lg transition">
                       <div className="flex items-start justify-between mb-4">
                         <div>
                           <h3 className="text-lg font-semibold text-slate-800">{child.full_name}</h3>
@@ -153,6 +171,7 @@ export default function ParentDashboard() {
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm text-slate-600">DOB: {new Date(child.date_of_birth).toLocaleDateString()}</p>
+                        <div><div className="mb-1 flex justify-between text-xs text-slate-500"><span>Learning progress</span><span>{child.progress_percentage || 0}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-sky-500" style={{ width: `${child.progress_percentage || 0}%` }} /></div></div>
                         {child.has_own_account && (
                           <>
                             <p className="text-sm text-slate-600">Email: {child.user_email || '—'}</p>
@@ -161,7 +180,7 @@ export default function ParentDashboard() {
                         )}
                       </div>
                       <div className="mt-4 flex gap-2">
-                        <button className="flex-1 rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100">View Progress</button>
+                        <Link to={`/parent/children/${child.id}`} className="flex-1 rounded-lg bg-sky-600 px-3 py-2 text-center text-xs font-semibold text-white hover:bg-sky-700">Open Learning Space</Link>
                         {child.has_own_account && (
                           <button className="flex-1 rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100">Manage Account</button>
                         )}

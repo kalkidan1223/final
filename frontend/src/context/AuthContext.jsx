@@ -39,13 +39,6 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  const registerStudent = useCallback(async (payload) => {
-    const { data } = await axiosClient.post('/auth/students/register', payload);
-    setAccessToken(data.access_token);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
   const logout = useCallback(async () => {
     await axiosClient.post('/auth/logout');
     setAccessToken(null);
@@ -54,7 +47,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, registerParent, registerStudent, logout }}
+      value={{ user, loading, login, registerParent, logout }}
     >
       {children}
     </AuthContext.Provider>

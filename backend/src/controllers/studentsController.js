@@ -171,4 +171,58 @@ async function listMyChildren(req, res, next) {
   }
 }
 
-module.exports = { addChild, listMyChildren, createChildRegistrationRequest, listMyChildRegistrationRequests };
+// Opens an approved child's learning overview through the parent account.
+async function getChildLearningSpace(req, res, next) {
+  try {
+    const childResult = await query(
+      `SELECT s.id, s.full_name, s.date_of_birth, s.age_group_id, s.user_id IS NOT NULL AS has_own_account,
+              ag.name AS age_group, u.email AS student_email, u.is_active AS student_account_active,
+              COALESCE(ROUND(AVG(pr.completion_percentage)), 0) AS progress_percentage,
+              COUNT(DISTINCT pr.lesson_id) FILTER (WHERE pr.status = 'completed') AS completed_lessons
+       FROM students s
+       JOIN parents p ON p.id = s.parent_id
+       JOIN age_groups ag ON ag.id = s.age_group_id
+       LEFT JOIN users u ON u.id = s.user_id
+       LEFT JOIN progress pr ON pr.student_id = s.id
+       WHERE s.id = $1 AND p.user_id = $2 AND s.is_active = TRUE
+       GROUP BY s.id, ag.name, u.email, u.is_active`,
+      [req.params.id, req.user.id]
+    );
+    const child = childResult.rows[0];
+    if (!child) return res.status(404).json({ error: 'Child not found' });
+
+    const [courses, activities, quizResults, recommendations] = await Promise.all([
+      query(
+        `SELECT c.id, c.title, c.description, u.full_name AS instructor_name, COUNT(DISTINCT l.id) AS lesson_count
+         FROM courses c JOIN instructors i ON i.id = c.instructor_id JOIN users u ON u.id = i.user_id
+         LEFT JOIN lessons l ON l.course_id = c.id
+         WHERE c.status = 'published' AND c.age_group_id = $1
+         GROUP BY c.id, u.full_name ORDER BY c.created_at DESC`,
+        [child.age_group_id]
+      ),
+      query(
+        `SELECT a.id, a.title, a.activity_type, sub.status, sub.score, sub.feedback, sub.submitted_at
+         FROM activities a JOIN lessons l ON l.id = a.lesson_id JOIN courses c ON c.id = l.course_id
+         LEFT JOIN activity_submissions sub ON sub.activity_id = a.id AND sub.student_id = $1
+         WHERE c.status = 'published' AND a.age_group_id = $2 ORDER BY a.created_at DESC LIMIT 10`,
+        [child.id, child.age_group_id]
+      ),
+      query(
+        `SELECT q.title, qr.score, qr.total_points, qr.submitted_at
+         FROM quiz_results qr JOIN quizzes q ON q.id = qr.quiz_id
+         WHERE qr.student_id = $1 ORDER BY qr.submitted_at DESC LIMIT 5`,
+        [child.id]
+      ),
+      query(
+        `SELECT recommendation_type, recommended_item_id, reason, confidence_score, generated_at
+         FROM ai_recommendations WHERE student_id = $1 ORDER BY generated_at DESC LIMIT 5`,
+        [child.id]
+      ),
+    ]);
+    res.json({ child, courses: courses.rows, activities: activities.rows, quiz_results: quizResults.rows, recommendations: recommendations.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { addChild, listMyChildren, createChildRegistrationRequest, listMyChildRegistrationRequests, getChildLearningSpace };

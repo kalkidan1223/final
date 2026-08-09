@@ -154,6 +154,7 @@ async function getActivity(req, res, next) {
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
     if (!(await canReadCourse(req.user, { ...activity, age_group_id: activity.course_age_group_id }))) {
       return res.status(404).json({ error: 'Activity not found' });
+    }
     delete activity.owner_instructor_id;
     res.json({ activity });
   } catch (err) {

@@ -17,11 +17,13 @@ import AdminNotifications from './pages/admin/AdminNotifications';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminApproval from './pages/admin/AdminApproval';
 import InstructorCourses from './pages/instructor/InstructorCourses';
+import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
 import InstructorLessonDetail from './pages/instructor/InstructorLessonDetail';
 import InstructorQuizManage from './pages/instructor/InstructorQuizManage';
 import InstructorActivitySubmissions from './pages/instructor/InstructorActivitySubmissions';
 import ParentDashboard from './pages/parent/ParentDashboard';
+import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
 import StudentDashboard from './pages/student/StudentDashboard';
 import CourseCatalog from './pages/shared/CourseCatalog';
 import StudentCourseDetail from './pages/student/StudentCourseDetail';
@@ -137,6 +139,10 @@ export default function App() {
       />
 
       <Route
+        path="/instructor/dashboard"
+        element={<ProtectedRoute roles={['instructor']}><InstructorDashboard /></ProtectedRoute>}
+      />
+      <Route
         path="/instructor/courses"
         element={
           <ProtectedRoute roles={['instructor']}>
@@ -184,6 +190,10 @@ export default function App() {
             <ParentDashboard />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/parent/children/:id"
+        element={<ProtectedRoute roles={['parent']}><ParentChildLearningSpace /></ProtectedRoute>}
       />
 
       <Route

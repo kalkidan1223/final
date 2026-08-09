@@ -1,6 +1,6 @@
 export const ROLE_HOME = {
   admin: '/admin/dashboard',
-  instructor: '/instructor/courses',
+  instructor: '/instructor/dashboard',
   parent: '/parent/dashboard',
   student: '/student/dashboard',
 };

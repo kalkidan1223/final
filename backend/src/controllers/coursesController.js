@@ -59,6 +59,37 @@ async function createCourse(req, res, next) {
   }
 }
 
+async function getMyInstructorDashboard(req, res, next) {
+  try {
+    const instructorId = await getInstructorIdForUser(req.user.id);
+    if (!instructorId) return res.status(403).json({ error: 'Instructor profile not found' });
+
+    const [summary, recentCourses] = await Promise.all([
+      query(
+        `SELECT
+          (SELECT COUNT(*)::int FROM courses WHERE instructor_id = $1) AS assigned_courses,
+          (SELECT COUNT(*)::int FROM lessons l JOIN courses c ON c.id = l.course_id WHERE c.instructor_id = $1) AS total_lessons,
+          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.age_group_id = s.age_group_id WHERE c.instructor_id = $1 AND s.is_active = TRUE) AS total_students,
+          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.age_group_id = s.age_group_id WHERE c.instructor_id = $1 AND s.user_id IS NULL AND s.is_active = TRUE) AS parent_managed_children,
+          (SELECT COUNT(*)::int FROM activity_submissions sub JOIN activities a ON a.id = sub.activity_id JOIN lessons l ON l.id = a.lesson_id JOIN courses c ON c.id = l.course_id WHERE c.instructor_id = $1 AND sub.status = 'pending') AS pending_activities,
+          (SELECT COUNT(*)::int FROM notifications WHERE user_id = $2 AND is_read = FALSE) AS unread_notifications`,
+        [instructorId, req.user.id]
+      ),
+      query(
+        `SELECT c.id, c.title, c.status, ag.name AS age_group_name, COUNT(l.id)::int AS lesson_count
+         FROM courses c JOIN age_groups ag ON ag.id = c.age_group_id
+         LEFT JOIN lessons l ON l.course_id = c.id
+         WHERE c.instructor_id = $1
+         GROUP BY c.id, ag.name ORDER BY c.updated_at DESC LIMIT 5`,
+        [instructorId]
+      ),
+    ]);
+    res.json({ summary: summary.rows[0], recent_courses: recentCourses.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ----------------------------------------------------------------------------
 // GET /api/courses  — list, filterable by age_group_id / status / instructor
 // Students and parents only ever see published courses; instructors/admins
@@ -225,6 +256,7 @@ async function deleteCourse(req, res, next) {
 
 module.exports = {
   createCourse,
+  getMyInstructorDashboard,
   listCourses,
   getCourse,
   updateCourse,
