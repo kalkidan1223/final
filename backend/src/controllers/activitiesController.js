@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
+const { canReadCourse } = require('../utils/courseAccess');
 
 const VALID_ACTIVITY_TYPES = [
   'writing', 'reading', 'drawing', 'speaking', 'worksheet',
@@ -40,7 +41,7 @@ async function assertLessonOwnership(req, res, lessonId) {
 // controller and the submissions controller.
 async function loadActivityWithContext(activityId) {
   const result = await query(
-    `SELECT a.*, l.course_id, c.instructor_id AS owner_instructor_id
+    `SELECT a.*, l.course_id, c.instructor_id AS owner_instructor_id, c.status, c.age_group_id AS course_age_group_id
      FROM activities a
      JOIN lessons l ON l.id = a.lesson_id
      JOIN courses c ON c.id = l.course_id
@@ -86,6 +87,14 @@ async function createActivity(req, res, next) {
       });
     }
 
+    const lessonAgeGroup = await query(
+      `SELECT c.age_group_id FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = $1`,
+      [lessonId]
+    );
+    if (String(lessonAgeGroup.rows[0]?.age_group_id) !== String(age_group_id)) {
+      return res.status(400).json({ error: 'Activity age group must match the course age group' });
+    }
+
     const instructorId = await getInstructorIdForUser(req.user.id);
     const result = await query(
       `INSERT INTO activities
@@ -119,6 +128,13 @@ async function createActivity(req, res, next) {
 async function listActivitiesForLesson(req, res, next) {
   try {
     const { lessonId } = req.params;
+    const lessonCourse = await query(
+      `SELECT c.* FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = $1`,
+      [lessonId]
+    );
+    if (lessonCourse.rows.length === 0 || !(await canReadCourse(req.user, lessonCourse.rows[0]))) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
     const result = await query(
       'SELECT * FROM activities WHERE lesson_id = $1 ORDER BY created_at',
       [lessonId]
@@ -136,6 +152,8 @@ async function getActivity(req, res, next) {
   try {
     const activity = await loadActivityWithContext(req.params.id);
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
+    if (!(await canReadCourse(req.user, { ...activity, age_group_id: activity.course_age_group_id }))) {
+      return res.status(404).json({ error: 'Activity not found' });
     delete activity.owner_instructor_id;
     res.json({ activity });
   } catch (err) {

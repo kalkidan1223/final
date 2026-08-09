@@ -4,13 +4,13 @@ import axiosClient from '../../api/axiosClient';
 
 export default function ParentDashboard() {
   const [children, setChildren] = useState([]);
+  const [registrationRequests, setRegistrationRequests] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [ageGroups, setAgeGroups] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
-  const [childForm, setChildForm] = useState({ full_name: '', date_of_birth: '', age_group_id: '' });
-  const [inviteResult, setInviteResult] = useState(null);
+  const [childForm, setChildForm] = useState({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,12 +20,14 @@ export default function ParentDashboard() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [childrenRes, ageGroupsRes, notifRes] = await Promise.all([
+      const [childrenRes, requestsRes, ageGroupsRes, notifRes] = await Promise.all([
         axiosClient.get('/students/children'),
+        axiosClient.get('/students/registration-requests'),
         axiosClient.get('/age-groups'),
         axiosClient.get('/notifications'),
       ]);
       setChildren(childrenRes.data.children);
+      setRegistrationRequests(requestsRes.data.registration_requests);
       setAgeGroups(ageGroupsRes.data.age_groups);
       setNotifications(notifRes.data.notifications);
     } catch (err) {
@@ -40,18 +42,10 @@ export default function ParentDashboard() {
   async function handleAddChild(e) {
     e.preventDefault();
     setError('');
-    setInviteResult(null);
     setSubmitting(true);
     try {
-      const selectedGroup = ageGroups.find((ag) => String(ag.id) === String(childForm.age_group_id));
-      if (!selectedGroup) throw new Error('Select an age group');
-      if (selectedGroup.requires_account) {
-        const { data } = await axiosClient.post('/auth/students/invite', childForm);
-        setInviteResult(data.invite_code);
-      } else {
-        await axiosClient.post('/students/children', childForm);
-      }
-      setChildForm({ full_name: '', date_of_birth: '', age_group_id: '' });
+      await axiosClient.post('/students/registration-requests', childForm);
+      setChildForm({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '' });
       setShowAddChild(false);
       await loadAll();
     } catch (err) {
@@ -61,7 +55,11 @@ export default function ParentDashboard() {
     }
   }
 
-  const selectedGroup = ageGroups.find((ag) => String(ag.id) === String(childForm.age_group_id));
+  const calculatedAge = childForm.date_of_birth
+    ? Math.max(0, new Date().getFullYear() - new Date(childForm.date_of_birth).getFullYear() -
+      (new Date() < new Date(new Date(childForm.date_of_birth).setFullYear(new Date().getFullYear())) ? 1 : 0))
+    : null;
+  const needsStudentAccount = calculatedAge !== null && calculatedAge >= 10;
 
   return (
     <Layout>
@@ -106,32 +104,34 @@ export default function ParentDashboard() {
                   <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg border border-violet-100">
                     <h3 className="text-lg font-semibold text-slate-700 mb-4">Add a Child</h3>
                     <form onSubmit={handleAddChild} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input required placeholder="Full Name" value={childForm.full_name} onChange={(e) => setChildForm((f) => ({ ...f, full_name: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
                         <input required type="date" value={childForm.date_of_birth} onChange={(e) => setChildForm((f) => ({ ...f, date_of_birth: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
-                        <select required value={childForm.age_group_id} onChange={(e) => setChildForm((f) => ({ ...f, age_group_id: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3">
-                          <option value="">Select age group</option>
-                          {ageGroups.map((ag) => (
-                            <option key={ag.id} value={ag.id}>{ag.name}</option>
-                          ))}
+                        <select required value={childForm.gender} onChange={(e) => setChildForm((f) => ({ ...f, gender: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3">
+                          <option value="">Select gender</option>
+                          <option value="female">Female</option>
+                          <option value="male">Male</option>
+                          <option value="other">Other</option>
                         </select>
+                        <input placeholder="Grade (optional)" value={childForm.grade} onChange={(e) => setChildForm((f) => ({ ...f, grade: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
                       </div>
-                      {selectedGroup && (
+                      {calculatedAge !== null && (
                         <p className="text-xs text-slate-500">
-                          {selectedGroup.requires_account
+                          {needsStudentAccount
                             ? 'This age group creates its own login — you\'ll get an invite code.'
                             : 'This age group has no login — you\'ll manage lessons and activities directly.'}
                         </p>
                       )}
-                      {error && <p className="text-sm text-rose-600">{error}</p>}
-                      {inviteResult && (
-                        <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
-                          Invite code: <span className="font-mono font-semibold">{inviteResult}</span>
+                      {needsStudentAccount && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl bg-sky-50 p-4">
+                          <input required type="email" placeholder="Student email" value={childForm.student_email} onChange={(e) => setChildForm((f) => ({ ...f, student_email: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input required type="password" placeholder="Student password" value={childForm.password} onChange={(e) => setChildForm((f) => ({ ...f, password: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
                         </div>
                       )}
+                      {error && <p className="text-sm text-rose-600">{error}</p>}
                       <div className="flex gap-3">
                         <button type="submit" disabled={submitting} className="rounded-xl bg-emerald-500 px-5 py-2.5 font-semibold text-white hover:bg-emerald-600 disabled:opacity-60">
-                          {submitting ? 'Adding...' : 'Add Child'}
+                          {submitting ? 'Submitting...' : 'Submit for Approval'}
                         </button>
                         <button type="button" onClick={() => setShowAddChild(false)} className="rounded-xl bg-slate-100 px-5 py-2.5 font-medium text-slate-600 hover:bg-slate-200">Cancel</button>
                       </div>
@@ -170,6 +170,22 @@ export default function ParentDashboard() {
                   ))}
                   {children.length === 0 && <p className="col-span-full text-center text-slate-500 py-10">No children added yet.</p>}
                 </div>
+                {registrationRequests.length > 0 && (
+                  <section className="mt-10">
+                    <h2 className="mb-4 text-xl font-bold text-slate-800">Child registration requests</h2>
+                    <div className="space-y-3">
+                      {registrationRequests.map((request) => (
+                        <div key={request.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                          <div>
+                            <p className="font-semibold text-slate-800">{request.student_full_name}</p>
+                            <p className="text-sm text-slate-500">Age {request.age} · {request.has_own_account ? 'Student account' : 'Parent-managed'}</p>
+                          </div>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${request.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : request.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{request.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
               </>
             )}
 

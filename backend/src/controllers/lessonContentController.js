@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
+const { canReadCourse } = require('../utils/courseAccess');
 
 async function assertLessonOwnership(req, res, lessonId) {
   const result = await query(
@@ -27,12 +28,16 @@ async function getLessonDetail(req, res, next) {
   try {
     const { id } = req.params;
     const lessonResult = await query(
-      `SELECT l.*, c.title AS course_title, c.id AS course_id
+      `SELECT l.*, c.title AS course_title, c.id AS course_id, c.status,
+              c.instructor_id, c.age_group_id
        FROM lessons l JOIN courses c ON c.id = l.course_id
        WHERE l.id = $1`,
       [id]
     );
     if (lessonResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+    if (!(await canReadCourse(req.user, lessonResult.rows[0]))) {
       return res.status(404).json({ error: 'Lesson not found' });
     }
 

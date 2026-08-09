@@ -25,6 +25,7 @@ router.patch('/students/:id/activate', requireAuth, authorize('admin'), adminCon
 
 // --- Parent Management ---
 router.get('/parents', requireAuth, authorize('admin'), adminController.listParents);
+router.post('/parents', requireAuth, authorize('admin'), adminController.createParent);
 router.patch('/parents/:id/deactivate', requireAuth, authorize('admin'), adminController.deactivateParent);
 router.patch('/parents/:id/activate', requireAuth, authorize('admin'), adminController.activateParent);
 

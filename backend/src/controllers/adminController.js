@@ -4,6 +4,15 @@ const { isValidEmail, isValidPassword } = require('../utils/validators');
 
 const SALT_ROUNDS = 12;
 
+function calculateAge(dateOfBirth) {
+  const birth = new Date(`${dateOfBirth}T00:00:00Z`);
+  const today = new Date();
+  let age = today.getUTCFullYear() - birth.getUTCFullYear();
+  if (today.getUTCMonth() < birth.getUTCMonth() ||
+    (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age -= 1;
+  return age;
+}
+
 // ----------------------------------------------------------------------------
 // Helper: map a users row to a safe public object
 // ----------------------------------------------------------------------------
@@ -311,6 +320,71 @@ async function activateStudent(req, res, next) {
 // PARENTS (admin can see/manage all parents)
 // =============================================================================
 
+// POST /api/admin/parents — admin-only, in-person creation of a parent/guardian.
+async function createParent(req, res, next) {
+  try {
+    const { full_name, email, password, phone, date_of_birth, address, emergency_contact,
+      guardian_relationship = 'parent', in_person_verified, verification_notes } = req.body;
+    const errors = [];
+    if (!full_name || full_name.trim().length < 2) errors.push('Full name is required');
+    if (!isValidEmail(email)) errors.push('A valid email address is required');
+    if (!isValidPassword(password)) errors.push('Password must be at least 8 characters and include a letter and a number');
+    if (!phone || !/^\d{10,15}$/.test(phone)) errors.push('Phone number must contain 10 to 15 digits');
+    if (!date_of_birth || Number.isNaN(Date.parse(date_of_birth))) errors.push('A valid date of birth is required');
+
+    const relationship = String(guardian_relationship).toLowerCase();
+    if (!['parent', 'sibling', 'relative', 'other'].includes(relationship)) {
+      errors.push('Select a valid parent or guardian relationship');
+    }
+    if (date_of_birth && !Number.isNaN(Date.parse(date_of_birth)) && calculateAge(date_of_birth) < 18) {
+      errors.push('A parent or guardian must be at least 18 years old');
+    }
+    if (relationship !== 'parent' && in_person_verified !== true) {
+      errors.push('Sibling and other guardian accounts require in-person administrator verification');
+    }
+    if (relationship !== 'parent' && (!verification_notes || verification_notes.trim().length < 10)) {
+      errors.push('Record verification notes of at least 10 characters for a guardian account');
+    }
+    if (errors.length) return res.status(400).json({ errors });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+      const userResult = await client.query(
+        `INSERT INTO users (email, password_hash, role, full_name, phone)
+         VALUES ($1, $2, 'parent', $3, $4)
+         RETURNING id, email, full_name, phone, role, is_active`,
+        [email.toLowerCase(), passwordHash, full_name.trim(), phone]
+      );
+      const user = userResult.rows[0];
+      const parentResult = await client.query(
+        `INSERT INTO parents (user_id, address, emergency_contact, date_of_birth, guardian_relationship,
+          in_person_verified, verification_notes, verified_by, verified_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $6 THEN now() ELSE NULL END)
+         RETURNING id, date_of_birth, guardian_relationship, in_person_verified, verified_at`,
+        [user.id, address?.trim() || null, emergency_contact?.trim() || null, date_of_birth, relationship,
+          in_person_verified === true, verification_notes?.trim() || null, in_person_verified === true ? req.user.id : null]
+      );
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values)
+         VALUES ($1, 'CREATE_PARENT_OR_GUARDIAN', 'parent', $2, $3)`,
+        [req.user.id, parentResult.rows[0].id, { email: user.email, guardian_relationship: relationship }]
+      );
+      await client.query('COMMIT');
+      res.status(201).json({ user, parent: parentResult.rows[0] });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err.code === '23505') return res.status(409).json({ error: 'An account with this email already exists' });
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /api/admin/parents  — list all parents
 async function listParents(req, res, next) {
   try {
@@ -326,7 +400,8 @@ async function listParents(req, res, next) {
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
       `SELECT u.id, u.email, u.full_name, u.phone, u.is_active, u.last_login_at, u.created_at,
-              p.address, p.emergency_contact
+              p.address, p.emergency_contact, p.date_of_birth, p.guardian_relationship,
+              p.in_person_verified, p.verified_at
        FROM users u
        JOIN parents p ON p.user_id = u.id
        ${where}
@@ -778,6 +853,7 @@ async function getAnalytics(req, res, next) {
 
 module.exports = {
   createInstructor,
+  createParent,
   listUsers,
   getUser,
   updateUser,

@@ -3,6 +3,7 @@ const { getInstructorIdForUser, getParentIdForUser, getStudentIdForUser } = requ
 const { loadActivityWithContext } = require('./activitiesController');
 const { upsertLessonProgress } = require('../utils/progress');
 const { createNotification } = require('./notificationsController');
+const { canReadCourse } = require('../utils/courseAccess');
 
 // ----------------------------------------------------------------------------
 // POST /api/activities/:id/submissions
@@ -21,6 +22,9 @@ async function createSubmission(req, res, next) {
     const { id: activityId } = req.params;
     const activity = await loadActivityWithContext(activityId);
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
+    if (!(await canReadCourse(req.user, { ...activity, age_group_id: activity.course_age_group_id }))) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
 
     const { submission_url, submission_text } = req.body;
     if (activity.requires_upload && !submission_url) {
@@ -41,8 +45,8 @@ async function createSubmission(req, res, next) {
       }
       const parentId = await getParentIdForUser(req.user.id);
       const ownsChild = await query(
-        'SELECT 1 FROM students WHERE id = $1 AND parent_id = $2',
-        [student_id, parentId]
+        'SELECT 1 FROM students WHERE id = $1 AND parent_id = $2 AND age_group_id = $3 AND is_active = TRUE',
+        [student_id, parentId, activity.course_age_group_id]
       );
       if (ownsChild.rows.length === 0) {
         return res.status(403).json({ error: 'This student is not linked to your account' });
@@ -51,6 +55,14 @@ async function createSubmission(req, res, next) {
       submittedBy = 'parent';
     } else {
       return res.status(403).json({ error: 'Only students or parents can submit activities' });
+    }
+
+    const eligibleStudent = await query(
+      'SELECT 1 FROM students WHERE id = $1 AND age_group_id = $2 AND is_active = TRUE',
+      [studentId, activity.course_age_group_id]
+    );
+    if (eligibleStudent.rows.length === 0) {
+      return res.status(403).json({ error: 'This activity is not available for this student' });
     }
 
     const result = await query(
@@ -76,6 +88,9 @@ async function listSubmissionsForActivity(req, res, next) {
     const { id: activityId } = req.params;
     const activity = await loadActivityWithContext(activityId);
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
+    if (!(await canReadCourse(req.user, { ...activity, age_group_id: activity.course_age_group_id }))) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
 
     let sql = `SELECT sub.*, s.full_name AS student_name
                FROM activity_submissions sub
@@ -145,8 +160,8 @@ async function reviewSubmission(req, res, next) {
       }
     }
 
-    if (status === 'graded' && score > submission.max_score) {
-      return res.status(400).json({ error: `score cannot exceed max_score (${submission.max_score})` });
+    if (status === 'graded' && (!Number.isFinite(Number(score)) || Number(score) < 0 || Number(score) > Number(submission.max_score))) {
+      return res.status(400).json({ error: `score must be between 0 and ${submission.max_score}` });
     }
 
     const reviewerInstructorId = await getInstructorIdForUser(req.user.id);
@@ -155,11 +170,11 @@ async function reviewSubmission(req, res, next) {
        SET status = $1, score = $2, feedback = $3, reviewed_by = $4, reviewed_at = now()
        WHERE id = $5
        RETURNING *`,
-      [status, status === 'graded' ? score : null, feedback || null, reviewerInstructorId, id]
+      [status, status === 'graded' ? Number(score) : null, feedback || null, reviewerInstructorId, id]
     );
 
     if (status === 'graded') {
-      const completionPct = submission.max_score > 0 ? (score / submission.max_score) * 100 : 100;
+      const completionPct = submission.max_score > 0 ? (Number(score) / submission.max_score) * 100 : 100;
       await upsertLessonProgress(
         submission.student_id,
         submission.course_id,

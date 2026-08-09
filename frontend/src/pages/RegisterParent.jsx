@@ -114,6 +114,7 @@ export default function RegisterParent() {
       if (form.last_name && !/^[A-Za-z\s]+$/.test(form.last_name)) errs.push('Last name must contain only letters');
       if (!form.gender) errs.push('Gender is required');
       if (!form.date_of_birth) errs.push('Date of birth is required');
+      if (age !== null && age < 18) errs.push('A parent must be at least 18 years old');
       if (!form.nationality) errs.push('Nationality is required');
       if (!form.phone || !/^\d{10,15}$/.test(form.phone)) errs.push('Phone number must be 10-15 digits');
       if (form.alt_phone && !/^\d{10,15}$/.test(form.alt_phone)) errs.push('Alt phone must be 10-15 digits');

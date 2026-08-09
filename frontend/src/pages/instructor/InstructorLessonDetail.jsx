@@ -18,6 +18,7 @@ export default function InstructorLessonDetail() {
   const [loading, setLoading] = useState(true);
 
   const [videoForm, setVideoForm] = useState({ title: '', video_url: '' });
+  const [materialForm, setMaterialForm] = useState({ title: '', type: 'pdf', file_url: '' });
   const [quizForm, setQuizForm] = useState({ title: '', description: '' });
   const [activityForm, setActivityForm] = useState({
     title: '', activity_type: 'worksheet', instructions: '', age_group_id: '', requires_upload: false,
@@ -45,6 +46,18 @@ export default function InstructorLessonDetail() {
       await load();
     } catch (err) {
       setError(err.response?.data?.error || 'Could not add video');
+    }
+  }
+
+  async function handleAddMaterial(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      await axiosClient.post(`/lessons/${id}/materials`, materialForm);
+      setMaterialForm({ title: '', type: 'pdf', file_url: '' });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not add learning material');
     }
   }
 
@@ -76,7 +89,7 @@ export default function InstructorLessonDetail() {
     return <Layout><p className="p-10 text-slate-500">Loading…</p></Layout>;
   }
 
-  const { lesson, videos, quizzes, activities } = data;
+  const { lesson, materials, videos, quizzes, activities } = data;
 
   return (
     <Layout>
@@ -86,6 +99,27 @@ export default function InstructorLessonDetail() {
         </Link>
         <h1 className="mb-6 mt-2 text-2xl font-semibold text-slate-800">{lesson.title}</h1>
         {error && <p className="mb-4 text-sm text-rose-600">{error}</p>}
+
+        {/* Learning materials */}
+        <section className="mb-8">
+          <h2 className="mb-3 text-lg font-medium text-slate-700">Learning materials</h2>
+          <ul className="mb-3 space-y-2">
+            {materials.map((material) => (
+              <li key={material.id} className="flex items-center justify-between rounded-xl bg-white p-3 text-sm shadow-sm">
+                <a href={material.file_url} target="_blank" rel="noreferrer" className="font-medium text-sky-600 hover:underline">{material.title}</a>
+                <span className="text-xs text-slate-400">{material.type}</span>
+              </li>
+            ))}
+          </ul>
+          <form onSubmit={handleAddMaterial} className="grid gap-2 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-[1fr_140px_1fr_auto]">
+            <input required placeholder="Material title" value={materialForm.title} onChange={(e) => setMaterialForm((f) => ({ ...f, title: e.target.value }))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+            <select value={materialForm.type} onChange={(e) => setMaterialForm((f) => ({ ...f, type: e.target.value }))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              {['pdf', 'document', 'image', 'audio', 'video'].map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <input required type="url" placeholder="Public file URL" value={materialForm.file_url} onChange={(e) => setMaterialForm((f) => ({ ...f, file_url: e.target.value }))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+            <button className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-medium text-white hover:bg-sky-600">Add</button>
+          </form>
+        </section>
 
         {/* Videos */}
         <section className="mb-8">

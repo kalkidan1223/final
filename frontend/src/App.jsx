@@ -4,7 +4,6 @@ import ProtectedRoute from './routes/ProtectedRoute';
 
 import Login from './pages/Login';
 import RegisterParent from './pages/RegisterParent';
-import RegisterStudent from './pages/RegisterStudent';
 import Unauthorized from './pages/Unauthorized';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
@@ -44,7 +43,6 @@ export default function App() {
       <Route path="/" element={<Root />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<RegisterParent />} />
-      <Route path="/register/student" element={<RegisterStudent />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 
       <Route

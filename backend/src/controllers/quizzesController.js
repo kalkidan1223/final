@@ -1,5 +1,7 @@
 const { query, pool } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
+const { canReadCourse } = require('../utils/courseAccess');
+const { upsertLessonProgress } = require('../utils/progress');
 
 // Resolves a lesson's owning instructor_id via its course, for ownership checks.
 async function getLessonOwnerInstructorId(lessonId) {
@@ -32,7 +34,7 @@ async function assertLessonOwnership(req, res, lessonId) {
 // Loads a quiz along with the instructor_id that owns its lesson's course.
 async function loadQuizWithOwner(quizId) {
   const result = await query(
-    `SELECT q.*, c.instructor_id AS owner_instructor_id
+    `SELECT q.*, c.instructor_id AS owner_instructor_id, c.status, c.age_group_id, l.course_id
      FROM quizzes q
      JOIN lessons l ON l.id = q.lesson_id
      JOIN courses c ON c.id = l.course_id
@@ -108,6 +110,10 @@ async function getQuiz(req, res, next) {
     const { id } = req.params;
     const quiz = await loadQuizWithOwner(id);
     if (!quiz) return res.status(404).json({ error: 'Quiz not found' });
+
+    if (!(await canReadCourse(req.user, quiz))) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
 
     const isOwnerOrAdmin =
       req.user.role === 'admin' ||
@@ -262,6 +268,20 @@ async function submitQuiz(req, res, next) {
     if (!answers || typeof answers !== 'object') {
       return res.status(400).json({ error: 'answers object is required' });
     }
+    if (question_type === 'mcq' && (!Array.isArray(options) || options.length < 2 || !options.includes(correct_answer))) {
+      return res.status(400).json({ error: 'A multiple-choice question needs at least two options and the correct answer must be one of them' });
+    }
+    if (question_type === 'true_false' && !['true', 'false'].includes(String(correct_answer).toLowerCase())) {
+      return res.status(400).json({ error: 'A true/false question must use True or False as its correct answer' });
+    }
+    if (!Number.isFinite(Number(points)) || Number(points) <= 0) {
+      return res.status(400).json({ error: 'points must be a positive number' });
+    }
+
+    const quiz = await loadQuizWithOwner(id);
+    if (!quiz || !(await canReadCourse(req.user, quiz))) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
 
     const studentResult = await query('SELECT id FROM students WHERE user_id = $1', [req.user.id]);
     if (studentResult.rows.length === 0) {
@@ -295,6 +315,9 @@ async function submitQuiz(req, res, next) {
       [id, studentId, score, totalPoints, JSON.stringify(answers)]
     );
 
+    const completionPercentage = totalPoints > 0 ? (score / totalPoints) * 100 : 100;
+    await upsertLessonProgress(studentId, quiz.course_id, quiz.lesson_id, 'completed', completionPercentage);
+
     res.status(201).json({ result: result.rows[0] });
   } catch (err) {
     next(err);
@@ -311,6 +334,9 @@ async function getQuizResults(req, res, next) {
     const { id } = req.params;
     const quiz = await loadQuizWithOwner(id);
     if (!quiz) return res.status(404).json({ error: 'Quiz not found' });
+    if (!(await canReadCourse(req.user, quiz))) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
 
     let sql = `SELECT qr.*, s.full_name AS student_name FROM quiz_results qr
                JOIN students s ON s.id = qr.student_id WHERE qr.quiz_id = $1`;

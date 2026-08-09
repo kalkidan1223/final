@@ -1,6 +1,5 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
-const { authorize } = require('../middleware/rbac');
 const authController = require('../controllers/authController');
 const authRegistrationController = require('../controllers/authRegistrationController');
 const adminApprovalController = require('../controllers/adminApprovalController');
@@ -21,9 +20,5 @@ router.post('/reset-password', authRegistrationController.resetPassword);
 // --- Email Verification ---
 router.post('/verify-email', requireAuth, authRegistrationController.sendVerificationToken);
 router.post('/verify-email/confirm', authRegistrationController.verifyEmail);
-
-// --- Student Invite (existing) ---
-router.post('/students/invite', requireAuth, authorize('parent'), authController.createStudentInvite);
-router.post('/students/register', authController.registerStudentWithInvite);
 
 module.exports = router;

@@ -29,7 +29,7 @@ async function createAgeGroup(req, res, next) {
       `INSERT INTO age_groups (name, min_age, max_age, requires_account)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [name, min_age, max_age, requires_account ?? (min_age >= 11)]
+      [name, min_age, max_age, requires_account ?? (min_age >= 10)]
     );
 
     res.status(201).json({ age_group: result.rows[0] });

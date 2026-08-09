@@ -92,6 +92,12 @@ CREATE TABLE parents (
     user_id         BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     address         TEXT,
     emergency_contact VARCHAR(20),
+    date_of_birth   DATE,
+    guardian_relationship VARCHAR(50) NOT NULL DEFAULT 'parent',
+    in_person_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    verification_notes TEXT,
+    verified_by     BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    verified_at     TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -351,5 +357,5 @@ COMMIT;
 -- ============================================================================
 INSERT INTO age_groups (name, min_age, max_age, requires_account) VALUES
     ('5-7',   5, 7,  FALSE),
-    ('8-10',  8, 10, FALSE),
-    ('11-12', 11, 12, TRUE);
+    ('8-9',   8, 9,  FALSE),
+    ('10-12', 10, 12, TRUE);

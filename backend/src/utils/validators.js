@@ -26,6 +26,20 @@ function validateRegisterParent(body) {
   if (!isValidPassword(body.password)) {
     errors.push('password must be at least 8 characters and include a letter and a number');
   }
+  if (!body.date_of_birth || Number.isNaN(Date.parse(body.date_of_birth))) {
+    errors.push('a valid date_of_birth is required');
+  } else {
+    const birth = new Date(`${body.date_of_birth}T00:00:00Z`);
+    const today = new Date();
+    let age = today.getUTCFullYear() - birth.getUTCFullYear();
+    if (today.getUTCMonth() < birth.getUTCMonth() ||
+      (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age -= 1;
+    if (age < 18) errors.push('a parent must be at least 18 years old');
+  }
+  const relationship = String(body.relationship_to_child || '').toLowerCase();
+  if (['sibling', 'brother', 'sister', 'relative', 'other'].includes(relationship)) {
+    errors.push('Sibling and guardian accounts must be created in person by an administrator');
+  }
   return errors;
 }
 
@@ -56,6 +70,18 @@ function validateStudentRegister(body) {
   return errors;
 }
 
+function validateChildRegistration(body) {
+  const errors = [];
+  if (!body.full_name || body.full_name.trim().length < 2) {
+    errors.push('full_name is required');
+  }
+  if (!body.date_of_birth || Number.isNaN(Date.parse(body.date_of_birth))) {
+    errors.push('a valid date_of_birth is required');
+  }
+  if (!body.gender) errors.push('gender is required');
+  return errors;
+}
+
 module.exports = {
   isValidEmail,
   isValidPassword,
@@ -63,4 +89,5 @@ module.exports = {
   validateLogin,
   validateStudentInvite,
   validateStudentRegister,
+  validateChildRegistration,
 };

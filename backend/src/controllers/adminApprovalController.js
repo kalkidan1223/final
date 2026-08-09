@@ -104,13 +104,13 @@ async function approveParentRegistration(req, res, next) {
       const user = userResult.rows[0];
 
       await client.query(
-        `INSERT INTO parents (user_id, address, emergency_contact)
-         VALUES ($1, $2, $3)`,
+        `INSERT INTO parents (user_id, address, emergency_contact, date_of_birth, guardian_relationship)
+         VALUES ($1, $2, $3, $4, 'parent')`,
         [user.id, JSON.stringify({
           country: reg.country, region: reg.region, city: reg.city,
           sub_city: reg.sub_city, woreda: reg.woreda, house_number: reg.house_number,
           postal_code: reg.postal_code,
-        }), reg.emergency_contact_phone || null]
+        }), reg.emergency_contact_phone || null, reg.date_of_birth]
       );
 
       await client.query(
@@ -240,9 +240,10 @@ async function listStudentRegistrationRequests(req, res, next) {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
-      `SELECT sr.*, rr.full_name AS parent_name, rr.email AS parent_email
+      `SELECT sr.*, p.id AS parent_id, u.full_name AS parent_name, u.email AS parent_email
        FROM student_registration_requests sr
-       JOIN registration_requests rr ON rr.id = sr.parent_id
+       JOIN parents p ON p.id = sr.parent_id
+       JOIN users u ON u.id = p.user_id
        ${where}
        ORDER BY sr.submitted_at DESC
        LIMIT 100`,
@@ -259,9 +260,10 @@ async function getStudentRegistrationRequest(req, res, next) {
   try {
     const { id } = req.params;
     const result = await query(
-      `SELECT sr.*, rr.full_name AS parent_name, rr.email AS parent_email
+      `SELECT sr.*, p.id AS parent_id, u.full_name AS parent_name, u.email AS parent_email
        FROM student_registration_requests sr
-       JOIN registration_requests rr ON rr.id = sr.parent_id
+       JOIN parents p ON p.id = sr.parent_id
+       JOIN users u ON u.id = p.user_id
        WHERE sr.id = $1`,
       [id]
     );
@@ -296,24 +298,29 @@ async function approveStudentRegistration(req, res, next) {
       return res.status(400).json({ error: `Registration is already ${reg.status}` });
     }
 
-    if (reg.age < 10 || reg.age > 12) {
-      return res.status(400).json({ error: 'Student age must be between 10 and 12 for account creation' });
+    if (reg.age < 5 || reg.age > 12) {
+      return res.status(400).json({ error: 'Child age must be between 5 and 12' });
     }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
+      let user = null;
+      if (reg.age >= 10) {
       const userResult = await client.query(
         `INSERT INTO users (email, password_hash, role, full_name, is_active)
          VALUES ($1, $2, 'student', $3, TRUE)
          RETURNING id, email, full_name, role, is_active`,
         [reg.student_email, reg.password_hash, reg.student_full_name]
       );
-      const user = userResult.rows[0];
+      user = userResult.rows[0];
+      }
 
       const parentReg = await client.query(
-        'SELECT email, status FROM registration_requests WHERE id = $1',
+        `SELECT u.email, 'approved' AS status
+         FROM parents p JOIN users u ON u.id = p.user_id
+         WHERE p.id = $1`,
         [reg.parent_id]
       );
       if (parentReg.rows.length === 0) {
@@ -339,7 +346,7 @@ async function approveStudentRegistration(req, res, next) {
       }
 
       const ageGroupResult = await client.query(
-        `SELECT id FROM age_groups WHERE min_age <= $1 AND max_age >= $1 AND requires_account = TRUE
+        `SELECT id FROM age_groups WHERE min_age <= $1 AND max_age >= $1
          LIMIT 1`,
         [reg.age]
       );
@@ -360,7 +367,7 @@ async function approveStudentRegistration(req, res, next) {
         `INSERT INTO students (user_id, parent_id, age_group_id, full_name, date_of_birth, gender)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id`,
-        [user.id, parentRow.id, ageGroupId || (await client.query("SELECT id FROM age_groups WHERE name = '11-12'")).rows[0].id,
+        [user?.id || null, parentRow.id, ageGroupId || (await client.query("SELECT id FROM age_groups WHERE name = '11-12'")).rows[0].id,
          reg.student_full_name, reg.date_of_birth, reg.gender]
       );
 
@@ -374,11 +381,11 @@ async function approveStudentRegistration(req, res, next) {
         `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [req.user.id, 'APPROVE_STUDENT_REGISTRATION', 'student_registration_request', id,
-         { status: 'pending' }, { status: 'approved', user_id: user.id }, null, null, null]
+         { status: 'pending' }, { status: 'approved', user_id: user?.id || null }, null, null, null]
       );
 
       await client.query('COMMIT');
-      res.json({ message: 'Student registration approved', user: user, registration_id: id });
+      res.json({ message: 'Child registration approved', user, registration_id: id });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

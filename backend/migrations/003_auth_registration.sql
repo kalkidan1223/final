@@ -51,11 +51,11 @@ CREATE INDEX idx_reg_requests_status ON registration_requests(status);
 CREATE INDEX idx_reg_requests_email ON registration_requests(email);
 
 -- ----------------------------------------------------------------------------
--- STUDENT REGISTRATION REQUESTS (for ages 10-12, pending admin approval)
+-- CHILD REGISTRATION REQUESTS (all children require admin approval)
 -- ----------------------------------------------------------------------------
 CREATE TABLE student_registration_requests (
     id              BIGSERIAL PRIMARY KEY,
-    parent_id       BIGINT NOT NULL REFERENCES registration_requests(id) ON DELETE CASCADE,
+    parent_id       BIGINT NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
     student_full_name VARCHAR(150) NOT NULL,
     date_of_birth   DATE NOT NULL,
     gender          VARCHAR(20) NOT NULL,
@@ -70,8 +70,9 @@ CREATE TABLE student_registration_requests (
     previous_school VARCHAR(200),
     current_grade   VARCHAR(50),
     academic_year   VARCHAR(20),
-    student_email   VARCHAR(255) NOT NULL,
-    password_hash   VARCHAR(255) NOT NULL,
+    -- Required only when the child is aged 10-12 and will receive a login.
+    student_email   VARCHAR(255),
+    password_hash   VARCHAR(255),
     recovery_email  VARCHAR(255),
     username        VARCHAR(100),
     age             SMALLINT NOT NULL,
@@ -80,7 +81,8 @@ CREATE TABLE student_registration_requests (
     reviewed_by     BIGINT REFERENCES users(id) ON DELETE SET NULL,
     reviewed_at     TIMESTAMPTZ,
     submitted_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (student_email)
+    UNIQUE (student_email),
+    UNIQUE (parent_id, student_full_name, date_of_birth)
 );
 CREATE INDEX idx_student_reg_status ON student_registration_requests(status);
 CREATE INDEX idx_student_reg_parent ON student_registration_requests(parent_id);

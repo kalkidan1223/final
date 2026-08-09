@@ -1,6 +1,6 @@
 ﻿# Children Learning Hub
 
-A full-stack learning platform for Brana Youth Academy designed for children aged 5–12. It supports parent oversight, instructor course management, student learning flows, and an admin approval workflow.
+A full-stack learning platform for Brana Youth Academy designed for children aged 5–12. It supports parent oversight, instructor course management, student learning flows, and mandatory administrator approval.
 
 ## Overview
 
@@ -13,7 +13,9 @@ This project combines:
 ## Key Features
 
 - Parent registration and approval workflow
-- Student registration for ages 10–12 through invite codes
+- Child registration and approval workflow — no child can access learning content before administrator approval
+- Parent-managed learning profiles for children aged 5–9
+- Student accounts for children aged 10–12, created only after administrator approval
 - Course, lesson, quiz, and activity management
 - Progress tracking and learning recommendations
 - Admin dashboard for approvals, users, and content oversight
@@ -58,7 +60,27 @@ createdb learning_hub
 psql -d learning_hub -f backend/schema.sql
 psql -d learning_hub -f backend/migrations/002_auth_extension.sql
 psql -d learning_hub -f backend/migrations/003_auth_registration.sql
+psql -d learning_hub -f backend/migrations/004_child_approval_policy.sql
+psql -d learning_hub -f backend/migrations/005_parent_guardian_verification.sql
 ```
+
+If you already created the database before the child-approval policy was added, back it up before applying migrations `004_child_approval_policy.sql` and `005_parent_guardian_verification.sql`.
+
+### Child Approval Policy
+
+Every child registration starts as `pending` and is unavailable to the parent and student learning areas until an administrator approves it.
+
+- Ages **5–9**: the administrator creates a parent-managed child profile. The child does not receive a separate login.
+- Ages **10–12**: the administrator creates both the child profile and the student login account from the credentials submitted by the parent.
+
+The Parent Dashboard displays submitted child-registration requests and their current status.
+
+### Parent and Guardian Eligibility
+
+- A parent or guardian must be at least **18 years old**.
+- A parent may submit their own registration for approval.
+- An adult sibling, relative, or other guardian must be created by an administrator after an in-person identity and document review.
+- The administrator records the relationship, verification decision, notes, reviewer, and verification time for every exceptional guardian account.
 
 
 
@@ -104,6 +126,7 @@ Log in at [http://localhost:5173/login](http://localhost:5173/login) — you wil
 - The AI recommendation module is rule-based and can be upgraded later.
 - File uploads are currently handled through URLs rather than cloud storage.
 - The project does not yet include automated tests.
+- The former direct invite-based student registration flow has been removed to enforce administrator approval.
 
 
 

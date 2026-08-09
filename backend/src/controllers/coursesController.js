@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
+const { canReadCourse } = require('../utils/courseAccess');
 
 const VALID_STATUSES = ['draft', 'published', 'archived'];
 
@@ -74,8 +75,17 @@ async function listCourses(req, res, next) {
       conditions.push(`c.age_group_id = $${params.length}`);
     }
 
-    if (req.user.role === 'student' || req.user.role === 'parent') {
+    if (req.user.role === 'student') {
       conditions.push(`c.status = 'published'`);
+      params.push(req.user.id);
+      conditions.push(`EXISTS (SELECT 1 FROM students s WHERE s.user_id = $${params.length} AND s.age_group_id = c.age_group_id AND s.is_active = TRUE)`);
+    } else if (req.user.role === 'parent') {
+      conditions.push(`c.status = 'published'`);
+      params.push(req.user.id);
+      conditions.push(`EXISTS (
+        SELECT 1 FROM students s JOIN parents p ON p.id = s.parent_id
+        WHERE p.user_id = $${params.length} AND s.age_group_id = c.age_group_id AND s.is_active = TRUE
+      )`);
     } else if (status && VALID_STATUSES.includes(status)) {
       params.push(status);
       conditions.push(`c.status = $${params.length}`);
@@ -125,12 +135,7 @@ async function getCourse(req, res, next) {
     }
     const course = courseResult.rows[0];
 
-    const isOwnerOrAdmin =
-      req.user?.role === 'admin' ||
-      (req.user?.role === 'instructor' &&
-        (await getInstructorIdForUser(req.user.id)) === course.instructor_id);
-
-    if (course.status !== 'published' && !isOwnerOrAdmin) {
+    if (!(await canReadCourse(req.user, course))) {
       return res.status(404).json({ error: 'Course not found' });
     }
 
@@ -183,6 +188,13 @@ async function updateCourseStatus(req, res, next) {
     const { status } = req.body;
     if (!VALID_STATUSES.includes(status)) {
       return res.status(400).json({ error: `status must be one of ${VALID_STATUSES.join(', ')}` });
+    }
+
+    if (status === 'published') {
+      const lessonCount = await query('SELECT COUNT(*)::int AS count FROM lessons WHERE course_id = $1', [course.id]);
+      if (lessonCount.rows[0].count === 0) {
+        return res.status(400).json({ error: 'Add at least one lesson before publishing this course' });
+      }
     }
 
     const result = await query(

@@ -1,5 +1,6 @@
 const { query, pool } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
+const { canReadCourse } = require('../utils/courseAccess');
 
 // Loads a lesson plus its parent course, and confirms the current user may
 // modify it (owning instructor or admin). Writes error responses itself.
@@ -91,6 +92,10 @@ async function createLesson(req, res, next) {
 async function listLessons(req, res, next) {
   try {
     const { courseId } = req.params;
+    const courseResult = await query('SELECT * FROM courses WHERE id = $1', [courseId]);
+    if (courseResult.rows.length === 0 || !(await canReadCourse(req.user, courseResult.rows[0]))) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
     const result = await query(
       'SELECT * FROM lessons WHERE course_id = $1 ORDER BY order_index',
       [courseId]
@@ -137,13 +142,24 @@ async function reorderLessons(req, res, next) {
     if (!ok) return;
 
     const { ordered_lesson_ids } = req.body;
-    if (!Array.isArray(ordered_lesson_ids) || ordered_lesson_ids.length === 0) {
-      return res.status(400).json({ error: 'ordered_lesson_ids must be a non-empty array' });
+    if (!Array.isArray(ordered_lesson_ids)) {
+      return res.status(400).json({ error: 'ordered_lesson_ids must be an array' });
     }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const existing = await client.query('SELECT id FROM lessons WHERE course_id = $1 ORDER BY id', [courseId]);
+      const existingIds = existing.rows.map((lesson) => String(lesson.id)).sort();
+      const requestedIds = ordered_lesson_ids.map(String).sort();
+      if (existingIds.length !== requestedIds.length || existingIds.some((id, index) => id !== requestedIds[index])) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'ordered_lesson_ids must contain every lesson in this course exactly once' });
+      }
+
+      // Move rows to unique temporary positions first so swaps do not violate
+      // the UNIQUE(course_id, order_index) database constraint.
+      await client.query('UPDATE lessons SET order_index = -id WHERE course_id = $1', [courseId]);
       for (let i = 0; i < ordered_lesson_ids.length; i += 1) {
         await client.query(
           'UPDATE lessons SET order_index = $1, updated_at = now() WHERE id = $2 AND course_id = $3',

@@ -105,7 +105,7 @@ export default function ActivitySubmit() {
                 className="w-full rounded-xl border border-slate-200 px-4 py-2.5"
               >
                 <option value="">Select child</option>
-                {children.map((c) => (
+                {children.filter((c) => String(c.age_group_id) === String(activity.course_age_group_id)).map((c) => (
                   <option key={c.id} value={c.id}>{c.full_name}</option>
                 ))}
               </select>
