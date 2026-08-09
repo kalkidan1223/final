@@ -235,7 +235,7 @@ async function listStudentRegistrationRequests(req, res, next) {
 
     if (status && ['pending', 'approved', 'rejected', 'suspended'].includes(status)) {
       params.push(status);
-      conditions.push(`status = $${params.length}`);
+      conditions.push(`sr.status = $${params.length}`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

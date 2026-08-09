@@ -30,15 +30,19 @@ export default function AdminApproval() {
   const [activeTab, setActiveTab] = useState('parent-requests');
   const [parentRequests, setParentRequests] = useState([]);
   const [studentRequests, setStudentRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showAction, setShowAction] = useState(null);
   const [actionReason, setActionReason] = useState('');
   const [actionNote, setActionNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   async function loadData() {
     setLoading(true);
+    setError('');
     try {
       const [prRes, srRes, alRes] = await Promise.all([
         axiosClient.get('/admin/approval/registration-requests?status=pending'),
@@ -49,7 +53,7 @@ export default function AdminApproval() {
       setStudentRequests(srRes.data.student_registration_requests || []);
       setAuditLogs(alRes.data.audit_logs || []);
     } catch (err) {
-      console.error(err);
+      setError(err.response?.data?.error || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -58,10 +62,12 @@ export default function AdminApproval() {
   useEffect(() => { loadData(); }, []);
 
   async function handleAction(id, action) {
-    if (action === 'reject' && actionReason.length < 10) {
-      alert('Rejection reason must be at least 10 characters');
+    if (action === 'reject' && actionReason.trim().length < 10) {
+      setError('Rejection reason must be at least 10 characters');
       return;
     }
+    setSubmitting(true);
+    setError('');
     try {
       if (activeTab === 'parent-requests') {
         if (action === 'approve') await axiosClient.patch(`/admin/approval/registration-requests/${id}/approve`, { notes: actionNote });
@@ -71,12 +77,16 @@ export default function AdminApproval() {
         if (action === 'approve') await axiosClient.patch(`/admin/approval/student-registration-requests/${id}/approve`, { notes: actionNote });
         else if (action === 'reject') await axiosClient.patch(`/admin/approval/student-registration-requests/${id}/reject`, { reason: actionReason });
       }
+      setSuccess('Action completed successfully');
       setShowAction(null);
       setActionReason('');
       setActionNote('');
       loadData();
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      console.error(err);
+      setError(err.response?.data?.error || 'Action failed');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -85,6 +95,17 @@ export default function AdminApproval() {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-slate-800 mb-2">📋 Admin Approvals</h1>
         <p className="text-slate-500 mb-8">Review and approve parent and student registration requests.</p>
+
+        {error && (
+          <div className="mb-6 rounded-2xl bg-red-50 border border-red-200 p-4">
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
+            <p className="text-sm text-emerald-600">{success}</p>
+          </div>
+        )}
 
         <div className="flex gap-2 mb-8 border-b border-slate-200">
           {['parent-requests', 'student-requests', 'audit-logs'].map((tab) => (
@@ -133,9 +154,9 @@ export default function AdminApproval() {
                               <ActionButton label="View" color="view" onClick={() => setSelectedRequest(req)} />
                               {req.status === 'pending' && (
                                 <>
-                                  <ActionButton label="✓ Approve" color="approve" onClick={() => { setShowAction({ type: 'approve', id: req.id }); setActionNote(''); }} />
-                                  <ActionButton label="✗ Reject" color="reject" onClick={() => { setShowAction({ type: 'reject', id: req.id }); setActionReason(''); }} />
-                                  <ActionButton label="⏸ Suspend" color="suspend" onClick={() => { setShowAction({ type: 'suspend', id: req.id }); setActionReason(''); }} />
+                                  <ActionButton label="✓ Approve" color="approve" onClick={() => { setShowAction({ type: 'approve', id: req.id, tab: 'parent' }); setActionNote(''); }} />
+                                  <ActionButton label="✗ Reject" color="reject" onClick={() => { setShowAction({ type: 'reject', id: req.id, tab: 'parent' }); setActionReason(''); }} />
+                                  <ActionButton label="⏸ Suspend" color="suspend" onClick={() => { setShowAction({ type: 'suspend', id: req.id, tab: 'parent' }); setActionReason(''); }} />
                                 </>
                               )}
                             </div>
@@ -179,8 +200,8 @@ export default function AdminApproval() {
                             <div className="flex gap-2">
                               {req.status === 'pending' && (
                                 <>
-                                  <ActionButton label="✓ Approve" color="approve" onClick={() => { setShowAction({ type: 'approve', id: req.id }); setActionNote(''); }} />
-                                  <ActionButton label="✗ Reject" color="reject" onClick={() => { setShowAction({ type: 'reject', id: req.id }); setActionReason(''); }} />
+                                  <ActionButton label="✓ Approve" color="approve" onClick={() => { setShowAction({ type: 'approve', id: req.id, tab: 'student' }); setActionNote(''); }} />
+                                  <ActionButton label="✗ Reject" color="reject" onClick={() => { setShowAction({ type: 'reject', id: req.id, tab: 'student' }); setActionReason(''); }} />
                                 </>
                               )}
                             </div>
@@ -193,35 +214,6 @@ export default function AdminApproval() {
                     </tbody>
                   </table>
                 </div>
-
-                {/* Action Modal */}
-                {showAction && showAction.type === 'approve' && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAction(null)}>
-                    <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                      <h3 className="text-xl font-bold text-slate-800 mb-4">✓ Approve Registration</h3>
-                      <textarea placeholder="Approval notes (optional)" value={actionNote} onChange={(e) => setActionNote(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 mb-4 text-sm" rows={3} />
-                      <div className="flex gap-3">
-                        <button onClick={() => handleAction(showAction.id, 'approve')} className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-white hover:bg-emerald-600 transition">Confirm Approval</button>
-                        <button onClick={() => setShowAction(null)} className="rounded-xl bg-slate-100 px-4 py-3 font-medium text-slate-600 hover:bg-slate-200 transition">Cancel</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {showAction && (showAction.type === 'reject' || showAction.type === 'suspend') && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAction(null)}>
-                    <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                      <h3 className="text-xl font-bold text-slate-800 mb-4">
-                        {showAction.type === 'reject' ? '✗ Reject Registration' : '⏸ Suspend Registration'}
-                      </h3>
-                      <textarea required placeholder="Enter reason (minimum 10 characters)" value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 mb-4 text-sm" rows={3} />
-                      <div className="flex gap-3">
-                        <button onClick={() => handleAction(showAction.id, showAction.type)} className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-semibold text-white hover:bg-red-600 transition">Confirm</button>
-                        <button onClick={() => setShowAction(null)} className="rounded-xl bg-slate-100 px-4 py-3 font-medium text-slate-600 hover:bg-slate-200 transition">Cancel</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -255,6 +247,78 @@ export default function AdminApproval() {
           </>
         )}
       </div>
+
+      {/* View Detail Modal */}
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setSelectedRequest(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-lg w-full mx-4 shadow-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">📋 Request Details</h3>
+              <button onClick={() => setSelectedRequest(null)} className="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <p><span className="font-medium">Name:</span> {selectedRequest.full_name}</p>
+                <p><span className="font-medium">Email:</span> {selectedRequest.email}</p>
+                <p><span className="font-medium">Phone:</span> {selectedRequest.phone}</p>
+                <p><span className="font-medium">Gender:</span> {selectedRequest.gender}</p>
+                <p><span className="font-medium">Nationality:</span> {selectedRequest.nationality}</p>
+                <p><span className="font-medium">Country:</span> {selectedRequest.country}</p>
+                <p><span className="font-medium">Region:</span> {selectedRequest.region}</p>
+                <p><span className="font-medium">City:</span> {selectedRequest.city}</p>
+                <p><span className="font-medium">Occupation:</span> {selectedRequest.occupation}</p>
+                <p><span className="font-medium">Relationship:</span> {selectedRequest.relationship_to_child}</p>
+                <p><span className="font-medium">Emergency:</span> {selectedRequest.emergency_contact_name} ({selectedRequest.emergency_contact_relationship})</p>
+                <p><span className="font-medium">Status:</span> <StatusBadge status={selectedRequest.status} /></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Modals */}
+      {showAction && showAction.type === 'approve' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAction(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-slate-800 mb-4">
+              ✓ Approve {showAction.tab === 'student' ? 'Student' : 'Parent'} Registration
+            </h3>
+            <textarea placeholder="Approval notes (optional)" value={actionNote} onChange={(e) => setActionNote(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 mb-4 text-sm" rows={3} />
+            <div className="flex gap-3">
+              <button onClick={() => handleAction(showAction.id, 'approve')} disabled={submitting} className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-white hover:bg-emerald-600 transition disabled:opacity-60">{submitting ? 'Processing...' : 'Confirm Approval'}</button>
+              <button onClick={() => setShowAction(null)} disabled={submitting} className="rounded-xl bg-slate-100 px-4 py-3 font-medium text-slate-600 hover:bg-slate-200 transition disabled:opacity-60">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAction && showAction.type === 'reject' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAction(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-slate-800 mb-4">
+              ✗ Reject {showAction.tab === 'student' ? 'Student' : 'Parent'} Registration
+            </h3>
+            <textarea required placeholder="Enter reason (minimum 10 characters)" value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 mb-4 text-sm" rows={3} />
+            <div className="flex gap-3">
+              <button onClick={() => handleAction(showAction.id, 'reject')} disabled={submitting} className="flex-1 rounded-xl bg-red-500 px-4 py-3 font-semibold text-white hover:bg-red-600 transition disabled:opacity-60">{submitting ? 'Processing...' : 'Confirm'}</button>
+              <button onClick={() => setShowAction(null)} disabled={submitting} className="rounded-xl bg-slate-100 px-4 py-3 font-medium text-slate-600 hover:bg-slate-200 transition disabled:opacity-60">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAction && showAction.type === 'suspend' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAction(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-slate-800 mb-4">⏸ Suspend Registration</h3>
+            <textarea required placeholder="Enter reason (minimum 10 characters)" value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 mb-4 text-sm" rows={3} />
+            <div className="flex gap-3">
+              <button onClick={() => handleAction(showAction.id, 'suspend')} disabled={submitting} className="flex-1 rounded-xl bg-violet-500 px-4 py-3 font-semibold text-white hover:bg-violet-600 transition disabled:opacity-60">{submitting ? 'Processing...' : 'Confirm'}</button>
+              <button onClick={() => setShowAction(null)} disabled={submitting} className="rounded-xl bg-slate-100 px-4 py-3 font-medium text-slate-600 hover:bg-slate-200 transition disabled:opacity-60">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }
