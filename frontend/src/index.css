@@ -25,6 +25,13 @@ input, select, textarea {
   font-family: inherit;
 }
 
+/* Browsers (Edge/IE) render their own reveal & clear controls inside password
+   fields, which would sit next to the app's own show/hide toggle. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

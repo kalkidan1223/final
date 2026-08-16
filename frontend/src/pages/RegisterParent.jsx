@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import DateOfBirthField from '../components/DateOfBirthField';
 
 function calculateAge(dob) {
   if (!dob) return null;
@@ -66,8 +67,8 @@ function PasswordStrength({ password }) {
 
 const steps = [
   { key: 'personal', label: 'Personal Info', icon: '👤' },
-  { key: 'school', label: 'School Info', icon: '🏫' },
-  { key: 'account', label: 'Account Info', icon: '🔑' },
+  { key: 'address', label: 'Address & Contact', icon: '🏫' },
+  { key: 'consent', label: 'Review & Consent', icon: '🔑' },
 ];
 
 export default function RegisterParent() {
@@ -154,6 +155,11 @@ export default function RegisterParent() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const consentErrors = validateStep(2);
+    if (consentErrors.length) {
+      setErrors(consentErrors);
+      return;
+    }
     setErrors([]);
     setSubmitting(true);
     try {
@@ -259,13 +265,17 @@ export default function RegisterParent() {
                     <input required placeholder="Last Name *" value={form.last_name} onChange={update('last_name')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <select required value={form.gender} onChange={update('gender')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100">
+                    <select required value={form.gender} onChange={update('gender')} className="self-end rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                       <option value="">Gender *</option>
                       <option value="male">Male</option>
                       <option value="female">Female</option>
                       <option value="other">Other</option>
                     </select>
-                    <input required type="date" value={form.date_of_birth} onChange={update('date_of_birth')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
+                    <DateOfBirthField
+                      required
+                      value={form.date_of_birth}
+                      onChange={(iso) => setForm((f) => ({ ...f, date_of_birth: iso }))}
+                    />
                   </div>
                   {age && (
                     <p className="text-sm text-emerald-600 font-semibold">📅 Age: {age} years</p>
@@ -331,13 +341,13 @@ export default function RegisterParent() {
                       <p><span className="font-medium">Country:</span> {form.country}</p>
                     </div>
                   </div>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" checked={form.terms_agreed} onChange={update('terms_agreed')} className="mt-1 h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                    <span className="text-sm text-slate-600">I agree to the <a href="#" className="text-violet-600 font-semibold hover:underline">Terms and Conditions</a></span>
+                  <label className={`flex items-start gap-3 cursor-pointer rounded-2xl border-2 p-4 transition ${form.terms_agreed ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input type="checkbox" checked={form.terms_agreed} onChange={update('terms_agreed')} className="mt-0.5 h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                    <span className="text-sm text-slate-700">I agree to the <a href="#" className="text-violet-600 font-semibold hover:underline">Terms and Conditions</a> *</span>
                   </label>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" checked={form.guardian_confirmed} onChange={update('guardian_confirmed')} className="mt-1 h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                    <span className="text-sm text-slate-600">I confirm I am the legal guardian of the child(ren) I am registering.</span>
+                  <label className={`flex items-start gap-3 cursor-pointer rounded-2xl border-2 p-4 transition ${form.guardian_confirmed ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input type="checkbox" checked={form.guardian_confirmed} onChange={update('guardian_confirmed')} className="mt-0.5 h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                    <span className="text-sm text-slate-700">I confirm I am the legal guardian of the child(ren) I am registering. *</span>
                   </label>
                 </div>
               )}
