@@ -13,7 +13,13 @@ export default function ParentDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
-  const [childForm, setChildForm] = useState({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '', confirm_password: '' });
+  const emptyChildForm = {
+    full_name: '', date_of_birth: '', gender: '', grade: '', section: '', current_grade: '',
+    academic_year: '', preferred_language: '', admission_number: '', previous_school: '',
+    blood_group: '', medical_condition: '', learning_disability: '', student_email: '',
+    username: '', password: '', confirm_password: '', recovery_email: '', parent_confirmation: false,
+  };
+  const [childForm, setChildForm] = useState(emptyChildForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -50,8 +56,11 @@ export default function ParentDashboard() {
       if (needsStudentAccount && childForm.password !== childForm.confirm_password) {
         throw new Error('Student passwords do not match');
       }
+      if (!childForm.parent_confirmation) {
+        throw new Error('Please confirm that the child information is correct.');
+      }
       await axiosClient.post('/students/registration-requests', childForm);
-      setChildForm({ full_name: '', date_of_birth: '', gender: '', grade: '', student_email: '', password: '', confirm_password: '' });
+      setChildForm(emptyChildForm);
       setShowAddChild(false);
       await loadAll();
     } catch (err) {
@@ -65,7 +74,7 @@ export default function ParentDashboard() {
     ? Math.max(0, new Date().getFullYear() - new Date(childForm.date_of_birth).getFullYear() -
       (new Date() < new Date(new Date(childForm.date_of_birth).setFullYear(new Date().getFullYear())) ? 1 : 0))
     : null;
-  const needsStudentAccount = calculatedAge !== null && calculatedAge >= 10;
+  const needsStudentAccount = calculatedAge !== null && calculatedAge >= 10 && calculatedAge <= 12;
   const averageProgress = children.length ? Math.round(children.reduce((sum, child) => sum + Number(child.progress_percentage || 0), 0) / children.length) : 0;
   const accountChildren = children.filter((child) => child.has_own_account).length;
 
@@ -119,33 +128,60 @@ export default function ParentDashboard() {
               <>
                 {showAddChild && (
                   <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg border border-violet-100">
-                    <h3 className="text-lg font-semibold text-slate-700 mb-4">Add a Child</h3>
+                    <h3 className="text-lg font-semibold text-slate-700 mb-1">Register a child</h3>
+                    <p className="mb-5 text-sm text-slate-500">Complete the child profile. An administrator reviews every registration before learning access begins.</p>
                     <form onSubmit={handleAddChild} className="space-y-4">
+                      <fieldset className="rounded-2xl border border-slate-200 p-4">
+                        <legend className="px-2 text-sm font-bold text-slate-700">1. Child information</legend>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <input required placeholder="Full Name" value={childForm.full_name} onChange={(e) => setChildForm((f) => ({ ...f, full_name: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
-                        <input required type="date" value={childForm.date_of_birth} onChange={(e) => setChildForm((f) => ({ ...f, date_of_birth: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                        <input required type="date" max={new Date().toISOString().slice(0, 10)} aria-label="Date of birth" value={childForm.date_of_birth} onChange={(e) => setChildForm((f) => ({ ...f, date_of_birth: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
                         <select required value={childForm.gender} onChange={(e) => setChildForm((f) => ({ ...f, gender: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3">
                           <option value="">Select gender</option>
                           <option value="female">Female</option>
                           <option value="male">Male</option>
                           <option value="other">Other</option>
                         </select>
-                        <input placeholder="Grade (optional)" value={childForm.grade} onChange={(e) => setChildForm((f) => ({ ...f, grade: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                        <select required value={childForm.preferred_language} onChange={(e) => setChildForm((f) => ({ ...f, preferred_language: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3"><option value="">Preferred learning language</option><option value="English">English</option><option value="Amharic">Amharic</option><option value="Afan Oromo">Afan Oromo</option><option value="Tigrinya">Tigrinya</option><option value="Other">Other</option></select>
                       </div>
+                      </fieldset>
                       {calculatedAge !== null && (
-                        <p className="text-xs text-slate-500">
+                        <p className="hidden">
                           {needsStudentAccount
                             ? 'This age group creates its own login — you\'ll get an invite code.'
                             : 'This age group has no login — you\'ll manage lessons and activities directly.'}
                         </p>
                       )}
+                      {calculatedAge !== null && <div className={`rounded-xl p-4 text-sm ${calculatedAge < 5 || calculatedAge > 12 ? 'bg-rose-50 text-rose-700' : needsStudentAccount ? 'bg-sky-50 text-sky-800' : 'bg-emerald-50 text-emerald-800'}`}>{calculatedAge < 5 || calculatedAge > 12 ? 'This platform accepts children aged 5 to 12 only.' : needsStudentAccount ? `Age ${calculatedAge}: independent account after administrator approval.` : `Age ${calculatedAge}: parent-managed learning with no separate child login.`}</div>}
+                      <fieldset className="rounded-2xl border border-slate-200 p-4">
+                        <legend className="px-2 text-sm font-bold text-slate-700">2. School information</legend>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <input required placeholder="Current grade" value={childForm.current_grade} onChange={(e) => setChildForm((f) => ({ ...f, current_grade: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input required placeholder="Academic year (for example, 2026/27)" value={childForm.academic_year} onChange={(e) => setChildForm((f) => ({ ...f, academic_year: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input placeholder="Class / section (optional)" value={childForm.section} onChange={(e) => setChildForm((f) => ({ ...f, section: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input placeholder="Admission number (optional)" value={childForm.admission_number} onChange={(e) => setChildForm((f) => ({ ...f, admission_number: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input placeholder="Previous school (optional)" value={childForm.previous_school} onChange={(e) => setChildForm((f) => ({ ...f, previous_school: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3 md:col-span-2" />
+                        </div>
+                      </fieldset>
+                      <fieldset className="rounded-2xl border border-slate-200 p-4">
+                        <legend className="px-2 text-sm font-bold text-slate-700">3. Health and learning support <span className="font-normal text-slate-400">(optional)</span></legend>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <select value={childForm.blood_group} onChange={(e) => setChildForm((f) => ({ ...f, blood_group: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3"><option value="">Blood group</option>{['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((value) => <option key={value}>{value}</option>)}</select>
+                          <input placeholder="Learning support needs (optional)" value={childForm.learning_disability} onChange={(e) => setChildForm((f) => ({ ...f, learning_disability: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <textarea placeholder="Medical information the school should know (optional)" value={childForm.medical_condition} onChange={(e) => setChildForm((f) => ({ ...f, medical_condition: e.target.value }))} className="min-h-24 rounded-xl border border-slate-200 px-4 py-3 md:col-span-2" />
+                        </div>
+                      </fieldset>
                       {needsStudentAccount && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl bg-sky-50 p-4">
+                          <p className="md:col-span-2 text-sm font-semibold text-sky-800">4. Independent student account — activated after administrator approval</p>
                           <input required type="email" placeholder="Student email" value={childForm.student_email} onChange={(e) => setChildForm((f) => ({ ...f, student_email: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input minLength="3" placeholder="Preferred username (optional)" value={childForm.username} onChange={(e) => setChildForm((f) => ({ ...f, username: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
                           <input required type="password" placeholder="Student password" value={childForm.password} onChange={(e) => setChildForm((f) => ({ ...f, password: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
-                          <input required type="password" placeholder="Confirm student password" value={childForm.confirm_password} onChange={(e) => setChildForm((f) => ({ ...f, confirm_password: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3 md:col-span-2" />
+                          <input required type="password" placeholder="Confirm student password" value={childForm.confirm_password} onChange={(e) => setChildForm((f) => ({ ...f, confirm_password: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3" />
+                          <input type="email" placeholder="Recovery email (optional)" value={childForm.recovery_email} onChange={(e) => setChildForm((f) => ({ ...f, recovery_email: e.target.value }))} className="rounded-xl border border-slate-200 px-4 py-3 md:col-span-2" />
                         </div>
                       )}
+                      <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-700"><input required type="checkbox" checked={childForm.parent_confirmation} onChange={(e) => setChildForm((f) => ({ ...f, parent_confirmation: e.target.checked }))} className="mt-1 h-4 w-4" /><span>I confirm that I am authorized to register this child and that the information is accurate.</span></label>
                       {error && <p className="text-sm text-rose-600">{error}</p>}
                       <div className="flex gap-3">
                         <button type="submit" disabled={submitting} className="rounded-xl bg-emerald-500 px-5 py-2.5 font-semibold text-white hover:bg-emerald-600 disabled:opacity-60">

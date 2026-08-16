@@ -43,6 +43,7 @@ CREATE TABLE registration_requests (
     rejection_reason TEXT,
     reviewed_by     BIGINT REFERENCES users(id) ON DELETE SET NULL,
     reviewed_at     TIMESTAMPTZ,
+    reviewed_notes  TEXT,
     submitted_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     reviewed_notes  TEXT,
     UNIQUE (email)

@@ -79,6 +79,21 @@ function validateChildRegistration(body) {
     errors.push('a valid date_of_birth is required');
   }
   if (!body.gender) errors.push('gender is required');
+  if (!body.current_grade || String(body.current_grade).trim().length > 50) {
+    errors.push('current_grade is required');
+  }
+  if (!body.academic_year || String(body.academic_year).trim().length > 20) {
+    errors.push('academic_year is required');
+  }
+  if (!body.preferred_language || String(body.preferred_language).trim().length > 50) {
+    errors.push('preferred_language is required');
+  }
+  if (body.recovery_email && !isValidEmail(body.recovery_email)) {
+    errors.push('a valid recovery_email is required when provided');
+  }
+  if (body.parent_confirmation !== true) {
+    errors.push('parent_confirmation is required');
+  }
   return errors;
 }
 

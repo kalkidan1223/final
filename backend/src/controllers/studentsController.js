@@ -69,7 +69,9 @@ async function createChildRegistrationRequest(req, res, next) {
     if (errors.length) return res.status(400).json({ errors });
 
     const { full_name, date_of_birth, gender, grade, section, preferred_language,
-      student_email, password } = req.body;
+      blood_group, medical_condition, learning_disability, admission_number,
+      previous_school, current_grade, academic_year, student_email, password,
+      recovery_email, username } = req.body;
     const age = calculateAge(date_of_birth);
     if (age < 5 || age > 12) {
       return res.status(400).json({ error: 'A child must be between 5 and 12 years old' });
@@ -101,11 +103,16 @@ async function createChildRegistrationRequest(req, res, next) {
     const result = await query(
       `INSERT INTO student_registration_requests
        (parent_id, student_full_name, date_of_birth, gender, grade, section, preferred_language,
-        student_email, password_hash, age, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')
+        blood_group, medical_condition, learning_disability, admission_number, previous_school,
+        current_grade, academic_year, student_email, password_hash, recovery_email, username, age, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'pending')
        RETURNING id, student_full_name, date_of_birth, age, status, submitted_at`,
       [parentId, full_name.trim(), date_of_birth, gender, grade || null, section || null,
-        preferred_language || null, needsAccount ? student_email.toLowerCase() : null, passwordHash, age]
+        preferred_language.trim(), blood_group || null, medical_condition || null,
+        learning_disability || null, admission_number || null, previous_school || null,
+        current_grade.trim(), academic_year.trim(), needsAccount ? student_email.toLowerCase() : null,
+        passwordHash, needsAccount && recovery_email ? recovery_email.toLowerCase() : null,
+        needsAccount && username ? username.trim() : null, age]
     );
 
     await query(
@@ -126,8 +133,10 @@ async function createChildRegistrationRequest(req, res, next) {
 async function listMyChildRegistrationRequests(req, res, next) {
   try {
     const result = await query(
-      `SELECT sr.id, sr.student_full_name, sr.date_of_birth, sr.age, sr.grade, sr.status,
-              sr.rejection_reason, sr.reviewed_at, sr.submitted_at, sr.student_email IS NOT NULL AS has_own_account
+      `SELECT sr.id, sr.student_full_name, sr.date_of_birth, sr.age, sr.gender, sr.grade,
+              sr.current_grade, sr.academic_year, sr.preferred_language, sr.student_email,
+              sr.username, sr.status, sr.rejection_reason, sr.reviewed_at, sr.submitted_at,
+              sr.student_email IS NOT NULL AS has_own_account
        FROM student_registration_requests sr
        JOIN parents p ON p.id = sr.parent_id
        WHERE p.user_id = $1
