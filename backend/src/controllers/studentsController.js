@@ -160,8 +160,9 @@ async function listMyChildren(req, res, next) {
     }
 
     const result = await query(
-      `SELECT s.id, s.full_name, s.date_of_birth, s.age_group_id, s.user_id IS NOT NULL AS has_own_account,
-              ag.name AS age_group, u.email AS user_email, u.last_login_at,
+      `SELECT s.id, s.full_name, s.date_of_birth, s.age_group_id, s.grade, s.section, s.academic_year,
+              s.preferred_language, s.admission_number, s.user_id IS NOT NULL AS has_own_account,
+              ag.name AS age_group, u.email AS user_email, u.is_active AS student_account_active, u.last_login_at,
               COALESCE(ROUND(AVG(pr.completion_percentage)), 0) AS progress_percentage,
               COUNT(DISTINCT pr.lesson_id) FILTER (WHERE pr.status = 'completed') AS completed_lessons
        FROM students s
@@ -169,7 +170,7 @@ async function listMyChildren(req, res, next) {
        LEFT JOIN users u ON u.id = s.user_id
        LEFT JOIN progress pr ON pr.student_id = s.id
        WHERE s.parent_id = $1
-       GROUP BY s.id, ag.name, u.email, u.last_login_at
+       GROUP BY s.id, ag.name, u.email, u.is_active, u.last_login_at
        ORDER BY s.date_of_birth`,
       [parentResult.rows[0].id]
     );
@@ -184,7 +185,8 @@ async function listMyChildren(req, res, next) {
 async function getChildLearningSpace(req, res, next) {
   try {
     const childResult = await query(
-      `SELECT s.id, s.full_name, s.date_of_birth, s.age_group_id, s.user_id IS NOT NULL AS has_own_account,
+      `SELECT s.id, s.full_name, s.date_of_birth, s.age_group_id, s.grade, s.section, s.academic_year,
+              s.preferred_language, s.admission_number, s.user_id IS NOT NULL AS has_own_account,
               ag.name AS age_group, u.email AS student_email, u.is_active AS student_account_active,
               COALESCE(ROUND(AVG(pr.completion_percentage)), 0) AS progress_percentage,
               COUNT(DISTINCT pr.lesson_id) FILTER (WHERE pr.status = 'completed') AS completed_lessons
@@ -200,7 +202,19 @@ async function getChildLearningSpace(req, res, next) {
     const child = childResult.rows[0];
     if (!child) return res.status(404).json({ error: 'Child not found' });
 
-    const [courses, activities, quizResults, recommendations] = await Promise.all([
+    const [courses, materials, activities, quizResults, recommendations] = await Promise.all([
+      query(
+        `SELECT lm.id, lm.title, lm.type, lm.file_url, lm.created_at, l.title AS lesson_title,
+                c.title AS course_title, u.full_name AS instructor_name
+         FROM learning_materials lm
+         JOIN lessons l ON l.id = lm.lesson_id
+         JOIN courses c ON c.id = l.course_id
+         JOIN instructors i ON i.id = c.instructor_id
+         JOIN users u ON u.id = i.user_id
+         WHERE c.status = 'published' AND c.age_group_id = $1
+         ORDER BY lm.created_at DESC`,
+        [child.age_group_id]
+      ),
       query(
         `SELECT c.id, c.title, c.description, u.full_name AS instructor_name, COUNT(DISTINCT l.id) AS lesson_count
          FROM courses c JOIN instructors i ON i.id = c.instructor_id JOIN users u ON u.id = i.user_id
@@ -228,7 +242,7 @@ async function getChildLearningSpace(req, res, next) {
         [child.id]
       ),
     ]);
-    res.json({ child, courses: courses.rows, activities: activities.rows, quiz_results: quizResults.rows, recommendations: recommendations.rows });
+    res.json({ child, courses: courses.rows, materials: materials.rows, activities: activities.rows, quiz_results: quizResults.rows, recommendations: recommendations.rows });
   } catch (err) {
     next(err);
   }

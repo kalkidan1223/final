@@ -364,11 +364,16 @@ async function approveStudentRegistration(req, res, next) {
       }
 
       await client.query(
-        `INSERT INTO students (user_id, parent_id, age_group_id, full_name, date_of_birth, gender)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO students (user_id, parent_id, age_group_id, full_name, date_of_birth, gender,
+           grade, section, preferred_language, admission_number, previous_school, academic_year,
+           blood_group, medical_condition, learning_disability)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING id`,
         [user?.id || null, parentRow.id, ageGroupId || (await client.query("SELECT id FROM age_groups WHERE name = '11-12'")).rows[0].id,
-         reg.student_full_name, reg.date_of_birth, reg.gender]
+         reg.student_full_name, reg.date_of_birth, reg.gender, reg.current_grade || reg.grade || null,
+         reg.section || null, reg.preferred_language || null, reg.admission_number || null,
+         reg.previous_school || null, reg.academic_year || null, reg.blood_group || null,
+         reg.medical_condition || null, reg.learning_disability || null]
       );
 
       await client.query(

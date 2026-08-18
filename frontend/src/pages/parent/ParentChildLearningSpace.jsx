@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import axiosClient from '../../api/axiosClient';
 
-const TABS = ['overview', 'courses', 'activities', 'progress', 'recommendations'];
+const TABS = ['overview', 'courses', 'materials', 'activities', 'progress', 'recommendations'];
 
 function ageFromDate(date) {
   const birth = new Date(date);
@@ -28,7 +28,7 @@ export default function ParentChildLearningSpace() {
   if (error) return <Layout><p className="mx-auto max-w-4xl p-10 text-rose-600">{error}</p></Layout>;
   if (!data) return <Layout><p className="p-10 text-slate-500">Loading learning space...</p></Layout>;
 
-  const { child, courses, activities, quiz_results: quizResults, recommendations } = data;
+  const { child, courses, materials, activities, quiz_results: quizResults, recommendations } = data;
   const averageQuiz = quizResults.length
     ? Math.round(quizResults.reduce((sum, item) => sum + (Number(item.score) / Number(item.total_points || 1)) * 100, 0) / quizResults.length)
     : 0;
@@ -59,6 +59,11 @@ export default function ParentChildLearningSpace() {
         {tab === 'courses' && <div className="mt-6 grid gap-4 md:grid-cols-2">
           {courses.map((course) => <Link key={course.id} to={`/courses/${course.id}`} className="rounded-2xl bg-white p-5 shadow-sm transition hover:shadow-md"><p className="text-lg font-bold text-slate-800">{course.title}</p><p className="mt-2 text-sm text-slate-600">{course.description || 'Explore this learning course.'}</p><p className="mt-3 text-xs font-semibold text-sky-700">{course.lesson_count} lessons · {course.instructor_name}</p></Link>)}
           {courses.length === 0 && <p className="text-slate-500">No published courses are available for this age group yet.</p>}
+        </div>}
+
+        {tab === 'materials' && <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {materials.map((material) => <article key={material.id} className="rounded-2xl bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-sky-700">{material.type}</p><h2 className="mt-1 text-lg font-bold text-slate-800">{material.title}</h2><p className="mt-2 text-sm text-slate-500">{material.course_title} · {material.lesson_title}</p><p className="mt-1 text-xs text-slate-400">Shared by {material.instructor_name}</p><a href={material.file_url} target="_blank" rel="noreferrer" className="mt-4 inline-block rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700">Open material</a></article>)}
+          {materials.length === 0 && <p className="text-slate-500">No learning materials are available for this age group yet.</p>}
         </div>}
 
         {tab === 'activities' && <div className="mt-6 space-y-3">

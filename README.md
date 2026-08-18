@@ -62,9 +62,11 @@ psql -d learning_hub -f backend/migrations/002_auth_extension.sql
 psql -d learning_hub -f backend/migrations/003_auth_registration.sql
 psql -d learning_hub -f backend/migrations/004_child_approval_policy.sql
 psql -d learning_hub -f backend/migrations/005_parent_guardian_verification.sql
+psql -d learning_hub -f backend/migrations/006_child_request_review_notes.sql
+psql -d learning_hub -f backend/migrations/007_student_profile_details.sql
 ```
 
-If you already created the database before the child-approval policy was added, back it up before applying migrations `004_child_approval_policy.sql` and `005_parent_guardian_verification.sql`.
+If you already created the database before the child-approval policy was added, back it up before applying migrations `004_child_approval_policy.sql` through `006_child_request_review_notes.sql`. Migration 006 is required for the administrator's child approval action because it stores the reviewer note.
 
 ### Child Approval Policy
 
@@ -74,6 +76,12 @@ Every child registration starts as `pending` and is unavailable to the parent an
 - Ages **10–12**: the administrator creates both the child profile and the student login account from the credentials submitted by the parent.
 
 The Parent Dashboard displays submitted child-registration requests and their current status.
+
+### Parent Child Registration
+
+Parents register each child through the Parent Dashboard. The form collects the child's identity, school information, preferred learning language, and optional medical or learning-support information. For ages 10–12 it also collects an email and password for the future independent account.
+
+The admin must approve the request before the child appears in learning areas. A rejection reason or review note is retained with the request for the parent to see.
 
 ### Parent and Guardian Eligibility
 
@@ -105,6 +113,8 @@ npm run dev
 
 The frontend will run on [http://localhost:5173](http://localhost:5173).
 
+The parent-registration date-of-birth control supports Ethiopian and Gregorian calendar entry; the API always receives a Gregorian `YYYY-MM-DD` date.
+
 ### 5. Create an Admin User
 
 After migrations are applied, seed the default admin account:
@@ -127,6 +137,7 @@ Log in at [http://localhost:5173/login](http://localhost:5173/login) — you wil
 - File uploads are currently handled through URLs rather than cloud storage.
 - The project does not yet include automated tests.
 - The former direct invite-based student registration flow has been removed to enforce administrator approval.
+- After pulling changes, run any newly added migrations before testing admin approvals or registration flows.
 
 
 

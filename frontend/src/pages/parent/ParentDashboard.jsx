@@ -9,6 +9,7 @@ export default function ParentDashboard() {
   const [children, setChildren] = useState([]);
   const [registrationRequests, setRegistrationRequests] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
+  const [selectedChild, setSelectedChild] = useState(null);
   const [ageGroups, setAgeGroups] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +48,15 @@ export default function ParentDashboard() {
   }
 
   useEffect(() => { loadAll(); }, []);
+
+  async function markNotificationRead(id) {
+    try {
+      const { data } = await axiosClient.patch(`/notifications/${id}/read`);
+      setNotifications((items) => items.map((item) => item.id === id ? data.notification : item));
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not update the notification');
+    }
+  }
 
   async function handleAddChild(e) {
     e.preventDefault();
@@ -199,7 +209,7 @@ export default function ParentDashboard() {
                       <div className="flex items-start justify-between mb-4">
                         <div>
                           <h3 className="text-lg font-semibold text-slate-800">{child.full_name}</h3>
-                          <p className="text-sm text-slate-500">{child.age_group}</p>
+                        <p className="text-sm text-slate-500">{child.age_group}{child.grade ? ` · ${child.grade}` : ''}{child.section ? ` (${child.section})` : ''}</p>
                         </div>
                         <span className={`rounded-full px-3 py-1 text-xs font-medium ${child.has_own_account ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
                           {child.has_own_account ? 'Own Login' : 'Parent-Managed'}
@@ -212,13 +222,14 @@ export default function ParentDashboard() {
                           <>
                             <p className="text-sm text-slate-600">Email: {child.user_email || '—'}</p>
                             <p className="text-sm text-slate-600">Last Login: {child.last_login_at ? new Date(child.last_login_at).toLocaleDateString() : 'Never'}</p>
+                            <p className={`text-xs font-semibold ${child.student_account_active ? 'text-emerald-700' : 'text-amber-700'}`}>Account: {child.student_account_active ? 'Active' : 'Inactive'}</p>
                           </>
                         )}
                       </div>
                       <div className="mt-4 flex gap-2">
                         <Link to={`/parent/children/${child.id}`} className="flex-1 rounded-lg bg-sky-600 px-3 py-2 text-center text-xs font-semibold text-white hover:bg-sky-700">Open Learning Space</Link>
                         {child.has_own_account && (
-                          <button className="flex-1 rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100">Manage Account</button>
+                          <button onClick={() => setSelectedChild(child)} className="flex-1 rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-100">Account details</button>
                         )}
                       </div>
                     </div>
@@ -250,13 +261,13 @@ export default function ParentDashboard() {
                   <p className="text-center text-slate-500 py-10">No notifications yet.</p>
                 ) : (
                   notifications.map((n) => (
-                    <div key={n.id} className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100 hover:shadow-md transition">
+                    <div key={n.id} className={`rounded-2xl bg-white p-5 shadow-sm border border-slate-100 hover:shadow-md transition ${n.is_read ? '' : 'border-sky-200 bg-sky-50/40'}`}>
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold text-slate-800">{n.title}</p>
                           <p className="text-sm text-slate-500 mt-1">{n.message}</p>
                         </div>
-                        <span className="text-xs text-slate-400">{new Date(n.created_at).toLocaleDateString()}</span>
+                        <div className="text-right"><span className="block text-xs text-slate-400">{new Date(n.created_at).toLocaleDateString()}</span>{!n.is_read && <button onClick={() => markNotificationRead(n.id)} className="mt-2 text-xs font-semibold text-sky-700 hover:underline">Mark as read</button>}</div>
                       </div>
                     </div>
                   ))
@@ -280,7 +291,7 @@ export default function ParentDashboard() {
                 {selectedChild.has_own_account && (
                   <>
                     <p><span className="font-medium">Last Login:</span> {selectedChild.last_login_at ? new Date(selectedChild.last_login_at).toLocaleString() : 'Never'}</p>
-                    <button className="w-full rounded-xl bg-sky-500 px-4 py-3 font-semibold text-white hover:bg-sky-600 transition">Reset Password</button>
+                    <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-800">For security, student passwords are never displayed to parents. Use the account recovery process if the student cannot sign in.</p>
                   </>
                 )}
                 {!selectedChild.has_own_account && (
