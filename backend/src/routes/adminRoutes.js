@@ -4,6 +4,7 @@ const { authorize } = require('../middleware/rbac');
 const adminController = require('../controllers/adminController');
 const adminDashboardController = require('../controllers/adminDashboardController');
 const ageGroupsController = require('../controllers/ageGroupsController');
+const adminExtController = require('../controllers/adminExtController');
 
 const router = express.Router();
 
@@ -51,5 +52,25 @@ router.get('/reports', requireAuth, authorize('admin'), adminController.listRepo
 
 // --- Notifications ---
 router.get('/notifications', requireAuth, authorize('admin'), adminController.listAllNotifications);
+router.post('/notifications/send', requireAuth, authorize('admin'), adminExtController.sendNotification);
+
+// --- Lessons (admin supervise) ---
+router.get('/lessons', requireAuth, authorize('admin'), adminExtController.listLessons);
+router.patch('/lessons/:id/status', requireAuth, authorize('admin'), adminExtController.updateLessonStatus);
+
+// --- Progress (admin view all) ---
+router.get('/progress', requireAuth, authorize('admin'), adminExtController.listProgress);
+
+// --- AI Recommendations (admin view all) ---
+router.get('/ai-recommendations', requireAuth, authorize('admin'), adminExtController.listAIRecommendations);
+router.patch('/ai-recommendations/:id/view', requireAuth, authorize('admin'), adminExtController.markRecommendationViewed);
+
+// --- Announcements ---
+router.get('/announcements', requireAuth, authorize('admin'), adminExtController.listAnnouncements);
+router.post('/announcements', requireAuth, authorize('admin'), adminExtController.createAnnouncement);
+router.delete('/announcements/:id', requireAuth, authorize('admin'), adminExtController.deleteAnnouncement);
+
+// --- Reports (generate) ---
+router.post('/reports/generate', requireAuth, authorize('admin'), adminExtController.generateReport);
 
 module.exports = router;

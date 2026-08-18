@@ -16,6 +16,11 @@ import AdminReports from './pages/admin/AdminReports';
 import AdminNotifications from './pages/admin/AdminNotifications';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminApproval from './pages/admin/AdminApproval';
+import AdminAuditLogs from './pages/admin/AdminAuditLogs';
+import AdminLessons from './pages/admin/AdminLessons';
+import AdminProgress from './pages/admin/AdminProgress';
+import AdminAIRecommendations from './pages/admin/AdminAIRecommendations';
+import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import InstructorCourses from './pages/instructor/InstructorCourses';
 import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
@@ -23,7 +28,9 @@ import InstructorLessonDetail from './pages/instructor/InstructorLessonDetail';
 import InstructorQuizManage from './pages/instructor/InstructorQuizManage';
 import InstructorActivitySubmissions from './pages/instructor/InstructorActivitySubmissions';
 import ParentDashboard from './pages/parent/ParentDashboard';
+import ParentChildren from './pages/parent/ParentChildren';
 import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
+import ParentLayout from './components/ParentLayout';
 import StudentDashboard from './pages/student/StudentDashboard';
 import CourseCatalog from './pages/shared/CourseCatalog';
 import StudentCourseDetail from './pages/student/StudentCourseDetail';
@@ -139,6 +146,51 @@ export default function App() {
       />
 
       <Route
+        path="/admin/audit-logs"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminAuditLogs />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/lessons"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminLessons />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/progress"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminProgress />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/ai-recommendations"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminAIRecommendations />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/announcements"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminAnnouncements />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/instructor/dashboard"
         element={<ProtectedRoute roles={['instructor']}><InstructorDashboard /></ProtectedRoute>}
       />
@@ -182,6 +234,13 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* ── Parent ── */}
+      <Route path="/parent" element={<ProtectedRoute roles={['parent']}><ParentLayout /></ProtectedRoute>}>
+        <Route path="dashboard" element={<ParentDashboard />} />
+        <Route path="children" element={<ParentChildren />} />
+        <Route path="children/:id" element={<ParentChildLearningSpace />} />
+      </Route>
 
       <Route
         path="/parent/dashboard"

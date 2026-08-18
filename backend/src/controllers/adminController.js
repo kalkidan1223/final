@@ -242,26 +242,28 @@ async function activateUser(req, res, next) {
 // GET /api/admin/students  — list all students with parent & age group info
 async function listStudents(req, res, next) {
   try {
-    const { is_active } = req.query;
+    const { is_active, limit } = req.query;
     const conditions = [];
     const params = [];
 
     if (is_active !== undefined) {
-      params.push(is_active === 'true' || is_active === 'true');
+      params.push(is_active === 'true');
       conditions.push(`s.is_active = $${params.length}`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
       `SELECT s.*, u.email, u.is_active AS user_is_active, u.full_name AS user_full_name,
-               ag.name AS age_group_name, p.full_name AS parent_name
+               ag.name AS age_group_name, pu.full_name AS parent_name
        FROM students s
-       JOIN users u ON u.id = s.user_id
+       LEFT JOIN users u ON u.id = s.user_id
        JOIN parents p ON p.id = s.parent_id
+       JOIN users pu ON pu.id = p.user_id
        JOIN age_groups ag ON ag.id = s.age_group_id
        ${where}
-       ORDER BY s.created_at DESC`,
-      params
+       ORDER BY s.created_at DESC
+       LIMIT $${params.length + 1}`,
+      [...params, parseInt(limit) || 300]
     );
 
     res.json({ students: result.rows });
@@ -388,25 +390,30 @@ async function createParent(req, res, next) {
 // GET /api/admin/parents  — list all parents
 async function listParents(req, res, next) {
   try {
-    const { is_active } = req.query;
+    const { is_active, search, limit } = req.query;
     const conditions = [];
     const params = [];
 
     if (is_active !== undefined) {
-      params.push(is_active === 'true' || is_active === 'true');
+      params.push(is_active === 'true');
       conditions.push(`u.is_active = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(u.full_name ILIKE $${params.length} OR u.email ILIKE $${params.length} OR u.phone ILIKE $${params.length})`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
       `SELECT u.id, u.email, u.full_name, u.phone, u.is_active, u.last_login_at, u.created_at,
-              p.address, p.emergency_contact, p.date_of_birth, p.guardian_relationship,
-              p.in_person_verified, p.verified_at
+              p.id AS parent_id, p.address, p.emergency_contact, p.date_of_birth,
+              p.guardian_relationship, p.in_person_verified, p.verified_at, p.verification_notes
        FROM users u
        JOIN parents p ON p.user_id = u.id
        ${where}
-       ORDER BY u.created_at DESC`,
-      params
+       ORDER BY u.created_at DESC
+       LIMIT $${params.length + 1}`,
+      [...params, parseInt(limit) || 300]
     );
 
     res.json({ parents: result.rows });
@@ -460,12 +467,12 @@ async function activateParent(req, res, next) {
 // GET /api/admin/instructors  — list all instructors
 async function listInstructors(req, res, next) {
   try {
-    const { is_active } = req.query;
+    const { is_active, limit } = req.query;
     const conditions = [];
     const params = [];
 
     if (is_active !== undefined) {
-      params.push(is_active === 'true' || is_active === 'true');
+      params.push(is_active === 'true');
       conditions.push(`u.is_active = $${params.length}`);
     }
 
@@ -476,8 +483,9 @@ async function listInstructors(req, res, next) {
        FROM users u
        JOIN instructors i ON i.user_id = u.id
        ${where}
-       ORDER BY u.created_at DESC`,
-      params
+       ORDER BY u.created_at DESC
+       LIMIT $${params.length + 1}`,
+      [...params, parseInt(limit) || 200]
     );
 
     res.json({ instructors: result.rows });
@@ -531,7 +539,7 @@ async function activateInstructor(req, res, next) {
 // GET /api/admin/courses  — list all courses with instructor & age group info
 async function listCourses(req, res, next) {
   try {
-    const { status, instructor_id, age_group_id } = req.query;
+    const { status, instructor_id, age_group_id, search, limit } = req.query;
     const conditions = [];
     const params = [];
 
@@ -547,6 +555,10 @@ async function listCourses(req, res, next) {
       params.push(age_group_id);
       conditions.push(`c.age_group_id = $${params.length}`);
     }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(c.title ILIKE $${params.length} OR u.full_name ILIKE $${params.length})`);
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
@@ -556,8 +568,9 @@ async function listCourses(req, res, next) {
        JOIN users u ON u.id = i.user_id
        JOIN age_groups ag ON ag.id = c.age_group_id
        ${where}
-       ORDER BY c.created_at DESC`,
-      params
+       ORDER BY c.created_at DESC
+       LIMIT $${params.length + 1}`,
+      [...params, parseInt(limit) || 300]
     );
 
     res.json({ courses: result.rows });

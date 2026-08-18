@@ -6,10 +6,6 @@ node_modules/
 .env.local
 .env.*.local
 
-# Build outputs
-frontend/dist/
-backend/dist/
-
 # IDE
 .vscode/
 .idea/
