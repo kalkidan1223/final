@@ -5,7 +5,8 @@ import {
   MdMenuBook, MdVideoLibrary, MdQuiz, MdAssignment, MdTrendingUp,
   MdSmartToy, MdStar, MdCheckCircle, MdArrowForward, MdMenu,
   MdClose, MdPlayCircle, MdAutoStories, MdDraw, MdCalculate,
-  MdAbc, MdPalette, MdMusicNote, MdScience, MdPublic, MdChildCare
+  MdAbc, MdPalette, MdMusicNote, MdScience, MdPublic, MdChildCare,
+  MdNotifications, MdEventAvailable, MdFeedback, MdMessage
 } from 'react-icons/md';
 
 function PublicNav() {
@@ -24,13 +25,15 @@ function PublicNav() {
   ];
 
   function handleNavClick(href) {
-    if (href.startsWith('#')) {
-      const element = document.querySelector(href);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
     setMobileMenuOpen(false);
+    if (href.startsWith('#')) {
+      setTimeout(() => {
+        const element = document.querySelector(href);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
   }
 
   return (
@@ -948,6 +951,13 @@ function CTASection() {
 }
 
 function Footer() {
+  function scrollToSection(sectionId) {
+    const element = document.querySelector(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   return (
     <footer className="bg-slate-900 text-slate-300 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -969,10 +979,38 @@ function Footer() {
           <div>
             <h3 className="text-white font-bold mb-4">Quick Links</h3>
             <ul className="space-y-2 text-sm">
-              <li><button className="hover:text-blue-400 transition-colors">About Us</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">How It Works</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">Learning Areas</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">Features</button></li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#about')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  About Us
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#how-it-works')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  How It Works
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#learning-areas')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  Learning Areas
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#features')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  Features
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -980,10 +1018,38 @@ function Footer() {
           <div>
             <h3 className="text-white font-bold mb-4">For Users</h3>
             <ul className="space-y-2 text-sm">
-              <li><button className="hover:text-blue-400 transition-colors">For Parents</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">For Instructors</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">For Students</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">For Administrators</button></li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#parents')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  For Parents
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#instructors')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  For Instructors
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#learning-areas')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  For Students
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#about')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  For Administrators
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -991,10 +1057,32 @@ function Footer() {
           <div>
             <h3 className="text-white font-bold mb-4">Support</h3>
             <ul className="space-y-2 text-sm">
-              <li><button className="hover:text-blue-400 transition-colors">Help Center</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">Contact Us</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">Privacy Policy</button></li>
-              <li><button className="hover:text-blue-400 transition-colors">Terms of Service</button></li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#contact')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  Help Center
+                </button>
+              </li>
+              <li>
+                <button 
+                  onClick={() => scrollToSection('#contact')} 
+                  className="hover:text-blue-400 transition-colors text-left"
+                >
+                  Contact Us
+                </button>
+              </li>
+              <li>
+                <button className="hover:text-blue-400 transition-colors text-left">
+                  Privacy Policy
+                </button>
+              </li>
+              <li>
+                <button className="hover:text-blue-400 transition-colors text-left">
+                  Terms of Service
+                </button>
+              </li>
             </ul>
           </div>
         </div>

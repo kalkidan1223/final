@@ -5,12 +5,12 @@
 
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { requireRole } = require('../middleware/rbac');
 const parentController = require('../controllers/parentController');
 
 // All parent routes require authentication and parent role
-router.use(authenticate);
+router.use(requireAuth);
 router.use(requireRole(['parent']));
 
 // ============================================================================

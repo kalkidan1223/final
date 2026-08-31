@@ -12,4 +12,8 @@ function authorize(...allowedRoles) {
   };
 }
 
-module.exports = { authorize };
+function requireRole(allowedRoles) {
+  return authorize(...allowedRoles);
+}
+
+module.exports = { authorize, requireRole };
