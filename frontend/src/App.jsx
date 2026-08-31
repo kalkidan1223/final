@@ -5,6 +5,7 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import Login from './pages/Login';
 import RegisterParent from './pages/RegisterParent';
 import Unauthorized from './pages/Unauthorized';
+import Home from './pages/Home';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminStudents from './pages/admin/AdminStudents';
@@ -42,7 +43,7 @@ import { ROLE_HOME } from './utils/roles';
 function Root() {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/home" replace />;
   return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />;
 }
 
@@ -50,6 +51,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Root />} />
+      <Route path="/home" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<RegisterParent />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
