@@ -206,9 +206,20 @@ export default function RegisterParent() {
       </div>
 
       <div className="relative flex min-h-screen flex-col">
-        <header className="flex items-center gap-3 px-6 py-5">
-          <span className="text-3xl">🎓</span>
-          <span className="text-lg font-bold text-white/90">Brana Youth Academy</span>
+        <header className="flex items-center justify-between px-6 py-5">
+          <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <span className="text-3xl">🎓</span>
+            <span className="text-lg font-bold text-white/90">Children Learning Hub</span>
+          </Link>
+          <Link
+            to="/"
+            className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm border border-white/20 hover:bg-white/25 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            <span className="hidden sm:inline">Back to Home</span>
+          </Link>
         </header>
 
         <main className="flex-1 flex items-center justify-center px-4 py-8">

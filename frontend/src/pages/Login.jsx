@@ -97,18 +97,35 @@ export default function Login() {
       <div className="relative flex min-h-screen flex-col">
         <header className="flex items-center justify-between px-6 md:px-12 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-md shadow-lg">
+            <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-md shadow-lg">
               <span className="text-3xl">🎓</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-wide">Brana Youth Academy</h1>
-              <p className="text-xs text-white/70">Learning Hub</p>
+              <h1 className="text-xl font-bold text-white tracking-wide">Children Learning Hub</h1>
+              <p className="text-xs text-white/70">Learning Portal</p>
             </div>
+            </Link>
           </div>
-          <div className="hidden md:block">
-            <span className="rounded-full bg-white/15 px-5 py-2 text-sm font-medium text-white/90 backdrop-blur-sm border border-white/20">
-              ✨ Where Young Minds Shine
-            </span>
+          <div className="flex items-center gap-4">
+            <Link 
+              to="/"
+              className="hidden sm:flex items-center gap-2 rounded-full bg-white/15 px-5 py-2 text-sm font-medium text-white/90 backdrop-blur-sm border border-white/20 hover:bg-white/25 transition-all"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              Back to Home
+            </Link>
+            <Link
+              to="/"
+              className="sm:hidden flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm border border-white/20 hover:bg-white/25 transition-all"
+              title="Back to Home"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-white">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </Link>
           </div>
         </header>
 
