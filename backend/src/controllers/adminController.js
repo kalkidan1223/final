@@ -72,14 +72,30 @@ async function createInstructor(req, res, next) {
         }
       }
 
-      // Insert assigned courses if provided
+      // Insert assigned courses and auto-create course instances
       if (assigned_courses && Array.isArray(assigned_courses) && assigned_courses.length > 0) {
-        for (const courseId of assigned_courses) {
+        for (const availableCourseId of assigned_courses) {
+          // Insert the assignment
           await client.query(
-            `INSERT INTO instructor_courses (instructor_id, course_id, assigned_by)
+            `INSERT INTO instructor_courses (instructor_id, available_course_id, assigned_by)
              VALUES ($1, $2, $3)`,
-            [instructor.id, courseId, req.user.id]
+            [instructor.id, availableCourseId, req.user.id]
           );
+
+          // Auto-create course instance
+          const availableCourse = await client.query(
+            'SELECT * FROM age_group_available_courses WHERE id = $1',
+            [availableCourseId]
+          );
+          
+          if (availableCourse.rows.length > 0) {
+            const ac = availableCourse.rows[0];
+            await client.query(
+              `INSERT INTO courses (instructor_id, age_group_id, title, description, available_course_id, status)
+               VALUES ($1, $2, $3, $4, $5, 'draft')`,
+              [instructor.id, ac.age_group_id, ac.course_title, ac.course_description, availableCourseId]
+            );
+          }
         }
       }
 
@@ -525,9 +541,10 @@ async function listInstructors(req, res, next) {
       instructor.assigned_age_groups = ageGroupsRes.rows;
 
       const coursesRes = await query(
-        `SELECT c.id, c.title, c.status
+        `SELECT agac.id, agac.course_title AS title, agac.course_description AS description, 
+                agac.is_active AS status, agac.age_group_id
          FROM instructor_courses ic
-         JOIN courses c ON c.id = ic.course_id
+         JOIN age_group_available_courses agac ON agac.id = ic.available_course_id
          WHERE ic.instructor_id = $1`,
         [instructor.id]
       );
@@ -573,6 +590,92 @@ async function activateInstructor(req, res, next) {
       return res.status(404).json({ error: 'Instructor not found or already active' });
     }
     res.json({ user: publicUser(result.rows[0]), activated: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/admin/instructors/:id/assignments — update instructor age group and course assignments
+async function updateInstructorAssignments(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { assigned_age_groups, assigned_courses } = req.body;
+
+    // Verify instructor exists
+    const instructorResult = await query('SELECT id FROM instructors WHERE id = $1', [id]);
+    if (instructorResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Instructor not found' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Delete existing age group assignments
+      await client.query('DELETE FROM instructor_age_groups WHERE instructor_id = $1', [id]);
+
+      // Insert new age group assignments
+      if (assigned_age_groups && Array.isArray(assigned_age_groups) && assigned_age_groups.length > 0) {
+        for (const ageGroupId of assigned_age_groups) {
+          await client.query(
+            `INSERT INTO instructor_age_groups (instructor_id, age_group_id, assigned_by)
+             VALUES ($1, $2, $3)`,
+            [id, ageGroupId, req.user.id]
+          );
+        }
+      }
+
+      // Delete existing course assignments
+      await client.query('DELETE FROM instructor_courses WHERE instructor_id = $1', [id]);
+
+      // Insert new course assignments and auto-create course instances
+      if (assigned_courses && Array.isArray(assigned_courses) && assigned_courses.length > 0) {
+        for (const availableCourseId of assigned_courses) {
+          // Insert the assignment
+          await client.query(
+            `INSERT INTO instructor_courses (instructor_id, available_course_id, assigned_by)
+             VALUES ($1, $2, $3)`,
+            [id, availableCourseId, req.user.id]
+          );
+
+          // Check if a course instance already exists for this instructor and available course
+          const existingCourse = await client.query(
+            'SELECT id FROM courses WHERE instructor_id = $1 AND available_course_id = $2',
+            [id, availableCourseId]
+          );
+
+          // If not, auto-create the course instance
+          if (existingCourse.rows.length === 0) {
+            const availableCourse = await client.query(
+              'SELECT * FROM age_group_available_courses WHERE id = $1',
+              [availableCourseId]
+            );
+            
+            if (availableCourse.rows.length > 0) {
+              const ac = availableCourse.rows[0];
+              await client.query(
+                `INSERT INTO courses (instructor_id, age_group_id, title, description, available_course_id, status)
+                 VALUES ($1, $2, $3, $4, $5, 'draft')`,
+                [id, ac.age_group_id, ac.course_title, ac.course_description, availableCourseId]
+              );
+            }
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+      res.json({ 
+        success: true, 
+        message: 'Instructor assignments updated successfully',
+        assigned_age_groups: assigned_age_groups || [],
+        assigned_courses: assigned_courses || []
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }
@@ -927,6 +1030,7 @@ module.exports = {
   listInstructors,
   deactivateInstructor,
   activateInstructor,
+  updateInstructorAssignments,
   listCourses,
   updateCourseStatus,
   deleteCourse,

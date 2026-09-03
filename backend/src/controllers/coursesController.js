@@ -27,41 +27,28 @@ async function loadOwnedCourse(req, res) {
 }
 
 // ----------------------------------------------------------------------------
-// POST /api/courses  (instructor only)
+// POST /api/courses  (REMOVED for instructors - courses are auto-created by admin assignments)
 // ----------------------------------------------------------------------------
 async function createCourse(req, res, next) {
   try {
-    const { title, description, age_group_id, thumbnail_url } = req.body;
+    // Only admins can manually create courses
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'Instructors cannot create courses directly. Courses are automatically created when an administrator assigns you to teach them.' 
+      });
+    }
+
+    const { title, description, age_group_id, thumbnail_url, available_course_id } = req.body;
     if (!title || !age_group_id) {
       return res.status(400).json({ error: 'title and age_group_id are required' });
     }
 
-    const instructorId = await getInstructorIdForUser(req.user.id);
-    if (!instructorId) {
-      return res.status(403).json({ error: 'Only instructors can create courses' });
-    }
-
-    const ageGroupExists = await query('SELECT 1 FROM age_groups WHERE id = $1', [age_group_id]);
-    if (ageGroupExists.rows.length === 0) {
-      return res.status(400).json({ error: 'Unknown age_group_id' });
-    }
-
-    // Check if instructor is assigned to this age group
-    const assignmentCheck = await query(
-      'SELECT 1 FROM instructor_age_groups WHERE instructor_id = $1 AND age_group_id = $2',
-      [instructorId, age_group_id]
-    );
-    if (assignmentCheck.rows.length === 0) {
-      return res.status(403).json({ 
-        error: 'You are not assigned to teach this age group. Please contact an administrator.' 
-      });
-    }
-
+    // Admin creating a course manually
     const result = await query(
-      `INSERT INTO courses (instructor_id, age_group_id, title, description, thumbnail_url, status)
-       VALUES ($1, $2, $3, $4, $5, 'draft')
+      `INSERT INTO courses (instructor_id, age_group_id, title, description, thumbnail_url, available_course_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'draft')
        RETURNING *`,
-      [instructorId, age_group_id, title, description || null, thumbnail_url || null]
+      [null, age_group_id, title, description || null, thumbnail_url || null, available_course_id || null]
     );
 
     res.status(201).json({ course: result.rows[0] });

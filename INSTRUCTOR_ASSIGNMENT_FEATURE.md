@@ -27,6 +27,15 @@ Created two junction tables to manage instructor assignments:
 - **New logic**: After creating instructor record, inserts assignments into junction tables
 - **Tracks assignment**: Records which admin (`assigned_by`) made the assignment
 
+#### `adminController.js` - `updateInstructorAssignments()` ✨ NEW
+- **Purpose**: Update existing instructor's age group and course assignments
+- **Method**: PATCH `/api/admin/instructors/:id/assignments`
+- **Logic**: 
+  - Deletes all existing assignments
+  - Inserts new assignments within a transaction
+  - Tracks which admin made the changes
+- **Validates**: Checks if instructor exists before updating
+
 #### `adminController.js` - `listInstructors()`
 - **Enhanced response**: Now includes `assigned_age_groups` and `assigned_courses` arrays for each instructor
 - **Fetches related data**: Joins with age_groups and courses tables to provide full details
@@ -36,34 +45,54 @@ Created two junction tables to manage instructor assignments:
 - **Error handling**: Returns 403 with clear message if instructor tries to create course for unassigned age group
 - **Query**: `SELECT FROM instructor_age_groups WHERE instructor_id = ? AND age_group_id = ?`
 
+#### `adminRoutes.js`
+- **New route**: `PATCH /admin/instructors/:id/assignments`
+- **Authorization**: Requires admin role
+
 ### Frontend Changes
 
 #### `AdminInstructors.jsx`
-Enhanced instructor creation form with:
+Enhanced instructor creation and editing with:
 
-1. **Age Group Multi-Select**
+1. **Age Group Multi-Select** (Create & Edit)
    - Checkbox-based interface for selecting multiple age groups
    - Visual distinction for selected items (violet background)
    - Shows age range for each group (e.g., "5-7 years")
 
-2. **Course Multi-Select**
+2. **Course Multi-Select** (Create & Edit)
    - Scrollable list (max-height: 60vh) with all available courses
    - **Smart filtering**: Only shows courses from selected age groups
    - Displays course title and associated age group
    - Checkbox-based selection with visual feedback
 
-3. **Data Loading**
-   - Fetches age groups from `/api/age-groups`
-   - Fetches courses from `/api/admin/courses?limit=500`
-   - Loading states with skeleton placeholders
+3. **Edit Assignments Modal** ✨ NEW
+   - Separate modal for editing existing instructor assignments
+   - Pre-fills with current assignments
+   - Same UI as create form but for editing only
+   - Accessible via "Edit" button on instructor cards
 
-4. **Form Submission**
-   - Sends `assigned_age_groups` and `assigned_courses` arrays to backend
+4. **Instructor Card Actions**
+   - **View**: Shows instructor details in modal
+   - **Edit**: Opens assignment editing modal ✨ NEW
+   - **Activate/Deactivate**: Toggle instructor status
+
+5. **Data Loading**
+   - Fetches age groups from `/age-groups`
+   - Fetches courses from `/admin/courses?limit=500`
+   - Loading states with skeleton placeholders
+   - Loads options when form or edit modal opens
+
+6. **Form Submission**
+   - Create: Sends `assigned_age_groups` and `assigned_courses` arrays to backend
+   - Edit: Sends updated assignments to `/admin/instructors/:id/assignments`
    - Arrays contain the IDs of selected items
+   - Success/error feedback with toast messages
 
 ### API Endpoints
 
 #### POST `/api/admin/instructors`
+**Purpose**: Create new instructor with assignments
+
 **Request Body:**
 ```json
 {
@@ -101,6 +130,33 @@ Enhanced instructor creation form with:
 }
 ```
 
+#### PATCH `/api/admin/instructors/:id/assignments` ✨ NEW
+**Purpose**: Update existing instructor's assignments
+
+**Request Body:**
+```json
+{
+  "assigned_age_groups": [1, 3],    // New array of age group IDs
+  "assigned_courses": [3, 7, 9]     // New array of course IDs
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Instructor assignments updated successfully",
+  "assigned_age_groups": [1, 3],
+  "assigned_courses": [3, 7, 9]
+}
+```
+
+**Features**:
+- Replaces all existing assignments with new ones
+- Uses transaction to ensure data consistency
+- Tracks which admin made the update (`assigned_by`)
+- Returns 404 if instructor not found
+
 #### GET `/api/admin/instructors`
 **Response includes:**
 ```json
@@ -133,6 +189,17 @@ Enhanced instructor creation form with:
 5. Submits form
 6. System creates instructor account with assignments
 
+### Admin Editing Instructor Assignments ✨ NEW
+1. Admin clicks "Edit" button on instructor card
+2. Modal opens showing current assignments (pre-selected)
+3. Admin modifies age group selections
+4. Course list automatically updates based on selected age groups
+5. Admin modifies course selections
+6. Clicks "Save Assignments"
+7. System updates assignments in database
+8. Success message displayed
+9. Instructor list refreshes with updated data
+
 ### Instructor Creating Course
 1. Instructor logs in and navigates to "Create Course"
 2. Selects age group dropdown
@@ -144,11 +211,14 @@ Enhanced instructor creation form with:
 
 ### Admin Viewing Instructor Details
 1. Admin views instructor list
-2. Each instructor card shows basic info
+2. Each instructor card shows:
+   - Basic info (name, email, status)
+   - Three action buttons: View, Edit, Activate/Deactivate
 3. Clicking "View" opens modal with:
    - Personal details
    - Assigned age groups (with age ranges)
    - Assigned courses (with status badges)
+4. Clicking "Edit" opens assignment editing modal
 
 ## Security & Authorization
 
@@ -197,34 +267,54 @@ VALUES (?, ?, ?)
    - Click "View" on created instructor
    - Verify assigned age groups and courses appear in modal
 
-3. **Test instructor restrictions**
+3. **Edit instructor assignments** ✨ NEW
+   - Click "Edit" button on instructor card
+   - Modal opens with current assignments pre-selected
+   - Change age group selections
+   - Verify course list updates automatically
+   - Change course selections
+   - Click "Save Assignments"
+   - Verify success message appears
+   - Click "View" to confirm changes were saved
+
+4. **Test instructor restrictions**
    - Login as newly created instructor
    - Try to create course for assigned age group → Should succeed
    - Try to create course for unassigned age group → Should fail with clear error
 
-4. **Test filtering**
+5. **Test filtering**
    - Select different age groups in create form
    - Verify course list updates to show only relevant courses
+   - Same behavior in edit modal
+
+6. **Test edge cases**
+   - Create instructor with no assignments
+   - Edit instructor to remove all assignments
+   - Edit instructor to add assignments for the first time
+   - Verify instructor list shows correct data after each change
 
 ## Future Enhancements
 
 ### Potential improvements:
-1. **Edit assignments**: Allow admins to update instructor assignments after creation
+1. ~~**Edit assignments**: Allow admins to update instructor assignments after creation~~ ✅ IMPLEMENTED
 2. **Bulk assignment**: Assign multiple instructors to courses at once
-3. **Assignment history**: Track when assignments changed and by whom
-4. **Instructor dashboard**: Show assigned age groups prominently
+3. **Assignment history**: Track when assignments changed and by whom (partially done - `assigned_by` field exists)
+4. **Instructor dashboard**: Show assigned age groups prominently on instructor home page
 5. **Reports**: Generate reports on instructor workload and assignments
 6. **Notifications**: Alert instructors when assigned to new courses
+7. **Copy assignments**: Clone assignments from one instructor to another
+8. **Assignment templates**: Create reusable assignment templates for common instructor types
 
 ## Files Modified
 
 ### Backend:
 - `backend/migrations/009_instructor_assignments.sql` (NEW)
-- `backend/src/controllers/adminController.js`
-- `backend/src/controllers/coursesController.js`
+- `backend/src/controllers/adminController.js` (createInstructor, listInstructors, updateInstructorAssignments ✨ NEW)
+- `backend/src/controllers/coursesController.js` (createCourse)
+- `backend/src/routes/adminRoutes.js` (added PATCH /instructors/:id/assignments ✨ NEW)
 
 ### Frontend:
-- `frontend/src/pages/admin/AdminInstructors.jsx`
+- `frontend/src/pages/admin/AdminInstructors.jsx` (added EditAssignmentsModal ✨ NEW, enhanced create form, added Edit button)
 
 ## Migration Instructions
 

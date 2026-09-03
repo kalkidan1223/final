@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { MdGroups, MdSearch, MdRefresh, MdAdd, MdPerson, MdPause, MdPlayArrow, MdStar } from 'react-icons/md';
+import { MdGroups, MdSearch, MdRefresh, MdAdd, MdPerson, MdPause, MdPlayArrow, MdStar, MdEdit } from 'react-icons/md';
 import AdminLayout from '../../components/AdminLayout';
 import FormField, { inputClass } from '../../components/FormField';
 import axiosClient from '../../api/axiosClient';
@@ -103,11 +103,177 @@ function validate(form) {
   if (!form.full_name.trim() || form.full_name.trim().length < 2) errors.full_name = 'Full name required (min 2 chars)';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Valid email required';
   if (!/^\d{10,15}$/.test(form.phone)) errors.phone = 'Phone: 10–15 digits only';
-  if (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password)) errors.password = 'Min 8 chars, one letter + one number';
+  if (form.password && (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password))) errors.password = 'Min 8 chars, one letter + one number';
   if (!form.qualification.trim()) errors.qualification = 'Qualification required';
   if (!form.specialty.trim()) errors.specialty = 'Specialty required';
   if (form.bio.trim() && form.bio.trim().length < 10) errors.bio = 'Bio must be ≥ 10 chars if provided';
   return errors;
+}
+
+function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups, allCourses, loadingOptions }) {
+  const [assignedAgeGroups, setAssignedAgeGroups] = useState(
+    instructor.assigned_age_groups?.map(ag => ag.id) || []
+  );
+  const [assignedCourses, setAssignedCourses] = useState(
+    instructor.assigned_courses?.map(c => c.id) || []
+  );
+  const [availableCourses, setAvailableCourses] = useState([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Load available courses when age groups change
+  useEffect(() => {
+    async function loadAvailableCoursesForSelectedAgeGroups() {
+      if (assignedAgeGroups.length === 0) {
+        setAvailableCourses([]);
+        return;
+      }
+
+      setLoadingCourses(true);
+      try {
+        const coursePromises = assignedAgeGroups.map(ageGroupId =>
+          axiosClient.get(`/admin/age-groups/${ageGroupId}/available-courses`)
+        );
+        const responses = await Promise.all(coursePromises);
+        
+        const allAvailableCourses = responses.flatMap((res, idx) => 
+          (res.data.available_courses || [])
+            .filter(c => c.is_active)
+            .map(c => ({
+              id: `${assignedAgeGroups[idx]}_${c.id}`,
+              age_group_id: assignedAgeGroups[idx],
+              title: c.course_title,
+              description: c.course_description,
+              available_course_id: c.id
+            }))
+        );
+        setAvailableCourses(allAvailableCourses);
+      } catch (err) {
+        console.error('Failed to load available courses:', err);
+      } finally {
+        setLoadingCourses(false);
+      }
+    }
+
+    loadAvailableCoursesForSelectedAgeGroups();
+  }, [assignedAgeGroups]);
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(instructor.id, { assigned_age_groups: assignedAgeGroups, assigned_courses: assignedCourses });
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update assignments');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="font-semibold text-slate-800">Edit Assignments</h3>
+            <p className="text-sm text-slate-500">{instructor.full_name}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+        </div>
+        
+        <div className="p-6 space-y-6">
+          {error && <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
+
+          {/* Age Groups */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-3">
+              Assigned Age Groups
+              <span className="block text-xs font-normal text-slate-400 mt-1">Select the age groups this instructor can teach</span>
+            </label>
+            {loadingOptions ? (
+              <div className="text-sm text-slate-400">Loading age groups...</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {ageGroups.map(ag => (
+                  <label key={ag.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${assignedAgeGroups.includes(ag.id) ? 'bg-violet-50 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                    <input
+                      type="checkbox"
+                      checked={assignedAgeGroups.includes(ag.id)}
+                      onChange={(e) => {
+                        setAssignedAgeGroups(prev => 
+                          e.target.checked 
+                            ? [...prev, ag.id]
+                            : prev.filter(id => id !== ag.id)
+                        );
+                      }}
+                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span className="text-sm font-medium">{ag.name} ({ag.min_age}-{ag.max_age} years)</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Courses */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-3">
+              Assigned Courses
+              <span className="block text-xs font-normal text-slate-400 mt-1">Select established courses this instructor can teach</span>
+            </label>
+            {loadingCourses ? (
+              <div className="text-sm text-slate-400">Loading available courses...</div>
+            ) : assignedAgeGroups.length === 0 ? (
+              <div className="text-sm text-slate-400 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                ⚠️ Please select age groups first. Courses are specific to age groups.
+              </div>
+            ) : availableCourses.length === 0 ? (
+              <div className="text-sm text-slate-400 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                ℹ️ No courses have been established for the selected age groups yet.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                {availableCourses.map(course => (
+                  <label key={course.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition ${assignedCourses.includes(course.available_course_id) ? 'bg-violet-50 border-violet-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                    <input
+                      type="checkbox"
+                      checked={assignedCourses.includes(course.available_course_id)}
+                      onChange={(e) => {
+                        setAssignedCourses(prev =>
+                          e.target.checked 
+                            ? [...prev, course.available_course_id]
+                            : prev.filter(id => id !== course.available_course_id)
+                        );
+                      }}
+                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium truncate ${assignedCourses.includes(course.available_course_id) ? 'text-violet-700' : 'text-slate-700'}`}>
+                        {course.title}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {ageGroups.find(ag => ag.id === course.age_group_id)?.name || 'Unknown age group'}
+                        {course.description && ` • ${course.description}`}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
+          <button onClick={handleSave} disabled={saving} className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-6 py-2.5 text-sm font-semibold disabled:opacity-60 transition">
+            {saving ? 'Saving...' : 'Save Assignments'}
+          </button>
+          <button onClick={onClose} className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminInstructors() {
@@ -121,6 +287,7 @@ export default function AdminInstructors() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [viewInst, setViewInst] = useState(null);
+  const [editInst, setEditInst] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -132,28 +299,68 @@ export default function AdminInstructors() {
   const [allCourses, setAllCourses] = useState([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
 
-  // Load age groups and courses when form is shown
+  // Load age groups and courses when form is shown OR when editing
   useEffect(() => {
-    if (showForm && ageGroups.length === 0) {
+    if (showForm || editInst) {
       loadOptions();
     }
-  }, [showForm]);
+  }, [showForm, editInst]);
 
   async function loadOptions() {
     setLoadingOptions(true);
     try {
-      const [ageGroupsRes, coursesRes] = await Promise.all([
-        axiosClient.get('/api/age-groups'),
-        axiosClient.get('/api/admin/courses?limit=500')
-      ]);
+      const ageGroupsRes = await axiosClient.get('/age-groups');
       setAgeGroups(ageGroupsRes.data.age_groups || []);
-      setAllCourses(coursesRes.data.courses || []);
+      // Don't load courses here - they'll be loaded per age group
+      setAllCourses([]);
     } catch (err) {
       console.error('Failed to load options:', err);
+      setError('Failed to load age groups');
     } finally {
       setLoadingOptions(false);
     }
   }
+
+  // Load available courses when age groups are selected
+  useEffect(() => {
+    async function loadAvailableCoursesForSelectedAgeGroups() {
+      if (form.assigned_age_groups.length === 0) {
+        setAllCourses([]);
+        return;
+      }
+
+      setLoadingOptions(true);
+      try {
+        // Fetch available courses for each selected age group
+        const coursePromises = form.assigned_age_groups.map(ageGroupId =>
+          axiosClient.get(`/admin/age-groups/${ageGroupId}/available-courses`)
+        );
+        const responses = await Promise.all(coursePromises);
+        
+        // Combine all available courses from all selected age groups
+        const allAvailableCourses = responses.flatMap((res, idx) => 
+          (res.data.available_courses || [])
+            .filter(c => c.is_active)
+            .map(c => ({
+              id: `${form.assigned_age_groups[idx]}_${c.id}`, // Unique ID combining age group and course
+              age_group_id: form.assigned_age_groups[idx],
+              title: c.course_title,
+              description: c.course_description,
+              available_course_id: c.id
+            }))
+        );
+        setAllCourses(allAvailableCourses);
+      } catch (err) {
+        console.error('Failed to load available courses:', err);
+      } finally {
+        setLoadingOptions(false);
+      }
+    }
+
+    if (showForm || editInst) {
+      loadAvailableCoursesForSelectedAgeGroups();
+    }
+  }, [form.assigned_age_groups, showForm, editInst]);
 
   const loadInstructors = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
@@ -213,6 +420,17 @@ export default function AdminInstructors() {
       const apiErrs = err.response?.data?.errors || [err.response?.data?.error || 'Failed to create'];
       setError(apiErrs.join('. '));
     } finally { setSubmitting(false); }
+  }
+
+  async function handleEditAssignments(instructorId, assignments) {
+    try {
+      await axiosClient.patch(`/admin/instructors/${instructorId}/assignments`, assignments);
+      setSuccess('Instructor assignments updated successfully');
+      setTimeout(() => setSuccess(''), 3000);
+      loadInstructors(true);
+    } catch (err) {
+      throw err; // Let the modal handle the error
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -298,46 +516,47 @@ export default function AdminInstructors() {
               </FormField>
 
               {/* Courses Assignment */}
-              <FormField label="Assigned Courses" className="sm:col-span-2" hint="Select the courses this instructor can teach">
+              <FormField label="Assigned Courses" className="sm:col-span-2" hint="Select established courses this instructor can teach">
                 {loadingOptions ? (
-                  <div className="text-sm text-slate-400">Loading courses...</div>
+                  <div className="text-sm text-slate-400">Loading available courses...</div>
+                ) : form.assigned_age_groups.length === 0 ? (
+                  <div className="text-sm text-slate-400 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    ⚠️ Please select age groups first. Courses are specific to age groups.
+                  </div>
+                ) : allCourses.length === 0 ? (
+                  <div className="text-sm text-slate-400 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    ℹ️ No courses have been established for the selected age groups yet.
+                    <br />
+                    <span className="text-xs">Go to <strong>Age Groups</strong> page and click <strong>"Establish Courses"</strong> to define available courses first.</span>
+                  </div>
                 ) : (
                   <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-3">
-                    {allCourses.length === 0 ? (
-                      <p className="text-sm text-slate-400">No courses available</p>
-                    ) : (
-                      allCourses
-                        .filter(course => {
-                          // Show only courses from selected age groups
-                          if (form.assigned_age_groups.length === 0) return true;
-                          return form.assigned_age_groups.includes(course.age_group_id);
-                        })
-                        .map(course => (
-                          <label key={course.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition ${form.assigned_courses.includes(course.id) ? 'bg-violet-50 border-violet-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                            <input
-                              type="checkbox"
-                              checked={form.assigned_courses.includes(course.id)}
-                              onChange={(e) => {
-                                setForm(f => ({
-                                  ...f,
-                                  assigned_courses: e.target.checked 
-                                    ? [...f.assigned_courses, course.id]
-                                    : f.assigned_courses.filter(id => id !== course.id)
-                                }));
-                              }}
-                              className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-medium truncate ${form.assigned_courses.includes(course.id) ? 'text-violet-700' : 'text-slate-700'}`}>
-                                {course.title}
-                              </p>
-                              <p className="text-xs text-slate-400">
-                                {ageGroups.find(ag => ag.id === course.age_group_id)?.name || 'Unknown age group'}
-                              </p>
-                            </div>
-                          </label>
-                        ))
-                    )}
+                    {allCourses.map(course => (
+                      <label key={course.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition ${form.assigned_courses.includes(course.available_course_id) ? 'bg-violet-50 border-violet-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                        <input
+                          type="checkbox"
+                          checked={form.assigned_courses.includes(course.available_course_id)}
+                          onChange={(e) => {
+                            setForm(f => ({
+                              ...f,
+                              assigned_courses: e.target.checked 
+                                ? [...f.assigned_courses, course.available_course_id]
+                                : f.assigned_courses.filter(id => id !== course.available_course_id)
+                            }));
+                          }}
+                          className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${form.assigned_courses.includes(course.available_course_id) ? 'text-violet-700' : 'text-slate-700'}`}>
+                            {course.title}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {ageGroups.find(ag => ag.id === course.age_group_id)?.name || 'Unknown age group'}
+                            {course.description && ` • ${course.description}`}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 )}
               </FormField>
@@ -405,6 +624,9 @@ export default function AdminInstructors() {
                   <button onClick={() => setViewInst(inst)} className="flex-1 rounded-lg bg-slate-100 hover:bg-violet-100 hover:text-violet-700 text-slate-600 py-1.5 text-xs font-medium transition flex items-center justify-center gap-1">
                     <MdPerson className="text-sm" /> View
                   </button>
+                  <button onClick={() => setEditInst(inst)} className="flex-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 py-1.5 text-xs font-medium transition flex items-center justify-center gap-1">
+                    <MdEdit className="text-sm" /> Edit
+                  </button>
                   <button onClick={() => handleToggle(inst.id, inst.is_active)}
                     className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition flex items-center justify-center gap-1 ${inst.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
                     {inst.is_active ? <><MdPause className="text-sm" />Deactivate</> : <><MdPlayArrow className="text-sm" />Activate</>}
@@ -427,6 +649,16 @@ export default function AdminInstructors() {
         )}
       </div>
       {viewInst && <ViewModal instructor={viewInst} onClose={() => setViewInst(null)} />}
+      {editInst && (
+        <EditAssignmentsModal 
+          instructor={editInst} 
+          onClose={() => setEditInst(null)} 
+          onSave={handleEditAssignments}
+          ageGroups={ageGroups}
+          allCourses={allCourses}
+          loadingOptions={loadingOptions}
+        />
+      )}
     </AdminLayout>
   );
 }

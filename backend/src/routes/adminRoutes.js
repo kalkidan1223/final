@@ -4,6 +4,7 @@ const { authorize } = require('../middleware/rbac');
 const adminController = require('../controllers/adminController');
 const adminDashboardController = require('../controllers/adminDashboardController');
 const ageGroupsController = require('../controllers/ageGroupsController');
+const ageGroupCoursesController = require('../controllers/ageGroupCoursesController');
 const adminExtController = require('../controllers/adminExtController');
 
 const router = express.Router();
@@ -34,6 +35,7 @@ router.patch('/parents/:id/activate', requireAuth, authorize('admin'), adminCont
 router.get('/instructors', requireAuth, authorize('admin'), adminController.listInstructors);
 router.patch('/instructors/:id/deactivate', requireAuth, authorize('admin'), adminController.deactivateInstructor);
 router.patch('/instructors/:id/activate', requireAuth, authorize('admin'), adminController.activateInstructor);
+router.patch('/instructors/:id/assignments', requireAuth, authorize('admin'), adminController.updateInstructorAssignments);
 router.post('/instructors', requireAuth, authorize('admin'), adminController.createInstructor);
 
 // --- Course Management ---
@@ -46,6 +48,13 @@ router.get('/age-groups', requireAuth, authorize('admin'), ageGroupsController.l
 router.post('/age-groups', requireAuth, authorize('admin'), ageGroupsController.createAgeGroup);
 router.put('/age-groups/:id', requireAuth, authorize('admin'), adminController.updateAgeGroup);
 router.delete('/age-groups/:id', requireAuth, authorize('admin'), adminController.deleteAgeGroup);
+
+// --- Age Group Available Courses ---
+router.get('/age-groups/:id/available-courses', requireAuth, authorize('admin'), ageGroupCoursesController.listAvailableCourses);
+router.post('/age-groups/:id/available-courses', requireAuth, authorize('admin'), ageGroupCoursesController.addAvailableCourse);
+router.post('/age-groups/:id/available-courses/bulk', requireAuth, authorize('admin'), ageGroupCoursesController.bulkAddAvailableCourses);
+router.patch('/age-groups/:ageGroupId/available-courses/:courseId', requireAuth, authorize('admin'), ageGroupCoursesController.updateAvailableCourse);
+router.delete('/age-groups/:ageGroupId/available-courses/:courseId', requireAuth, authorize('admin'), ageGroupCoursesController.deleteAvailableCourse);
 
 // --- Reports ---
 router.get('/reports', requireAuth, authorize('admin'), adminController.listReports);
