@@ -26,7 +26,7 @@ function publicUser(row) {
 // ----------------------------------------------------------------------------
 async function createInstructor(req, res, next) {
   try {
-    const { full_name, email, password, phone, bio, qualification, specialty } = req.body;
+    const { full_name, email, password, phone, bio, qualification, specialty, assigned_age_groups, assigned_courses } = req.body;
 
     const errors = [];
     if (!full_name || full_name.trim().length < 2) errors.push('Full name is required (at least 2 characters)');
@@ -61,6 +61,28 @@ async function createInstructor(req, res, next) {
       );
       const instructor = instructorResult.rows[0];
 
+      // Insert assigned age groups if provided
+      if (assigned_age_groups && Array.isArray(assigned_age_groups) && assigned_age_groups.length > 0) {
+        for (const ageGroupId of assigned_age_groups) {
+          await client.query(
+            `INSERT INTO instructor_age_groups (instructor_id, age_group_id, assigned_by)
+             VALUES ($1, $2, $3)`,
+            [instructor.id, ageGroupId, req.user.id]
+          );
+        }
+      }
+
+      // Insert assigned courses if provided
+      if (assigned_courses && Array.isArray(assigned_courses) && assigned_courses.length > 0) {
+        for (const courseId of assigned_courses) {
+          await client.query(
+            `INSERT INTO instructor_courses (instructor_id, course_id, assigned_by)
+             VALUES ($1, $2, $3)`,
+            [instructor.id, courseId, req.user.id]
+          );
+        }
+      }
+
       await client.query('COMMIT');
       res.status(201).json({
         user,
@@ -70,6 +92,8 @@ async function createInstructor(req, res, next) {
           qualification: instructor.qualification,
           specialty: instructor.specialty,
           created_at: instructor.created_at,
+          assigned_age_groups: assigned_age_groups || [],
+          assigned_courses: assigned_courses || [],
         },
       });
     } catch (err) {
@@ -488,7 +512,29 @@ async function listInstructors(req, res, next) {
       [...params, parseInt(limit) || 200]
     );
 
-    res.json({ instructors: result.rows });
+    // Fetch assigned age groups and courses for each instructor
+    const instructors = result.rows;
+    for (const instructor of instructors) {
+      const ageGroupsRes = await query(
+        `SELECT ag.id, ag.name, ag.min_age, ag.max_age
+         FROM instructor_age_groups iag
+         JOIN age_groups ag ON ag.id = iag.age_group_id
+         WHERE iag.instructor_id = $1`,
+        [instructor.id]
+      );
+      instructor.assigned_age_groups = ageGroupsRes.rows;
+
+      const coursesRes = await query(
+        `SELECT c.id, c.title, c.status
+         FROM instructor_courses ic
+         JOIN courses c ON c.id = ic.course_id
+         WHERE ic.instructor_id = $1`,
+        [instructor.id]
+      );
+      instructor.assigned_courses = coursesRes.rows;
+    }
+
+    res.json({ instructors });
   } catch (err) {
     next(err);
   }

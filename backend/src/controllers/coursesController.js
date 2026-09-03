@@ -46,6 +46,17 @@ async function createCourse(req, res, next) {
       return res.status(400).json({ error: 'Unknown age_group_id' });
     }
 
+    // Check if instructor is assigned to this age group
+    const assignmentCheck = await query(
+      'SELECT 1 FROM instructor_age_groups WHERE instructor_id = $1 AND age_group_id = $2',
+      [instructorId, age_group_id]
+    );
+    if (assignmentCheck.rows.length === 0) {
+      return res.status(403).json({ 
+        error: 'You are not assigned to teach this age group. Please contact an administrator.' 
+      });
+    }
+
     const result = await query(
       `INSERT INTO courses (instructor_id, age_group_id, title, description, thumbnail_url, status)
        VALUES ($1, $2, $3, $4, $5, 'draft')

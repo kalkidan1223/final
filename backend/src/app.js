@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const passport = require('./config/passport');
 
 const authRoutes = require('./routes/authRoutes');
 const adminApprovalRoutes = require('./routes/adminApprovalRoutes');
@@ -37,6 +38,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+app.use(passport.initialize());
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

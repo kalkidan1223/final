@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import RegisterParent from './pages/RegisterParent';
 import Unauthorized from './pages/Unauthorized';
 import Home from './pages/Home';
+import AuthCallback from './pages/AuthCallback';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminStudents from './pages/admin/AdminStudents';
@@ -54,6 +55,7 @@ export default function App() {
       <Route path="/home" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<RegisterParent />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 
       <Route

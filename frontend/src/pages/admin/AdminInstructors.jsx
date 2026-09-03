@@ -5,7 +5,17 @@ import FormField, { inputClass } from '../../components/FormField';
 import axiosClient from '../../api/axiosClient';
 
 const PAGE_SIZE = 12;
-const EMPTY_FORM = { full_name: '', email: '', phone: '', password: '', qualification: '', specialty: '', bio: '' };
+const EMPTY_FORM = { 
+  full_name: '', 
+  email: '', 
+  phone: '', 
+  password: '', 
+  qualification: '', 
+  specialty: '', 
+  bio: '',
+  assigned_age_groups: [], // New: Array of age group IDs
+  assigned_courses: []      // New: Array of course IDs
+};
 
 function StatusBadge({ isActive }) {
   return (
@@ -116,6 +126,34 @@ export default function AdminInstructors() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const debounce = useRef(null);
+  
+  // New: For course and age group selection
+  const [ageGroups, setAgeGroups] = useState([]);
+  const [allCourses, setAllCourses] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+
+  // Load age groups and courses when form is shown
+  useEffect(() => {
+    if (showForm && ageGroups.length === 0) {
+      loadOptions();
+    }
+  }, [showForm]);
+
+  async function loadOptions() {
+    setLoadingOptions(true);
+    try {
+      const [ageGroupsRes, coursesRes] = await Promise.all([
+        axiosClient.get('/api/age-groups'),
+        axiosClient.get('/api/admin/courses?limit=500')
+      ]);
+      setAgeGroups(ageGroupsRes.data.age_groups || []);
+      setAllCourses(coursesRes.data.courses || []);
+    } catch (err) {
+      console.error('Failed to load options:', err);
+    } finally {
+      setLoadingOptions(false);
+    }
+  }
 
   const loadInstructors = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
@@ -229,6 +267,79 @@ export default function AdminInstructors() {
               </FormField>
               <FormField label="Bio" error={fieldErrors.bio} className="sm:col-span-2">
                 <textarea rows={3} value={form.bio} onChange={e => setForm(f => ({...f, bio: e.target.value}))} placeholder="Optional teacher background…" className={`${inputClass(fieldErrors.bio)} resize-y`} />
+              </FormField>
+
+              {/* Age Groups Assignment */}
+              <FormField label="Assigned Age Groups" className="sm:col-span-2" hint="Select the age groups this instructor can teach">
+                {loadingOptions ? (
+                  <div className="text-sm text-slate-400">Loading age groups...</div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {ageGroups.map(ag => (
+                      <label key={ag.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${form.assigned_age_groups.includes(ag.id) ? 'bg-violet-50 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                        <input
+                          type="checkbox"
+                          checked={form.assigned_age_groups.includes(ag.id)}
+                          onChange={(e) => {
+                            setForm(f => ({
+                              ...f,
+                              assigned_age_groups: e.target.checked 
+                                ? [...f.assigned_age_groups, ag.id]
+                                : f.assigned_age_groups.filter(id => id !== ag.id)
+                            }));
+                          }}
+                          className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span className="text-sm font-medium">{ag.name} ({ag.min_age}-{ag.max_age} years)</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </FormField>
+
+              {/* Courses Assignment */}
+              <FormField label="Assigned Courses" className="sm:col-span-2" hint="Select the courses this instructor can teach">
+                {loadingOptions ? (
+                  <div className="text-sm text-slate-400">Loading courses...</div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                    {allCourses.length === 0 ? (
+                      <p className="text-sm text-slate-400">No courses available</p>
+                    ) : (
+                      allCourses
+                        .filter(course => {
+                          // Show only courses from selected age groups
+                          if (form.assigned_age_groups.length === 0) return true;
+                          return form.assigned_age_groups.includes(course.age_group_id);
+                        })
+                        .map(course => (
+                          <label key={course.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition ${form.assigned_courses.includes(course.id) ? 'bg-violet-50 border-violet-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                            <input
+                              type="checkbox"
+                              checked={form.assigned_courses.includes(course.id)}
+                              onChange={(e) => {
+                                setForm(f => ({
+                                  ...f,
+                                  assigned_courses: e.target.checked 
+                                    ? [...f.assigned_courses, course.id]
+                                    : f.assigned_courses.filter(id => id !== course.id)
+                                }));
+                              }}
+                              className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-medium truncate ${form.assigned_courses.includes(course.id) ? 'text-violet-700' : 'text-slate-700'}`}>
+                                {course.title}
+                              </p>
+                              <p className="text-xs text-slate-400">
+                                {ageGroups.find(ag => ag.id === course.age_group_id)?.name || 'Unknown age group'}
+                              </p>
+                            </div>
+                          </label>
+                        ))
+                    )}
+                  </div>
+                )}
               </FormField>
             </div>
             <div className="flex gap-3">
