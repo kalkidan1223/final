@@ -2,8 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base ── */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Nunito', 'Comic Sans MS', sans-serif;
+  font-family: 'Inter', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -25,123 +26,157 @@ input, select, textarea {
   font-family: inherit;
 }
 
-/* Browsers (Edge/IE) render their own reveal & clear controls inside password
-   fields, which would sit next to the app's own show/hide toggle. */
+/* Remove MS Edge built-in password controls */
 input::-ms-reveal,
 input::-ms-clear {
   display: none;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #818cf8; }
+
+/* ── Keyframes ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(32px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
+@keyframes fadeInLeft {
+  from { opacity: 0; transform: translateX(-32px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
-::-webkit-scrollbar-thumb {
-  background: #c7d2fe;
-  border-radius: 4px;
+@keyframes fadeInRight {
+  from { opacity: 0; transform: translateX(32px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #a5b4fc;
-}
-
-@layer components {
-.animate-gradient {
-  animation: gradientShift 8s ease infinite;
-  background-size: 200% 200%;
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-20px) rotate(5deg); }
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33%       { transform: translateY(-12px) rotate(2deg); }
+  66%       { transform: translateY(-6px) rotate(-1deg); }
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(30px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-18px); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6); }
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
 
-.slide-up { animation: slideUp 0.6s ease-out both; }
-.slide-up-delay-1 { animation: slideUp 0.6s ease-out 0.1s both; }
-.slide-up-delay-2 { animation: slideUp 0.6s ease-out 0.2s both; }
-.slide-up-delay-3 { animation: slideUp 0.6s ease-out 0.3s both; }
-
-.btn-primary {
-  @apply rounded-xl bg-violet-500 px-6 py-3 font-semibold text-white hover:bg-violet-600 disabled:opacity-60 transition-all duration-200 shadow-sm hover:shadow-md;
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
 }
 
-.btn-secondary {
-  @apply rounded-xl bg-slate-100 px-6 py-3 font-medium text-slate-700 hover:bg-slate-200 transition-all duration-200;
+@keyframes blob {
+  0%, 100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  50%       { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
 }
 
-.card {
-  @apply rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow duration-200;
-}
+/* ── Animation utility classes ── */
+@layer components {
+  .animate-fade-in-up      { animation: fadeInUp 0.6s ease-out both; }
+  .animate-fade-in-left    { animation: fadeInLeft 0.6s ease-out both; }
+  .animate-fade-in-right   { animation: fadeInRight 0.6s ease-out both; }
+  .animate-slide-down      { animation: slideDown 0.4s ease-out both; }
+  .animate-float           { animation: float 4s ease-in-out infinite; }
+  .animate-float-slow      { animation: floatSlow 6s ease-in-out infinite; }
+  .animate-blob            { animation: blob 8s ease-in-out infinite; }
 
-.input-field {
-  @apply w-full rounded-xl border border-slate-200 px-4 py-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 transition-colors;
-}
+  .animate-gradient {
+    animation: gradientShift 8s ease infinite;
+    background-size: 300% 300%;
+  }
 
-.badge {
-  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium;
-}
+  /* Stagger delays */
+  .delay-100 { animation-delay: 0.1s; }
+  .delay-200 { animation-delay: 0.2s; }
+  .delay-300 { animation-delay: 0.3s; }
+  .delay-400 { animation-delay: 0.4s; }
+  .delay-500 { animation-delay: 0.5s; }
+  .delay-600 { animation-delay: 0.6s; }
 
-/* Glassmorphism card */
-.glass-card {
-  @apply rounded-2xl bg-white/90 backdrop-blur-lg border border-white/30 shadow-xl;
-}
+  /* ── Design tokens ── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white
+           hover:bg-indigo-700 active:scale-95 transition-all duration-200 shadow-sm hover:shadow-indigo-200 hover:shadow-lg
+           disabled:opacity-60 disabled:cursor-not-allowed;
+  }
 
-/* Multi-step form progress */
-.step-indicator {
-  @apply flex items-center justify-center gap-4;
-}
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 font-semibold text-indigo-600
+           border border-indigo-200 hover:bg-indigo-50 active:scale-95 transition-all duration-200;
+  }
 
-.step-dot {
-  @apply h-10 w-10 rounded-full flex items-center justify-center text-lg transition-all duration-300;
-}
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 font-semibold text-slate-600
+           hover:bg-slate-100 active:scale-95 transition-all duration-200;
+  }
 
-.step-dot.active {
-  @apply bg-violet-500 text-white shadow-lg scale-110;
-}
+  .card {
+    @apply rounded-2xl bg-white p-6 shadow-sm border border-slate-100 hover:shadow-md transition-all duration-200;
+  }
 
-.step-dot.completed {
-  @apply bg-emerald-500 text-white;
-}
+  .input-field {
+    @apply w-full rounded-xl border border-slate-200 px-4 py-3 text-base
+           focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100
+           transition-colors placeholder:text-slate-400;
+  }
 
-.step-dot.inactive {
-  @apply bg-slate-200 text-slate-400;
-}
+  .badge {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+  }
 
-/* Toast notification */
-.toast {
-  @apply fixed bottom-6 right-6 z-50 rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-3 text-sm font-medium slide-up;
-}
+  /* ── Glassmorphism ── */
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl;
+  }
 
-.toast-success {
-  @apply bg-emerald-500 text-white;
-}
+  .glass-dark {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
 
-.toast-error {
-  @apply bg-red-500 text-white;
-}
+  .glass-card {
+    @apply rounded-2xl bg-white/90 backdrop-blur-lg border border-white/40 shadow-xl;
+  }
 
-.toast-info {
-  @apply bg-sky-500 text-white;
-}
+  /* ── Multi-step form progress ── */
+  .step-dot         { @apply h-10 w-10 rounded-full flex items-center justify-center text-lg transition-all duration-300; }
+  .step-dot.active  { @apply bg-indigo-600 text-white shadow-lg scale-110; }
+  .step-dot.done    { @apply bg-emerald-500 text-white; }
+  .step-dot.pending { @apply bg-slate-200 text-slate-400; }
+
+  /* ── Toast ── */
+  .toast         { @apply fixed bottom-6 right-6 z-50 rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-3 text-sm font-medium; animation: fadeInUp 0.4s ease-out both; }
+  .toast-success { @apply bg-emerald-500 text-white; }
+  .toast-error   { @apply bg-red-500 text-white; }
+  .toast-info    { @apply bg-sky-500 text-white; }
+
+  /* ── Shimmer ── */
+  .shimmer {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 400px 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
 }

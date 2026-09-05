@@ -10,6 +10,7 @@ const router = express.Router();
 
 // --- Authentication (existing) ---
 router.post('/register/parent', authRegistrationController.registerParent);
+router.post('/register/instructor', authRegistrationController.registerInstructor);
 router.post('/login', authController.login);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);

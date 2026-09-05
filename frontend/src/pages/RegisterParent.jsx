@@ -212,13 +212,13 @@ export default function RegisterParent() {
             <span className="text-lg font-bold text-white/90">Children Learning Hub</span>
           </Link>
           <Link
-            to="/"
+            to="/signup"
             className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm border border-white/20 hover:bg-white/25 transition-all"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
               <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
-            <span className="hidden sm:inline">Back to Home</span>
+            <span className="hidden sm:inline">Back</span>
           </Link>
         </header>
 
@@ -367,7 +367,7 @@ export default function RegisterParent() {
                 {currentStep > 0 ? (
                   <button type="button" onClick={handleBack} className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</button>
                 ) : (
-                  <Link to="/login" className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back to Login</Link>
+                  <Link to="/signup" className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</Link>
                 )}
                 {currentStep < 2 ? (
                   <button type="button" onClick={handleNext} className="rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-bold text-white shadow-lg transition hover:scale-105">Next →</button>

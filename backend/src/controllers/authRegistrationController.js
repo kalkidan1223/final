@@ -298,12 +298,81 @@ async function verifyEmail(req, res, next) {
   }
 }
 
+// ============================================================================
+// INSTRUCTOR REGISTRATION (self-signup with approval workflow)
+// ============================================================================
+
+async function registerInstructor(req, res, next) {
+  try {
+    const {
+      full_name, email, password, phone,
+      specialization, education_level, years_of_experience, bio,
+      terms_agreed,
+    } = req.body;
+
+    // Basic validation
+    const errs = [];
+    if (!full_name || full_name.trim().length < 2) errs.push('Full name is required');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push('Valid email is required');
+    if (!password || !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password))
+      errs.push('Password must be 8+ chars with uppercase, lowercase, number and special character');
+    if (!phone || !/^\d{10,15}$/.test(phone)) errs.push('Phone must be 10-15 digits');
+    if (!terms_agreed) errs.push('You must agree to the Terms and Conditions');
+    if (errs.length) return res.status(400).json({ errors: errs });
+
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const result = await client.query(
+        `INSERT INTO instructor_registration_requests
+           (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
+         RETURNING id, full_name, email, status`,
+        [
+          full_name.trim(), email.toLowerCase(), passwordHash, phone,
+          specialization || null, education_level || null,
+          years_of_experience ? parseInt(years_of_experience, 10) : null,
+          bio || null, terms_agreed,
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [null, 'INSTRUCTOR_REGISTRATION', 'instructor_registration_request', result.rows[0].id,
+         null, { full_name: result.rows[0].full_name, email: result.rows[0].email }, null, null, null]
+      );
+
+      await client.query('COMMIT');
+      res.status(201).json({
+        message: 'Instructor application submitted. Your account is pending administrator review.',
+        registration_id: result.rows[0].id,
+        status: 'pending',
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      if (err.code === '23505') {
+        return res.status(409).json({ errors: ['An account with this email already exists'] });
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   registerParent,
+  registerInstructor,
   login,
   forgotPassword,
   resetPassword,
   sendVerificationToken,
   verifyEmail,
   logAudit,
-};
+};

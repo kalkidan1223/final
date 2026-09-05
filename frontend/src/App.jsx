@@ -4,6 +4,8 @@ import ProtectedRoute from './routes/ProtectedRoute';
 
 import Login from './pages/Login';
 import RegisterParent from './pages/RegisterParent';
+import Signup from './pages/Signup';
+import SignupInstructor from './pages/SignupInstructor';
 import Unauthorized from './pages/Unauthorized';
 import Home from './pages/Home';
 import AuthCallback from './pages/AuthCallback';
@@ -54,7 +56,12 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/home" element={<Home />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<RegisterParent />} />
+      {/* Sign up flow */}
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/signup/parent" element={<RegisterParent />} />
+      <Route path="/signup/instructor" element={<SignupInstructor />} />
+      {/* Legacy /register → redirect to /signup/parent */}
+      <Route path="/register" element={<Navigate to="/signup/parent" replace />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 

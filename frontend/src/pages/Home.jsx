@@ -1,125 +1,148 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import {
-  MdSchool, MdFamilyRestroom, MdPerson, MdAdminPanelSettings,
-  MdMenuBook, MdVideoLibrary, MdQuiz, MdAssignment, MdTrendingUp,
-  MdSmartToy, MdStar, MdCheckCircle, MdArrowForward, MdMenu,
-  MdClose, MdPlayCircle, MdAutoStories, MdDraw, MdCalculate,
-  MdAbc, MdPalette, MdMusicNote, MdScience, MdPublic, MdChildCare,
-  MdNotifications, MdEventAvailable, MdFeedback, MdMessage
-} from 'react-icons/md';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 
-function PublicNav() {
+/* ─── Scroll Reveal Hook ─── */
+function useReveal() {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold: 0.12 }
+    );
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+  return [ref, visible];
+}
+
+/* ─── Nav ─── */
+function Navbar() {
   const navigate = useNavigate();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  const navLinks = [
-    { label: 'Home', href: '#home' },
-    { label: 'About', href: '#about' },
-    { label: 'How It Works', href: '#how-it-works' },
-    { label: 'Learning Areas', href: '#learning-areas' },
-    { label: 'Features', href: '#features' },
-    { label: 'For Parents', href: '#parents' },
-    { label: 'For Instructors', href: '#instructors' },
-    { label: 'Contact', href: '#contact' },
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handler, { passive: true });
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+
+  const links = [
+    { label: 'Home',     href: '#home' },
+    { label: 'About',    href: '#about' },
+    { label: 'Learning', href: '#learning' },
+    { label: 'Contact',  href: '#contact' },
   ];
 
-  function handleNavClick(href) {
-    setMobileMenuOpen(false);
-    if (href.startsWith('#')) {
-      setTimeout(() => {
-        const element = document.querySelector(href);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
-    }
+  function scrollTo(href) {
+    setOpen(false);
+    const el = document.querySelector(href);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   return (
-    <nav className="fixed top-0 left-0 right-0 bg-white shadow-md z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? 'bg-white/95 backdrop-blur-xl shadow-md border-b border-slate-100'
+          : 'bg-transparent'
+      }`}
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <MdSchool className="text-white text-2xl" />
+          <button
+            onClick={() => scrollTo('#home')}
+            className="flex items-center gap-2.5 group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md group-hover:shadow-indigo-300 transition-shadow">
+              <span className="text-lg">🎓</span>
             </div>
-            <span className="text-xl font-bold text-slate-800 hidden sm:block">
+            <span className={`font-bold text-base hidden sm:block transition-colors ${scrolled ? 'text-slate-800' : 'text-white'}`}>
               Children Learning Hub
             </span>
-          </div>
+          </button>
 
-          {/* Desktop Nav */}
-          <div className="hidden lg:flex items-center gap-6">
-            {navLinks.map((link) => (
+          {/* Desktop Links */}
+          <div className="hidden md:flex items-center gap-1">
+            {links.map((l) => (
               <button
-                key={link.label}
-                onClick={() => handleNavClick(link.href)}
-                className="text-slate-600 hover:text-blue-600 font-medium transition-colors"
+                key={l.label}
+                onClick={() => scrollTo(l.href)}
+                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  scrolled
+                    ? 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50'
+                    : 'text-white/85 hover:text-white hover:bg-white/10'
+                }`}
               >
-                {link.label}
+                {l.label}
               </button>
             ))}
+          </div>
+
+          {/* Auth Buttons */}
+          <div className="hidden md:flex items-center gap-2">
             <button
               onClick={() => navigate('/login')}
-              className="text-blue-600 hover:text-blue-700 font-semibold"
+              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+                scrolled
+                  ? 'text-indigo-600 hover:bg-indigo-50'
+                  : 'text-white/90 hover:text-white hover:bg-white/10'
+              }`}
             >
               Login
             </button>
             <button
-              onClick={() => navigate('/register')}
-              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full hover:shadow-lg transition-shadow font-semibold"
+              onClick={() => navigate('/signup')}
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-indigo-300 active:scale-95"
             >
-              Get Started
+              Sign Up
             </button>
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Hamburger */}
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-2 rounded-lg hover:bg-slate-100"
+            onClick={() => setOpen(!open)}
+            className={`md:hidden p-2 rounded-lg transition-colors ${
+              scrolled ? 'text-slate-700 hover:bg-slate-100' : 'text-white hover:bg-white/10'
+            }`}
+            aria-label="Toggle menu"
           >
-            {mobileMenuOpen ? (
-              <MdClose className="text-2xl text-slate-700" />
-            ) : (
-              <MdMenu className="text-2xl text-slate-700" />
-            )}
+            <span className="block w-5 h-0.5 bg-current mb-1.5 transition-all" style={open ? { transform: 'rotate(45deg) translate(4px, 4px)' } : {}} />
+            <span className="block w-5 h-0.5 bg-current mb-1.5 transition-all" style={open ? { opacity: 0 } : {}} />
+            <span className="block w-5 h-0.5 bg-current transition-all" style={open ? { transform: 'rotate(-45deg) translate(4px, -4px)' } : {}} />
           </button>
         </div>
       </div>
 
       {/* Mobile Menu */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden bg-white border-t border-slate-200 shadow-lg">
-          <div className="px-4 py-4 space-y-2">
-            {navLinks.map((link) => (
+      {open && (
+        <div className="md:hidden bg-white border-t border-slate-100 shadow-xl animate-slide-down">
+          <div className="px-4 py-3 space-y-1">
+            {links.map((l) => (
               <button
-                key={link.label}
-                onClick={() => handleNavClick(link.href)}
-                className="block w-full text-left px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                key={l.label}
+                onClick={() => scrollTo(l.href)}
+                className="block w-full text-left px-4 py-2.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg font-medium text-sm transition-colors"
               >
-                {link.label}
+                {l.label}
               </button>
             ))}
-            <button
-              onClick={() => {
-                navigate('/login');
-                setMobileMenuOpen(false);
-              }}
-              className="block w-full text-left px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg font-semibold"
-            >
-              Login
-            </button>
-            <button
-              onClick={() => {
-                navigate('/register');
-                setMobileMenuOpen(false);
-              }}
-              className="block w-full px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold text-center"
-            >
-              Get Started
-            </button>
+            <div className="border-t border-slate-100 mt-2 pt-2 space-y-1">
+              <button
+                onClick={() => { setOpen(false); navigate('/login'); }}
+                className="block w-full text-left px-4 py-2.5 text-indigo-600 hover:bg-indigo-50 rounded-lg font-semibold text-sm"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => { setOpen(false); navigate('/signup'); }}
+                className="block w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-sm text-center"
+              >
+                Sign Up
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -127,140 +150,217 @@ function PublicNav() {
   );
 }
 
+/* ─── Hero ─── */
 function HeroSection() {
   const navigate = useNavigate();
 
   return (
-    <section id="home" className="pt-24 pb-16 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left Content */}
-          <div className="text-center lg:text-left">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-800 mb-6 leading-tight">
-              Making Learning{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                Fun, Interactive
+    <section
+      id="home"
+      className="relative min-h-screen flex items-center justify-center overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 65%, #6d28d9 100%)' }}
+    >
+      {/* Background blobs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div
+          className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-20 animate-blob"
+          style={{ background: 'radial-gradient(circle, #818cf8, #6366f1)' }}
+        />
+        <div
+          className="absolute top-1/2 -right-24 w-80 h-80 rounded-full opacity-15 animate-blob delay-300"
+          style={{ background: 'radial-gradient(circle, #a78bfa, #7c3aed)', animationDelay: '3s' }}
+        />
+        <div
+          className="absolute -bottom-20 left-1/4 w-72 h-72 rounded-full opacity-20 animate-blob"
+          style={{ background: 'radial-gradient(circle, #c4b5fd, #8b5cf6)', animationDelay: '6s' }}
+        />
+        {/* Grid overlay */}
+        <div
+          className="absolute inset-0 opacity-5"
+          style={{
+            backgroundImage: `linear-gradient(rgba(255,255,255,.3) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,.3) 1px, transparent 1px)`,
+            backgroundSize: '48px 48px'
+          }}
+        />
+      </div>
+
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-24 pt-32">
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          {/* Left */}
+          <div className="text-center lg:text-left animate-fade-in-left">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 text-white/80 text-sm font-medium mb-8 backdrop-blur-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Brana Youth Academy
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-6">
+              Welcome to{' '}
+              <span
+                className="animate-gradient"
+                style={{
+                  background: 'linear-gradient(90deg, #a5b4fc, #c4b5fd, #f9a8d4, #a5b4fc)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundSize: '300% 300%',
+                }}
+              >
+                Children Learning Hub
               </span>
-              , and Personalized
             </h1>
-            <p className="text-lg sm:text-xl text-slate-600 mb-8 leading-relaxed">
-              Children Learning Hub provides an engaging learning environment where children can learn,
-              practice, participate in activities, and receive personalized learning support while parents
-              and instructors monitor their progress.
+
+            <p className="text-lg text-white/70 mb-10 max-w-xl leading-relaxed mx-auto lg:mx-0">
+              An interactive learning platform that supports children, parents, and instructors
+              in a connected learning environment.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
               <button
                 onClick={() => navigate('/login')}
-                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-bold text-lg hover:shadow-xl transition-all transform hover:scale-105"
+                className="px-8 py-3.5 bg-white text-indigo-700 rounded-xl font-bold text-base hover:bg-indigo-50 transition-all shadow-xl hover:shadow-white/20 active:scale-95"
               >
-                Start Learning
+                Login
               </button>
               <button
-                onClick={() => document.querySelector('#features')?.scrollIntoView({ behavior: 'smooth' })}
-                className="px-8 py-4 bg-white border-2 border-blue-600 text-blue-600 rounded-full font-bold text-lg hover:bg-blue-50 transition-all"
+                onClick={() => navigate('/signup')}
+                className="px-8 py-3.5 bg-indigo-500/30 backdrop-blur-sm border border-white/30 text-white rounded-xl font-bold text-base hover:bg-indigo-500/50 transition-all active:scale-95"
               >
-                Explore Platform
+                Sign Up
               </button>
             </div>
           </div>
 
           {/* Right Illustration */}
-          <div className="relative">
-            <div className="relative bg-gradient-to-br from-blue-200 to-purple-200 rounded-3xl p-8 shadow-2xl">
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { icon: MdAutoStories, color: 'from-blue-500 to-blue-600', label: 'Reading' },
-                  { icon: MdCalculate, color: 'from-green-500 to-green-600', label: 'Math' },
-                  { icon: MdMusicNote, color: 'from-purple-500 to-purple-600', label: 'Music' },
-                  { icon: MdScience, color: 'from-orange-500 to-orange-600', label: 'Science' },
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    className={`bg-white rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-transform cursor-pointer`}
-                  >
-                    <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${item.color} flex items-center justify-center mx-auto mb-3`}>
-                      <item.icon className="text-white text-3xl" />
-                    </div>
-                    <div className="text-center font-semibold text-slate-700">{item.label}</div>
+          <div className="flex justify-center lg:justify-end animate-fade-in-right delay-200">
+            <div className="relative w-full max-w-sm lg:max-w-md">
+              {/* Main card */}
+              <div className="glass-dark rounded-3xl p-6 text-white">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/40 flex items-center justify-center text-2xl">
+                    📚
                   </div>
-                ))}
+                  <div>
+                    <div className="font-bold text-white">Today's Learning</div>
+                    <div className="text-white/50 text-sm">4 activities ready</div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 mb-6">
+                  {[
+                    { emoji: '🔤', label: 'Amharic Reading', progress: 75, color: '#818cf8' },
+                    { emoji: '🔢', label: 'Mathematics', progress: 50, color: '#34d399' },
+                    { emoji: '📖', label: 'English Reading', progress: 90, color: '#f472b6' },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center gap-3">
+                      <span className="text-xl">{item.emoji}</span>
+                      <div className="flex-1">
+                        <div className="text-sm text-white/70 mb-1">{item.label}</div>
+                        <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${item.progress}%`, background: item.color }}
+                          />
+                        </div>
+                      </div>
+                      <span className="text-xs text-white/50">{item.progress}%</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { emoji: '🏆', value: '24', label: 'Points Today' },
+                    { emoji: '⭐', value: '5', label: 'Day Streak' },
+                  ].map((stat) => (
+                    <div key={stat.label} className="bg-white/5 rounded-2xl p-3 text-center border border-white/10">
+                      <div className="text-2xl mb-1">{stat.emoji}</div>
+                      <div className="text-xl font-bold text-white">{stat.value}</div>
+                      <div className="text-xs text-white/50">{stat.label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              {/* Floating Elements */}
-              <div className="absolute -top-4 -right-4 w-16 h-16 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg animate-bounce">
-                <MdStar className="text-white text-2xl" />
+
+              {/* Floating badges */}
+              <div className="absolute -top-5 -right-5 bg-emerald-400 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-float">
+                ✓ New Lesson
               </div>
-              <div className="absolute -bottom-4 -left-4 w-12 h-12 bg-pink-400 rounded-full flex items-center justify-center shadow-lg animate-pulse">
-                <MdSchool className="text-white text-xl" />
+              <div className="absolute -bottom-4 -left-4 bg-yellow-400 text-slate-900 text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-float delay-300" style={{ animationDelay: '1.5s' }}>
+                🌟 Well Done!
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Scroll cue */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white/40 animate-float-slow">
+        <span className="text-xs tracking-widest uppercase">Scroll</span>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
     </section>
   );
 }
 
-function UserRolesSection() {
-  const roles = [
+/* ─── Info / 3 Pillars ─── */
+function InfoSection() {
+  const [ref, visible] = useReveal();
+
+  const pillars = [
     {
-      icon: MdFamilyRestroom,
-      title: 'Parent',
-      description: 'Parents manage their children\'s learning and monitor progress.',
-      color: 'from-blue-500 to-blue-600',
-      link: '#parents',
+      emoji: '📚',
+      title: 'Learn',
+      desc: 'Access learning materials.',
+      bg: 'from-indigo-50 to-indigo-100',
+      border: 'border-indigo-200',
+      icon: 'text-indigo-600',
     },
     {
-      icon: MdPerson,
-      title: 'Instructor',
-      description: 'Instructors create lessons, activities, quizzes and learning materials and support children\'s learning.',
-      color: 'from-green-500 to-green-600',
-      link: '#instructors',
+      emoji: '✏️',
+      title: 'Practice',
+      desc: 'Complete educational activities.',
+      bg: 'from-emerald-50 to-emerald-100',
+      border: 'border-emerald-200',
+      icon: 'text-emerald-600',
     },
     {
-      icon: MdChildCare,
-      title: 'Child / Student',
-      description: 'Children access age-appropriate learning content, activities, quizzes and interactive learning experiences.',
-      color: 'from-purple-500 to-purple-600',
-      link: '#learning-areas',
-    },
-    {
-      icon: MdAdminPanelSettings,
-      title: 'Administrator',
-      description: 'Administrators manage users, instructors, courses, approvals and the overall learning platform.',
-      color: 'from-orange-500 to-orange-600',
-      link: '#about',
+      emoji: '🌱',
+      title: 'Grow',
+      desc: 'Develop knowledge and skills.',
+      bg: 'from-purple-50 to-purple-100',
+      border: 'border-purple-200',
+      icon: 'text-purple-600',
     },
   ];
 
   return (
-    <section className="py-16 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            Who Uses Children Learning Hub?
+    <section className="py-20 bg-white" ref={ref}>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <div className={`text-center mb-14 transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-4">
+            Learn. Practice. Grow.
           </h2>
-          <p className="text-lg text-slate-600">
-            A comprehensive platform designed for everyone involved in children's education
+          <p className="text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed">
+            Children Learning Hub provides educational learning materials,
+            activities, and learning support for children.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {roles.map((role, idx) => (
+        <div className="grid sm:grid-cols-3 gap-6">
+          {pillars.map((p, i) => (
             <div
-              key={idx}
-              className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 hover:shadow-xl transition-all transform hover:-translate-y-2"
+              key={p.title}
+              className={`rounded-2xl border ${p.border} bg-gradient-to-br ${p.bg} p-8 text-center
+                transition-all duration-700 hover:-translate-y-1 hover:shadow-lg
+                ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
+              style={{ transitionDelay: visible ? `${i * 120}ms` : '0ms' }}
             >
-              <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${role.color} flex items-center justify-center mb-4`}>
-                <role.icon className="text-white text-3xl" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-3">{role.title}</h3>
-              <p className="text-slate-600 mb-4 leading-relaxed">{role.description}</p>
-              <button
-                onClick={() => document.querySelector(role.link)?.scrollIntoView({ behavior: 'smooth' })}
-                className="text-blue-600 font-semibold hover:text-blue-700 flex items-center gap-1"
-              >
-                Learn More <MdArrowForward />
-              </button>
+              <div className={`text-4xl mb-4`}>{p.emoji}</div>
+              <h3 className={`text-xl font-bold mb-2 ${p.icon}`}>{p.title}</h3>
+              <p className="text-slate-600 text-sm leading-relaxed">{p.desc}</p>
             </div>
           ))}
         </div>
@@ -269,279 +369,44 @@ function UserRolesSection() {
   );
 }
 
-function AgeLearningModel() {
-  return (
-    <section id="about" className="py-16 bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            Learning Designed for Every Child
-          </h2>
-          <p className="text-lg text-slate-600">
-            Age-appropriate learning experiences tailored to each developmental stage
-          </p>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Age 5-9 */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-4 border-purple-200">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
-                <MdFamilyRestroom className="text-white text-3xl" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">Age 5–9</div>
-                <div className="text-sm font-semibold text-purple-600 bg-purple-100 px-3 py-1 rounded-full inline-block mt-1">
-                  PARENT MANAGED
-                </div>
-              </div>
-            </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-4">Parent-Guided Learning</h3>
-            <p className="text-slate-600 leading-relaxed mb-6">
-              Children aged 5–9 use the platform through their parent or guardian. Parents open the
-              child's learning space and help them access lessons, learning materials and activities.
-            </p>
-            <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-              <div className="flex items-start gap-2 text-sm text-slate-700">
-                <MdCheckCircle className="text-purple-600 flex-shrink-0 mt-0.5" />
-                <span>Parents guide children through lessons and activities</span>
-              </div>
-              <div className="flex items-start gap-2 text-sm text-slate-700 mt-2">
-                <MdCheckCircle className="text-purple-600 flex-shrink-0 mt-0.5" />
-                <span>No separate login required for children</span>
-              </div>
-              <div className="flex items-start gap-2 text-sm text-slate-700 mt-2">
-                <MdCheckCircle className="text-purple-600 flex-shrink-0 mt-0.5" />
-                <span>Safe, parent-supervised learning environment</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Age 10-12 */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-4 border-blue-200">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                <MdSchool className="text-white text-3xl" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">Age 10–12</div>
-                <div className="text-sm font-semibold text-blue-600 bg-blue-100 px-3 py-1 rounded-full inline-block mt-1">
-                  STUDENT ACCOUNT
-                </div>
-              </div>
-            </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-4">Independent Student Learning</h3>
-            <p className="text-slate-600 leading-relaxed mb-6">
-              Children aged 10–12 can use an individual student account created through their parent
-              or guardian and approved by the administrator.
-            </p>
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                    1
-                  </div>
-                  <span className="text-sm text-slate-700 font-medium">Parent registers child</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                    2
-                  </div>
-                  <span className="text-sm text-slate-700 font-medium">Administrator approves account</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                    3
-                  </div>
-                  <span className="text-sm text-slate-700 font-medium">Student receives access</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                    4
-                  </div>
-                  <span className="text-sm text-slate-700 font-medium">Student can log in independently</span>
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-blue-200 text-sm text-slate-600">
-                <MdCheckCircle className="inline text-blue-600 mr-2" />
-                Parents can continue monitoring progress
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HowItWorksSection() {
-  const steps = [
-    {
-      number: 1,
-      title: 'Parent Registers',
-      description: 'Parent creates an account and provides the required information.',
-      icon: MdFamilyRestroom,
-      color: 'from-blue-500 to-blue-600',
-    },
-    {
-      number: 2,
-      title: 'Admin Approves',
-      description: 'Administrator reviews and approves the parent account.',
-      icon: MdAdminPanelSettings,
-      color: 'from-green-500 to-green-600',
-    },
-    {
-      number: 3,
-      title: 'Register Your Child',
-      description: 'Parent provides the child\'s information.',
-      icon: MdChildCare,
-      color: 'from-purple-500 to-purple-600',
-    },
-    {
-      number: 4,
-      title: 'Learning Begins',
-      description: 'Child accesses age-appropriate learning resources.',
-      icon: MdSchool,
-      color: 'from-pink-500 to-pink-600',
-    },
-    {
-      number: 5,
-      title: 'Instructor Support',
-      description: 'Instructor provides lessons, materials, activities and assessments.',
-      icon: MdPerson,
-      color: 'from-orange-500 to-orange-600',
-    },
-    {
-      number: 6,
-      title: 'Progress Is Tracked',
-      description: 'The system records learning activities, scores and progress.',
-      icon: MdTrendingUp,
-      color: 'from-teal-500 to-teal-600',
-    },
-    {
-      number: 7,
-      title: 'Personalized Recommendations',
-      description: 'AI analyzes learning performance and recommends suitable learning activities.',
-      icon: MdSmartToy,
-      color: 'from-indigo-500 to-indigo-600',
-    },
-  ];
-
-  return (
-    <section id="how-it-works" className="py-16 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            How Children Learning Hub Works
-          </h2>
-          <p className="text-lg text-slate-600">
-            A simple, structured approach to online learning
-          </p>
-        </div>
-
-        <div className="relative">
-          {/* Steps */}
-          <div className="space-y-8">
-            {steps.map((step, idx) => (
-              <div key={idx} className="relative">
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                  {/* Icon */}
-                  <div className="flex-shrink-0">
-                    <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${step.color} flex items-center justify-center shadow-lg`}>
-                      <step.icon className="text-white text-3xl" />
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 bg-slate-50 rounded-xl p-6 border border-slate-200">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`w-8 h-8 rounded-full bg-gradient-to-br ${step.color} text-white flex items-center justify-center font-bold text-sm`}>
-                        {step.number}
-                      </span>
-                      <h3 className="text-xl font-bold text-slate-800">{step.title}</h3>
-                    </div>
-                    <p className="text-slate-600">{step.description}</p>
-                  </div>
-                </div>
-
-                {/* Arrow */}
-                {idx < steps.length - 1 && (
-                  <div className="hidden md:flex justify-center my-4">
-                    <MdArrowForward className="text-3xl text-slate-300 transform rotate-90" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
+/* ─── Learning Areas ─── */
 function LearningAreasSection() {
-  const learningAreas = [
-    {
-      title: 'Amharic',
-      description: 'Letters, words, reading and language practice.',
-      icon: MdAbc,
-      color: 'from-red-500 to-red-600',
-    },
-    {
-      title: 'Mathematics',
-      description: 'Numbers, counting, calculations and problem solving.',
-      icon: MdCalculate,
-      color: 'from-blue-500 to-blue-600',
-    },
-    {
-      title: 'Reading',
-      description: 'Stories, vocabulary, comprehension and reading practice.',
-      icon: MdAutoStories,
-      color: 'from-green-500 to-green-600',
-    },
-    {
-      title: 'General Knowledge',
-      description: 'Age-appropriate knowledge and interactive learning.',
-      icon: MdPublic,
-      color: 'from-purple-500 to-purple-600',
-    },
-    {
-      title: 'Science',
-      description: 'Fun experiments, observations and discoveries.',
-      icon: MdScience,
-      color: 'from-orange-500 to-orange-600',
-    },
-    {
-      title: 'Art & Creativity',
-      description: 'Drawing, coloring, painting and creative expression.',
-      icon: MdPalette,
-      color: 'from-pink-500 to-pink-600',
-    },
+  const [ref, visible] = useReveal();
+
+  const areas = [
+    { emoji: '🔤', title: 'Amharic',           desc: 'Letters, words, and language practice.',          color: 'bg-red-50 border-red-200 hover:border-red-300' },
+    { emoji: '🔡', title: 'English',            desc: 'Reading, vocabulary, and comprehension.',         color: 'bg-blue-50 border-blue-200 hover:border-blue-300' },
+    { emoji: '🔢', title: 'Mathematics',        desc: 'Numbers, counting, and problem solving.',         color: 'bg-green-50 border-green-200 hover:border-green-300' },
+    { emoji: '📖', title: 'Reading',            desc: 'Stories and reading comprehension.',              color: 'bg-yellow-50 border-yellow-200 hover:border-yellow-300' },
+    { emoji: '🌍', title: 'General Knowledge',  desc: 'Age-appropriate world knowledge.',                color: 'bg-purple-50 border-purple-200 hover:border-purple-300' },
   ];
 
   return (
-    <section id="learning-areas" className="py-16 bg-gradient-to-br from-blue-50 to-purple-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            What Can Children Learn?
+    <section id="learning" className="py-20 bg-slate-50" ref={ref}>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <div className={`text-center mb-14 transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-4">
+            Learning Areas
           </h2>
-          <p className="text-lg text-slate-600">
-            Comprehensive curriculum covering essential learning areas
+          <p className="text-lg text-slate-500 max-w-xl mx-auto">
+            Explore the subjects available on our platform.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {learningAreas.map((area, idx) => (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {areas.map((a, i) => (
             <div
-              key={idx}
-              className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all transform hover:-translate-y-2"
+              key={a.title}
+              className={`rounded-2xl border ${a.color} bg-white p-6 flex items-start gap-4
+                transition-all duration-700 cursor-default
+                ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
+              style={{ transitionDelay: visible ? `${i * 80}ms` : '0ms' }}
             >
-              <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${area.color} flex items-center justify-center mb-4`}>
-                <area.icon className="text-white text-3xl" />
+              <div className="text-3xl flex-shrink-0">{a.emoji}</div>
+              <div>
+                <h3 className="font-bold text-slate-900 mb-1">{a.title}</h3>
+                <p className="text-slate-500 text-sm leading-relaxed">{a.desc}</p>
               </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-3">{area.title}</h3>
-              <p className="text-slate-600">{area.description}</p>
             </div>
           ))}
         </div>
@@ -550,368 +415,53 @@ function LearningAreasSection() {
   );
 }
 
-function InteractiveLearningPreview() {
-  const activities = [
-    { icon: MdVideoLibrary, label: 'Video Learning', color: 'from-red-500 to-red-600' },
-    { icon: MdAutoStories, label: 'Reading', color: 'from-blue-500 to-blue-600' },
-    { icon: MdDraw, label: 'Writing', color: 'from-green-500 to-green-600' },
-    { icon: MdQuiz, label: 'Quizzes', color: 'from-purple-500 to-purple-600' },
-    { icon: MdAssignment, label: 'Activities', color: 'from-orange-500 to-orange-600' },
-    { icon: MdPalette, label: 'Drawing', color: 'from-pink-500 to-pink-600' },
-    { icon: MdCalculate, label: 'Counting', color: 'from-teal-500 to-teal-600' },
-    { icon: MdAbc, label: 'Letter Tracing', color: 'from-indigo-500 to-indigo-600' },
-  ];
+/* ─── About ─── */
+function AboutSection() {
+  const [ref, visible] = useReveal();
 
   return (
-    <section id="features" className="py-16 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            Interactive Learning Experience
-          </h2>
-          <p className="text-lg text-slate-600">
-            Engage children with multiple learning formats
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
-          {activities.map((activity, idx) => (
-            <div
-              key={idx}
-              className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl p-6 hover:shadow-lg transition-all transform hover:scale-105 cursor-pointer"
-            >
-              <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${activity.color} flex items-center justify-center mx-auto mb-3`}>
-                <activity.icon className="text-white text-3xl" />
-              </div>
-              <div className="text-center font-semibold text-slate-700">{activity.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-12 text-center">
-          <div className="inline-flex items-center gap-8 p-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-3xl text-white shadow-2xl">
-            <div className="text-center">
-              <div className="text-4xl font-bold mb-2">Learn</div>
-              <div className="text-blue-100">New Concepts</div>
-            </div>
-            <div className="w-px h-16 bg-blue-300"></div>
-            <div className="text-center">
-              <div className="text-4xl font-bold mb-2">Practice</div>
-              <div className="text-blue-100">Skills Daily</div>
-            </div>
-            <div className="w-px h-16 bg-blue-300"></div>
-            <div className="text-center">
-              <div className="text-4xl font-bold mb-2">Play</div>
-              <div className="text-blue-100">Learning Games</div>
-            </div>
-            <div className="w-px h-16 bg-blue-300"></div>
-            <div className="text-center">
-              <div className="text-4xl font-bold mb-2">Improve</div>
-              <div className="text-blue-100">Continuously</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function LearningMaterialsPreview() {
-  const materials = [
-    { icon: MdMenuBook, label: 'PDF Documents', color: 'from-red-500 to-red-600' },
-    { icon: MdVideoLibrary, label: 'Video Lessons', color: 'from-blue-500 to-blue-600' },
-    { icon: MdMusicNote, label: 'Audio Content', color: 'from-green-500 to-green-600' },
-    { icon: MdPalette, label: 'Images & Graphics', color: 'from-purple-500 to-purple-600' },
-    { icon: MdPlayCircle, label: 'Interactive Lessons', color: 'from-orange-500 to-orange-600' },
-  ];
-
-  return (
-    <section className="py-16 bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            Rich Learning Materials
-          </h2>
-          <p className="text-lg text-slate-600 max-w-3xl mx-auto">
-            Instructors can provide different types of learning materials, allowing children to learn
-            through text, images, audio and video.
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6">
-          {materials.map((material, idx) => (
-            <div
-              key={idx}
-              className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all text-center"
-            >
-              <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${material.color} flex items-center justify-center mx-auto mb-4`}>
-                <material.icon className="text-white text-4xl" />
-              </div>
-              <h3 className="font-bold text-slate-800">{material.label}</h3>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ActivityExample() {
-  return (
-    <section className="py-16 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            Learning Through Activities
-          </h2>
-          <p className="text-lg text-slate-600">
-            Interactive activities make learning engaging and measurable
-          </p>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Example 1 */}
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl shadow-lg p-6 border-2 border-blue-200">
-            <div className="bg-white rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <MdAssignment className="text-blue-600 text-2xl" />
-                <span className="font-bold text-slate-800">Writing Activity</span>
-              </div>
-              <p className="text-slate-700 mb-4">
-                "Write the letter <span className="font-bold text-2xl text-blue-600">ሀ</span> five times."
-              </p>
-              <div className="bg-slate-50 rounded-lg p-3 border-2 border-dashed border-slate-300 text-center text-slate-500">
-                [Child's Submission]
-              </div>
-            </div>
-            <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-              <div className="flex items-center gap-2 mb-2">
-                <MdCheckCircle className="text-green-600 text-xl" />
-                <span className="font-semibold text-green-700">Teacher Feedback:</span>
-              </div>
-              <p className="text-green-700 text-sm">
-                "Excellent work! Keep practicing your letter formation."
-              </p>
-            </div>
+    <section id="about" className="py-20 bg-white" ref={ref}>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          {/* Text */}
+          <div className={`transition-all duration-700 ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-6">
+              About Children Learning Hub
+            </h2>
+            <p className="text-lg text-slate-500 leading-relaxed mb-6">
+              Children Learning Hub is designed to provide a supportive digital environment
+              where children can learn and practice while parents and instructors support
+              their learning journey.
+            </p>
+            <p className="text-base text-slate-400 leading-relaxed">
+              The platform serves children aged 5–12, with parent-guided learning for
+              younger children and independent student accounts for older ones — all
+              managed with full administrator oversight.
+            </p>
           </div>
 
-          {/* Example 2 */}
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl shadow-lg p-6 border-2 border-purple-200">
-            <div className="bg-white rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <MdAutoStories className="text-purple-600 text-2xl" />
-                <span className="font-bold text-slate-800">Reading Activity</span>
-              </div>
-              <p className="text-slate-700 mb-4">
-                "Read this short story and answer the questions."
-              </p>
-              <div className="bg-purple-50 rounded-lg p-3 text-sm text-slate-600">
-                Children can read, comprehend, and respond to questions.
-              </div>
-            </div>
-            <div className="bg-white rounded-xl p-4 border border-purple-200">
-              <div className="text-sm text-slate-600">
-                <strong>Score:</strong> <span className="text-purple-600 font-bold">8/10</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Example 3 */}
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl shadow-lg p-6 border-2 border-green-200">
-            <div className="bg-white rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <MdCalculate className="text-green-600 text-2xl" />
-                <span className="font-bold text-slate-800">Math Activity</span>
-              </div>
-              <p className="text-slate-700 mb-4">
-                "Count the objects and select the correct number."
-              </p>
-              <div className="grid grid-cols-5 gap-2">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="w-8 h-8 bg-green-200 rounded-full"></div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-white rounded-xl p-4 border border-green-200">
-              <div className="flex gap-2">
-                {[3, 4, 5, 6].map((num) => (
-                  <button
-                    key={num}
-                    className={`w-10 h-10 rounded-lg font-bold ${
-                      num === 5
-                        ? 'bg-green-600 text-white'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {num}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ParentFeaturesSection() {
-  const features = [
-    { icon: MdChildCare, label: 'Manage Children' },
-    { icon: MdMenuBook, label: 'View Learning Materials' },
-    { icon: MdTrendingUp, label: 'Monitor Progress' },
-    { icon: MdAssignment, label: 'View Activities' },
-    { icon: MdQuiz, label: 'View Quiz Results' },
-    { icon: MdEventAvailable, label: 'View Attendance' },
-    { icon: MdFeedback, label: 'Receive Teacher Feedback' },
-    { icon: MdNotifications, label: 'Receive Notifications' },
-    { icon: MdSmartToy, label: 'View AI Recommendations' },
-    { icon: MdMessage, label: 'Communicate with Instructors' },
-  ];
-
-  return (
-    <section id="parents" className="py-16 bg-gradient-to-br from-blue-50 to-purple-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            Designed for Parents
-          </h2>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Parents remain connected to their child's learning journey with comprehensive monitoring
-            and communication tools.
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          {features.map((feature, idx) => (
-            <div
-              key={idx}
-              className="bg-white rounded-xl shadow-md p-4 hover:shadow-lg transition-all text-center"
-            >
-              <feature.icon className="text-blue-600 text-3xl mx-auto mb-2" />
-              <div className="text-sm font-semibold text-slate-700">{feature.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="text-center">
-          <button
-            onClick={() => document.querySelector('#about')?.scrollIntoView({ behavior: 'smooth' })}
-            className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-full font-bold text-lg hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl"
+          {/* Visual */}
+          <div
+            className={`transition-all duration-700 delay-200 ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}
           >
-            Explore Parent Features <MdArrowForward />
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function InstructorFeaturesSection() {
-  const features = [
-    { icon: MdMenuBook, label: 'Create Lessons' },
-    { icon: MdVideoLibrary, label: 'Upload Materials' },
-    { icon: MdAssignment, label: 'Create Activities' },
-    { icon: MdQuiz, label: 'Create Quizzes' },
-    { icon: MdCheckCircle, label: 'Review Submissions' },
-    { icon: MdStar, label: 'Grade Activities' },
-    { icon: MdEventAvailable, label: 'Record Attendance' },
-    { icon: MdFeedback, label: 'Provide Feedback' },
-    { icon: MdTrendingUp, label: 'Monitor Progress' },
-    { icon: MdSmartToy, label: 'View AI Recommendations' },
-  ];
-
-  return (
-    <section id="instructors" className="py-16 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-4">
-            Powerful Tools for Instructors
-          </h2>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-            Everything instructors need to create engaging lessons and support student learning.
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          {features.map((feature, idx) => (
-            <div
-              key={idx}
-              className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-md p-4 hover:shadow-lg transition-all text-center border border-green-200"
-            >
-              <feature.icon className="text-green-600 text-3xl mx-auto mb-2" />
-              <div className="text-sm font-semibold text-slate-700">{feature.label}</div>
+            <div className="rounded-3xl p-8 bg-gradient-to-br from-indigo-600 to-purple-700 text-white shadow-2xl">
+              <div className="space-y-5">
+                {[
+                  { emoji: '👨‍👩‍👧', role: 'Parents',     desc: 'Manage and monitor learning' },
+                  { emoji: '👩‍🏫', role: 'Instructors', desc: 'Create lessons and activities' },
+                  { emoji: '👦',   role: 'Children',    desc: 'Learn at their own pace' },
+                  { emoji: '🛡️',  role: 'Admins',      desc: 'Oversee the platform' },
+                ].map((r) => (
+                  <div key={r.role} className="flex items-center gap-4 bg-white/10 rounded-2xl px-5 py-4 border border-white/10">
+                    <span className="text-2xl">{r.emoji}</span>
+                    <div>
+                      <div className="font-semibold">{r.role}</div>
+                      <div className="text-white/60 text-sm">{r.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-
-        <div className="text-center">
-          <button className="inline-flex items-center gap-2 px-8 py-4 bg-green-600 text-white rounded-full font-bold text-lg hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl">
-            For Instructors <MdArrowForward />
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AIRecommendationSection() {
-  return (
-    <section className="py-16 bg-gradient-to-br from-indigo-600 to-purple-600 text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-6">
-            <MdSmartToy className="text-6xl" />
-          </div>
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            Personalized Learning with AI
-          </h2>
-          <p className="text-lg text-indigo-100 max-w-3xl mx-auto">
-            Our AI-powered recommendation system analyzes each child's learning patterns and provides
-            personalized suggestions to enhance their educational journey.
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <MdTrendingUp className="text-4xl mb-3" />
-            <h3 className="text-xl font-bold mb-2">Analyzes Performance</h3>
-            <p className="text-indigo-100 text-sm">
-              Tracks quiz scores, activity completion, and learning patterns
-            </p>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <MdAssignment className="text-4xl mb-3" />
-            <h3 className="text-xl font-bold mb-2">Identifies Gaps</h3>
-            <p className="text-indigo-100 text-sm">
-              Detects areas where children need additional practice
-            </p>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <MdMenuBook className="text-4xl mb-3" />
-            <h3 className="text-xl font-bold mb-2">Recommends Content</h3>
-            <p className="text-indigo-100 text-sm">
-              Suggests lessons, activities, and materials tailored to each child
-            </p>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
-            <MdStar className="text-4xl mb-3" />
-            <h3 className="text-xl font-bold mb-2">Improves Outcomes</h3>
-            <p className="text-indigo-100 text-sm">
-              Helps children learn more effectively with personalized support
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-12 text-center">
-          <div className="inline-block bg-white/20 backdrop-blur-sm rounded-2xl p-8 border border-white/30">
-            <p className="text-xl font-semibold mb-2">
-              "Every child learns differently. Our AI ensures each child gets the support they need."
-            </p>
-            <p className="text-indigo-200">— Personalized Learning for Every Student</p>
           </div>
         </div>
       </div>
@@ -919,197 +469,115 @@ function AIRecommendationSection() {
   );
 }
 
+/* ─── CTA / Contact ─── */
 function CTASection() {
   const navigate = useNavigate();
+  const [ref, visible] = useReveal();
 
   return (
-    <section id="contact" className="py-20 bg-gradient-to-r from-blue-600 to-purple-600">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <h2 className="text-3xl sm:text-5xl font-bold text-white mb-6">
-          Ready to Start Your Child's Learning Journey?
-        </h2>
-        <p className="text-xl text-blue-100 mb-8">
-          Join thousands of parents and children already using Children Learning Hub
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <button
-            onClick={() => navigate('/register')}
-            className="px-10 py-4 bg-white text-blue-600 rounded-full font-bold text-lg hover:bg-blue-50 transition-all shadow-2xl hover:shadow-3xl transform hover:scale-105"
+    <section id="contact" className="py-20 bg-slate-50" ref={ref}>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
+        <div
+          className={`transition-all duration-700 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+        >
+          <div
+            className="rounded-3xl p-10 sm:p-14 shadow-2xl text-white overflow-hidden relative"
+            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%)' }}
           >
-            Get Started Free
-          </button>
-          <button
-            onClick={() => navigate('/login')}
-            className="px-10 py-4 bg-transparent border-2 border-white text-white rounded-full font-bold text-lg hover:bg-white/10 transition-all"
-          >
-            Login to Your Account
-          </button>
+            {/* Decorative blobs */}
+            <div className="absolute -top-16 -right-16 w-48 h-48 bg-white/5 rounded-full" />
+            <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-white/5 rounded-full" />
+
+            <div className="relative">
+              <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">
+                Ready to Start Learning?
+              </h2>
+              <p className="text-white/70 text-lg mb-8 max-w-xl mx-auto">
+                Join Children Learning Hub today and give your child a supportive,
+                structured learning environment.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => navigate('/signup')}
+                  className="px-8 py-3.5 bg-white text-indigo-700 rounded-xl font-bold text-base hover:bg-indigo-50 transition-all active:scale-95 shadow-xl"
+                >
+                  Create Account
+                </button>
+                <button
+                  onClick={() => navigate('/login')}
+                  className="px-8 py-3.5 bg-white/10 border border-white/30 text-white rounded-xl font-bold text-base hover:bg-white/20 transition-all active:scale-95 backdrop-blur-sm"
+                >
+                  Login
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
+/* ─── Footer ─── */
 function Footer() {
-  function scrollToSection(sectionId) {
-    const element = document.querySelector(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+  function scrollTo(href) {
+    const el = document.querySelector(href);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   return (
-    <footer className="bg-slate-900 text-slate-300 py-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid md:grid-cols-4 gap-8 mb-8">
-          {/* Brand */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                <MdSchool className="text-white text-2xl" />
-              </div>
-              <span className="text-xl font-bold text-white">Children Learning Hub</span>
+    <footer className="bg-slate-900 text-slate-400 py-12">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        {/* Brand */}
+        <div className="flex flex-col items-center gap-2 mb-8">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm shadow-md">
+              🎓
             </div>
-            <p className="text-sm text-slate-400">
-              Making learning fun, interactive, and personalized for every child.
-            </p>
+            <span className="text-white font-bold text-base">Children Learning Hub</span>
           </div>
-
-          {/* Quick Links */}
-          <div>
-            <h3 className="text-white font-bold mb-4">Quick Links</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#about')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  About Us
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#how-it-works')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  How It Works
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#learning-areas')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  Learning Areas
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#features')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  Features
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* For Users */}
-          <div>
-            <h3 className="text-white font-bold mb-4">For Users</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#parents')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  For Parents
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#instructors')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  For Instructors
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#learning-areas')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  For Students
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#about')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  For Administrators
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* Support */}
-          <div>
-            <h3 className="text-white font-bold mb-4">Support</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#contact')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  Help Center
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={() => scrollToSection('#contact')} 
-                  className="hover:text-blue-400 transition-colors text-left"
-                >
-                  Contact Us
-                </button>
-              </li>
-              <li>
-                <button className="hover:text-blue-400 transition-colors text-left">
-                  Privacy Policy
-                </button>
-              </li>
-              <li>
-                <button className="hover:text-blue-400 transition-colors text-left">
-                  Terms of Service
-                </button>
-              </li>
-            </ul>
-          </div>
+          <p className="text-sm text-slate-500 text-center max-w-xs">
+            Making learning fun, interactive, and personalized for every child.
+          </p>
         </div>
 
-        <div className="border-t border-slate-800 pt-8 text-center text-sm text-slate-400">
-          <p>© {new Date().getFullYear()} Children Learning Hub. All rights reserved.</p>
+        {/* Links */}
+        <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm mb-8">
+          {[
+            { label: 'Home',     href: '#home' },
+            { label: 'About',    href: '#about' },
+            { label: 'Learning', href: '#learning' },
+            { label: 'Contact',  href: '#contact' },
+          ].map((l) => (
+            <button
+              key={l.label}
+              onClick={() => scrollTo(l.href)}
+              className="hover:text-white transition-colors"
+            >
+              {l.label}
+            </button>
+          ))}
+          <Link to="/login" className="hover:text-white transition-colors">Login</Link>
+          <Link to="/signup" className="hover:text-white transition-colors">Sign Up</Link>
+        </nav>
+
+        <div className="border-t border-slate-800 pt-6 text-center text-sm text-slate-600">
+          © {new Date().getFullYear()} Children Learning Hub · Brana Youth Academy
         </div>
       </div>
     </footer>
   );
 }
 
+/* ─── Page ─── */
 export default function Home() {
   return (
     <div className="min-h-screen bg-white">
-      <PublicNav />
+      <Navbar />
       <HeroSection />
-      <UserRolesSection />
-      <AgeLearningModel />
-      <HowItWorksSection />
+      <InfoSection />
       <LearningAreasSection />
-      <InteractiveLearningPreview />
-      <LearningMaterialsPreview />
-      <ActivityExample />
-      <ParentFeaturesSection />
-      <InstructorFeaturesSection />
-      <AIRecommendationSection />
+      <AboutSection />
       <CTASection />
       <Footer />
     </div>
