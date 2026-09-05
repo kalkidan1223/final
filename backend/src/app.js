@@ -20,6 +20,7 @@ const notificationsRoutes = require('./routes/notificationsRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const materialsRoutes = require('./routes/materialsRoutes');
 const videosRoutes = require('./routes/videosRoutes');
+const instructorRoutes = require('./routes/instructorRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -59,6 +60,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/ai/recommendations', aiRoutes);
 app.use('/api/materials', materialsRoutes);
 app.use('/api/videos', videosRoutes);
+app.use('/api/instructor', instructorRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

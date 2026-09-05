@@ -441,6 +441,185 @@ async function rejectStudentRegistration(req, res, next) {
 }
 
 // ============================================================================
+// INSTRUCTOR REGISTRATION REQUESTS — ADMIN VIEW
+// ============================================================================
+
+async function listInstructorRegistrationRequests(req, res, next) {
+  try {
+    const { status } = req.query;
+    const conditions = [];
+    const params = [];
+
+    if (status && ['pending', 'approved', 'rejected', 'suspended'].includes(status)) {
+      params.push(status);
+      conditions.push(`status = $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const result = await query(
+      `SELECT * FROM instructor_registration_requests ${where} ORDER BY submitted_at DESC LIMIT 100`,
+      params
+    );
+
+    res.json({ instructor_registration_requests: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============================================================================
+// APPROVE INSTRUCTOR REGISTRATION
+// ============================================================================
+
+async function approveInstructorRegistration(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    const regResult = await query(
+      'SELECT * FROM instructor_registration_requests WHERE id = $1',
+      [id]
+    );
+    if (regResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Instructor registration request not found' });
+    }
+    const reg = regResult.rows[0];
+
+    if (reg.status !== 'pending') {
+      return res.status(400).json({ error: `Registration is already ${reg.status}` });
+    }
+
+    const passwordHash = reg.password_hash;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        `INSERT INTO users (email, password_hash, role, full_name, phone)
+         VALUES ($1, $2, 'instructor', $3, $4)
+         RETURNING id, email, full_name, role, phone, is_active`,
+        [reg.email, passwordHash, reg.full_name, reg.phone]
+      );
+      const user = userResult.rows[0];
+
+      await client.query(
+        `INSERT INTO instructors (user_id, bio, qualification, specialty)
+         VALUES ($1, $2, $3, $4)`,
+        [user.id, reg.bio || null, reg.education_level || null, reg.specialization || null]
+      );
+
+      await client.query(
+        `UPDATE instructor_registration_requests SET status = 'approved', reviewed_by = $1, reviewed_at = now(), reviewed_notes = $2
+         WHERE id = $3`,
+        [req.user.id, notes || null, id]
+      );
+
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [req.user.id, 'APPROVE_INSTRUCTOR_REGISTRATION', 'instructor_registration_request', id,
+         { status: 'pending' }, { status: 'approved', user_id: user.id }, null, null, null]
+      );
+
+      await client.query('COMMIT');
+      res.json({ message: 'Instructor registration approved', user: user, registration_id: id });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============================================================================
+// REJECT INSTRUCTOR REGISTRATION
+// ============================================================================
+
+async function rejectInstructorRegistration(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || reason.trim().length < 10) {
+      return res.status(400).json({ error: 'Rejection reason must be at least 10 characters' });
+    }
+
+    const regResult = await query(
+      'SELECT * FROM instructor_registration_requests WHERE id = $1',
+      [id]
+    );
+    if (regResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Instructor registration request not found' });
+    }
+    const reg = regResult.rows[0];
+
+    if (reg.status !== 'pending') {
+      return res.status(400).json({ error: `Registration is already ${reg.status}` });
+    }
+
+    await query(
+      `UPDATE instructor_registration_requests SET status = 'rejected', rejection_reason = $1, reviewed_by = $2, reviewed_at = now()
+       WHERE id = $3`,
+      [reason, req.user.id, id]
+    );
+
+    await logAudit(null, req.user.id, 'REJECT_INSTRUCTOR_REGISTRATION', 'instructor_registration_request', id,
+      { status: 'pending' }, { status: 'rejected', reason }
+    );
+
+    res.json({ message: 'Instructor registration rejected', registration_id: id });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============================================================================
+// SUSPEND INSTRUCTOR REGISTRATION
+// ============================================================================
+
+async function suspendInstructorRegistration(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || reason.trim().length < 10) {
+      return res.status(400).json({ error: 'Suspension reason must be at least 10 characters' });
+    }
+
+    const regResult = await query(
+      'SELECT * FROM instructor_registration_requests WHERE id = $1',
+      [id]
+    );
+    if (regResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Instructor registration request not found' });
+    }
+    const reg = regResult.rows[0];
+
+    if (reg.status !== 'pending') {
+      return res.status(400).json({ error: `Registration is already ${reg.status}` });
+    }
+
+    await query(
+      `UPDATE instructor_registration_requests SET status = 'suspended', rejection_reason = $1, reviewed_by = $2, reviewed_at = now()
+       WHERE id = $3`,
+      [reason, req.user.id, id]
+    );
+
+    await logAudit(null, req.user.id, 'SUSPEND_INSTRUCTOR_REGISTRATION', 'instructor_registration_request', id,
+      { status: 'pending' }, { status: 'suspended', reason }
+    );
+
+    res.json({ message: 'Instructor registration suspended', registration_id: id });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============================================================================
 // AUDIT LOGS
 // ============================================================================
 
@@ -477,5 +656,9 @@ module.exports = {
   getStudentRegistrationRequest,
   approveStudentRegistration,
   rejectStudentRegistration,
+  listInstructorRegistrationRequests,
+  approveInstructorRegistration,
+  rejectInstructorRegistration,
+  suspendInstructorRegistration,
   listAuditLogs,
 };

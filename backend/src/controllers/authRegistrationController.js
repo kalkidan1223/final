@@ -74,6 +74,12 @@ async function registerParent(req, res, next) {
       return res.status(400).json({ errors: ['You must confirm you are the legal guardian'] });
     }
 
+    const occupationVal = occupation || 'Not Specified';
+    const relationshipVal = relationship_to_child || 'Parent';
+    const emName = emergency_contact_name || null;
+    const emRel = emergency_contact_relationship || null;
+    const emPhone = emergency_contact_phone || null;
+
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const client = await pool.connect();
@@ -91,10 +97,10 @@ async function registerParent(req, res, next) {
         RETURNING id, full_name, email, phone, status`,
         [
           full_name, email.toLowerCase(), passwordHash, phone, alt_phone || null,
-          date_of_birth, gender, nationality, occupation, relationship_to_child,
+          date_of_birth, gender, nationality, occupationVal, relationshipVal,
           national_id || null, profile_image_url || null, country, region, city,
           sub_city || null, woreda || null, house_number || null, postal_code || null,
-          emergency_contact_name, emergency_contact_relationship, emergency_contact_phone,
+          emName, emRel, emPhone,
           terms_agreed, guardian_confirmed,
         ]
       );

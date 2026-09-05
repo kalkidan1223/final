@@ -18,6 +18,13 @@ router.get('/student-registration-requests/:id', requireAuth, authorize('admin')
 router.patch('/student-registration-requests/:id/approve', requireAuth, authorize('admin'), adminApprovalController.approveStudentRegistration);
 router.patch('/student-registration-requests/:id/reject', requireAuth, authorize('admin'), adminApprovalController.rejectStudentRegistration);
 
+// --- Instructor Registration Requests ---
+router.get('/instructor-registration-requests', requireAuth, authorize('admin'), adminApprovalController.listInstructorRegistrationRequests);
+router.get('/instructor-registration-requests/:id', requireAuth, authorize('admin'), adminApprovalController.getRegistrationRequest);
+router.patch('/instructor-registration-requests/:id/approve', requireAuth, authorize('admin'), adminApprovalController.approveInstructorRegistration);
+router.patch('/instructor-registration-requests/:id/reject', requireAuth, authorize('admin'), adminApprovalController.rejectInstructorRegistration);
+router.patch('/instructor-registration-requests/:id/suspend', requireAuth, authorize('admin'), adminApprovalController.suspendInstructorRegistration);
+
 // --- Audit Logs ---
 router.get('/audit-logs', requireAuth, authorize('admin'), adminApprovalController.listAuditLogs);
 

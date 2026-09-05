@@ -82,4 +82,32 @@ router.delete('/announcements/:id', requireAuth, authorize('admin'), adminExtCon
 // --- Reports (generate) ---
 router.post('/reports/generate', requireAuth, authorize('admin'), adminExtController.generateReport);
 
+// --- Instructor Assignments (admin manages which instructor teaches which course) ---
+const { listInstructorAssignments, createInstructorAssignment, updateInstructorAssignment, deleteInstructorAssignment } = require('../controllers/instructorAssignmentController');
+router.get('/instructor-assignments',     requireAuth, authorize('admin'), listInstructorAssignments);
+router.post('/instructor-assignments',    requireAuth, authorize('admin'), createInstructorAssignment);
+router.patch('/instructor-assignments/:id', requireAuth, authorize('admin'), updateInstructorAssignment);
+router.delete('/instructor-assignments/:id', requireAuth, authorize('admin'), deleteInstructorAssignment);
+
+// --- Academic Years ---
+router.get('/academic-years', requireAuth, authorize('admin'), async (req, res, next) => {
+  try {
+    const { query } = require('../config/db');
+    const { rows } = await query('SELECT * FROM academic_years ORDER BY id DESC');
+    res.json({ academic_years: rows });
+  } catch (err) { next(err); }
+});
+router.post('/academic-years', requireAuth, authorize('admin'), async (req, res, next) => {
+  try {
+    const { query } = require('../config/db');
+    const { label, is_current } = req.body;
+    if (!label) return res.status(400).json({ error: 'label is required' });
+    const { rows } = await query(
+      'INSERT INTO academic_years (label, is_current) VALUES ($1, $2) ON CONFLICT (label) DO UPDATE SET is_current = EXCLUDED.is_current RETURNING *',
+      [label, !!is_current]
+    );
+    res.status(201).json({ academic_year: rows[0] });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

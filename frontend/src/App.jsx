@@ -25,12 +25,20 @@ import AdminLessons from './pages/admin/AdminLessons';
 import AdminProgress from './pages/admin/AdminProgress';
 import AdminAIRecommendations from './pages/admin/AdminAIRecommendations';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
+import AdminInstructorAssignments from './pages/admin/AdminInstructorAssignments';
 import InstructorCourses from './pages/instructor/InstructorCourses';
 import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
 import InstructorLessonDetail from './pages/instructor/InstructorLessonDetail';
 import InstructorQuizManage from './pages/instructor/InstructorQuizManage';
 import InstructorActivitySubmissions from './pages/instructor/InstructorActivitySubmissions';
+import InstructorAssignments from './pages/instructor/InstructorAssignments';
+import InstructorAssignmentWorkspace from './pages/instructor/InstructorAssignmentWorkspace';
+import InstructorStudentProfile from './pages/instructor/InstructorStudentProfile';
+import InstructorStudents from './pages/instructor/InstructorStudents';
+import InstructorMessages from './pages/instructor/InstructorMessages';
+import InstructorNotifications from './pages/instructor/InstructorNotifications';
+import InstructorProfile from './pages/instructor/InstructorProfile';
 import ParentDashboard from './pages/parent/ParentDashboard';
 import ParentChildren from './pages/parent/ParentChildren';
 import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
@@ -202,6 +210,15 @@ export default function App() {
       />
 
       <Route
+        path="/admin/instructor-assignments"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminInstructorAssignments />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/instructor/dashboard"
         element={<ProtectedRoute roles={['instructor']}><InstructorDashboard /></ProtectedRoute>}
       />
@@ -240,10 +257,52 @@ export default function App() {
       <Route
         path="/instructor/activities/:id/submissions"
         element={
-          <ProtectedRoute roles={['instructor', 'admin']}>
-            <InstructorActivitySubmissions />
-          </ProtectedRoute>
+          <ProtectedRoute roles={['instructor', 'admin']}><InstructorActivitySubmissions /></ProtectedRoute>
         }
+      />
+
+      {/* ── Instructor Portal (New Assignment-based routes) ── */}
+      <Route path="/instructor/assignments"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/assignments/:id"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignmentWorkspace /></ProtectedRoute>}
+      />
+      <Route path="/instructor/students/:studentId"
+        element={<ProtectedRoute roles={['instructor']}><InstructorStudentProfile /></ProtectedRoute>}
+      />
+      <Route path="/instructor/students"
+        element={<ProtectedRoute roles={['instructor']}><InstructorStudents /></ProtectedRoute>}
+      />
+      <Route path="/instructor/lessons"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/materials"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/activities"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/quizzes"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/submissions"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/attendance"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/progress"
+        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+      />
+      <Route path="/instructor/messages"
+        element={<ProtectedRoute roles={['instructor']}><InstructorMessages /></ProtectedRoute>}
+      />
+      <Route path="/instructor/notifications"
+        element={<ProtectedRoute roles={['instructor']}><InstructorNotifications /></ProtectedRoute>}
+      />
+      <Route path="/instructor/profile"
+        element={<ProtectedRoute roles={['instructor']}><InstructorProfile /></ProtectedRoute>}
       />
 
       {/* ── Parent ── */}

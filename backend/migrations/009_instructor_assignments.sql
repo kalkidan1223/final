@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS instructor_age_groups (
     UNIQUE(instructor_id, age_group_id)
 );
 
-CREATE INDEX idx_instructor_age_groups_instructor ON instructor_age_groups(instructor_id);
-CREATE INDEX idx_instructor_age_groups_age_group ON instructor_age_groups(age_group_id);
+CREATE INDEX IF NOT EXISTS idx_instructor_age_groups_instructor ON instructor_age_groups(instructor_id);
+CREATE INDEX IF NOT EXISTS idx_instructor_age_groups_age_group ON instructor_age_groups(age_group_id);
 
 -- Junction table: instructor can be assigned to multiple courses
 CREATE TABLE IF NOT EXISTS instructor_courses (
@@ -26,7 +26,23 @@ CREATE TABLE IF NOT EXISTS instructor_courses (
     UNIQUE(instructor_id, course_id)
 );
 
-CREATE INDEX idx_instructor_courses_instructor ON instructor_courses(instructor_id);
-CREATE INDEX idx_instructor_courses_course ON instructor_courses(course_id);
+CREATE INDEX IF NOT EXISTS idx_instructor_courses_instructor ON instructor_courses(instructor_id);
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'instructor_courses'
+          AND column_name = 'available_course_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_instructor_courses_available_course
+            ON instructor_courses(available_course_id);
+    ELSE
+        CREATE INDEX IF NOT EXISTS idx_instructor_courses_course
+            ON instructor_courses(course_id);
+    END IF;
+END $$;
 
 COMMIT;

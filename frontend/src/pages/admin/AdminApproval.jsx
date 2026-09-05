@@ -30,6 +30,7 @@ export default function AdminApproval() {
   const [activeTab, setActiveTab] = useState('parent-requests');
   const [parentRequests, setParentRequests] = useState([]);
   const [studentRequests, setStudentRequests] = useState([]);
+  const [instructorRequests, setInstructorRequests] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,13 +45,15 @@ export default function AdminApproval() {
     setLoading(true);
     setError('');
     try {
-      const [prRes, srRes, alRes] = await Promise.all([
+      const [prRes, srRes, irRes, alRes] = await Promise.all([
         axiosClient.get('/admin/approval/registration-requests?status=pending'),
         axiosClient.get('/admin/approval/student-registration-requests?status=pending'),
+        axiosClient.get('/admin/approval/instructor-registration-requests?status=pending'),
         axiosClient.get('/admin/approval/audit-logs?limit=20'),
       ]);
       setParentRequests(prRes.data.registration_requests || []);
       setStudentRequests(srRes.data.student_registration_requests || []);
+      setInstructorRequests(irRes.data.instructor_registration_requests || []);
       setAuditLogs(alRes.data.audit_logs || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load data');
@@ -73,9 +76,13 @@ export default function AdminApproval() {
         if (action === 'approve') await axiosClient.patch(`/admin/approval/registration-requests/${id}/approve`, { notes: actionNote });
         else if (action === 'reject') await axiosClient.patch(`/admin/approval/registration-requests/${id}/reject`, { reason: actionReason });
         else if (action === 'suspend') await axiosClient.patch(`/admin/approval/registration-requests/${id}/suspend`, { reason: actionReason });
-      } else {
+      } else if (activeTab === 'student-requests') {
         if (action === 'approve') await axiosClient.patch(`/admin/approval/student-registration-requests/${id}/approve`, { notes: actionNote });
         else if (action === 'reject') await axiosClient.patch(`/admin/approval/student-registration-requests/${id}/reject`, { reason: actionReason });
+      } else if (activeTab === 'instructor-requests') {
+        if (action === 'approve') await axiosClient.patch(`/admin/approval/instructor-registration-requests/${id}/approve`, { notes: actionNote });
+        else if (action === 'reject') await axiosClient.patch(`/admin/approval/instructor-registration-requests/${id}/reject`, { reason: actionReason });
+        else if (action === 'suspend') await axiosClient.patch(`/admin/approval/instructor-registration-requests/${id}/suspend`, { reason: actionReason });
       }
       setSuccess('Action completed successfully');
       setShowAction(null);
@@ -108,9 +115,9 @@ export default function AdminApproval() {
         )}
 
         <div className="flex gap-2 mb-8 border-b border-slate-200">
-          {['parent-requests', 'student-requests', 'audit-logs'].map((tab) => (
+          {['parent-requests', 'student-requests', 'instructor-requests', 'audit-logs'].map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 py-3 font-semibold text-sm transition border-b-2 ${activeTab === tab ? 'border-violet-500 text-violet-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-              {tab === 'parent-requests' ? '👨‍👩‍👧 Parent Requests' : tab === 'student-requests' ? '🎓 Student Requests' : '📝 Audit Logs'}
+              {tab === 'parent-requests' ? '👨‍👩‍👧 Parent Requests' : tab === 'student-requests' ? '🎓 Student Requests' : tab === 'instructor-requests' ? '👩‍🏫 Instructor Requests' : '📝 Audit Logs'}
             </button>
           ))}
         </div>
@@ -217,6 +224,55 @@ export default function AdminApproval() {
               </div>
             )}
 
+            {activeTab === 'instructor-requests' && (
+              <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-amber-50">
+                      <tr>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Full Name</th>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Email</th>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Phone</th>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Specialization</th>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Education</th>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Registered</th>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Status</th>
+                        <th className="px-4 py-3 text-sm font-semibold text-amber-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {instructorRequests.map((req) => (
+                        <tr key={req.id} className="hover:bg-amber-50/50 transition">
+                          <td className="px-4 py-3 font-medium text-slate-800">{req.full_name}</td>
+                          <td className="px-4 py-3 text-sm text-slate-500">{req.email}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{req.phone}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{req.specialization || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{req.education_level || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-slate-500">{new Date(req.submitted_at).toLocaleDateString()}</td>
+                          <td className="px-4 py-3"><StatusBadge status={req.status} /></td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2 flex-wrap">
+                              <ActionButton label="View" color="view" onClick={() => setSelectedRequest(req)} />
+                              {req.status === 'pending' && (
+                                <>
+                                  <ActionButton label="✓ Approve" color="approve" onClick={() => { setShowAction({ type: 'approve', id: req.id, tab: 'instructor' }); setActionNote(''); }} />
+                                  <ActionButton label="✗ Reject" color="reject" onClick={() => { setShowAction({ type: 'reject', id: req.id, tab: 'instructor' }); setActionReason(''); }} />
+                                  <ActionButton label="⏸ Suspend" color="suspend" onClick={() => { setShowAction({ type: 'suspend', id: req.id, tab: 'instructor' }); setActionReason(''); }} />
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {instructorRequests.length === 0 && (
+                        <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-500">No pending instructor registration requests.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'audit-logs' && (
               <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
@@ -260,15 +316,18 @@ export default function AdminApproval() {
               <div className="grid grid-cols-2 gap-3">
                 <p><span className="font-medium">Name:</span> {selectedRequest.full_name}</p>
                 <p><span className="font-medium">Email:</span> {selectedRequest.email}</p>
-                <p><span className="font-medium">Phone:</span> {selectedRequest.phone}</p>
-                <p><span className="font-medium">Gender:</span> {selectedRequest.gender}</p>
-                <p><span className="font-medium">Nationality:</span> {selectedRequest.nationality}</p>
-                <p><span className="font-medium">Country:</span> {selectedRequest.country}</p>
-                <p><span className="font-medium">Region:</span> {selectedRequest.region}</p>
-                <p><span className="font-medium">City:</span> {selectedRequest.city}</p>
-                <p><span className="font-medium">Occupation:</span> {selectedRequest.occupation}</p>
-                <p><span className="font-medium">Relationship:</span> {selectedRequest.relationship_to_child}</p>
-                <p><span className="font-medium">Emergency:</span> {selectedRequest.emergency_contact_name} ({selectedRequest.emergency_contact_relationship})</p>
+                {selectedRequest.phone && <p><span className="font-medium">Phone:</span> {selectedRequest.phone}</p>}
+                {selectedRequest.gender && <p><span className="font-medium">Gender:</span> {selectedRequest.gender}</p>}
+                {selectedRequest.nationality && <p><span className="font-medium">Nationality:</span> {selectedRequest.nationality}</p>}
+                {selectedRequest.country && <p><span className="font-medium">Country:</span> {selectedRequest.country}</p>}
+                {selectedRequest.region && <p><span className="font-medium">Region:</span> {selectedRequest.region}</p>}
+                {selectedRequest.city && <p><span className="font-medium">City:</span> {selectedRequest.city}</p>}
+                {selectedRequest.occupation && <p><span className="font-medium">Occupation:</span> {selectedRequest.occupation}</p>}
+                {selectedRequest.relationship_to_child && <p><span className="font-medium">Relationship:</span> {selectedRequest.relationship_to_child}</p>}
+                {selectedRequest.emergency_contact_name && <p><span className="font-medium">Emergency:</span> {selectedRequest.emergency_contact_name} ({selectedRequest.emergency_contact_relationship})</p>}
+                {selectedRequest.specialization && <p><span className="font-medium">Specialization:</span> {selectedRequest.specialization}</p>}
+                {selectedRequest.education_level && <p><span className="font-medium">Education:</span> {selectedRequest.education_level}</p>}
+                {selectedRequest.years_of_experience && <p><span className="font-medium">Experience:</span> {selectedRequest.years_of_experience} years</p>}
                 <p><span className="font-medium">Status:</span> <StatusBadge status={selectedRequest.status} /></p>
               </div>
             </div>
@@ -281,7 +340,7 @@ export default function AdminApproval() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAction(null)}>
           <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-slate-800 mb-4">
-              ✓ Approve {showAction.tab === 'student' ? 'Student' : 'Parent'} Registration
+              ✓ Approve {showAction.tab === 'student' ? 'Student' : showAction.tab === 'instructor' ? 'Instructor' : 'Parent'} Registration
             </h3>
             <textarea placeholder="Approval notes (optional)" value={actionNote} onChange={(e) => setActionNote(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 mb-4 text-sm" rows={3} />
             <div className="flex gap-3">
@@ -296,7 +355,7 @@ export default function AdminApproval() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowAction(null)}>
           <div className="bg-white rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-bold text-slate-800 mb-4">
-              ✗ Reject {showAction.tab === 'student' ? 'Student' : 'Parent'} Registration
+              ✗ Reject {showAction.tab === 'student' ? 'Student' : showAction.tab === 'instructor' ? 'Instructor' : 'Parent'} Registration
             </h3>
             <textarea required placeholder="Enter reason (minimum 10 characters)" value={actionReason} onChange={(e) => setActionReason(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 mb-4 text-sm" rows={3} />
             <div className="flex gap-3">

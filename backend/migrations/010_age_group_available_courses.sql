@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS age_group_available_courses (
     UNIQUE(age_group_id, course_title)
 );
 
-CREATE INDEX idx_age_group_available_courses_age_group ON age_group_available_courses(age_group_id);
-CREATE INDEX idx_age_group_available_courses_active ON age_group_available_courses(is_active);
+CREATE INDEX IF NOT EXISTS idx_age_group_available_courses_age_group ON age_group_available_courses(age_group_id);
+CREATE INDEX IF NOT EXISTS idx_age_group_available_courses_active ON age_group_available_courses(is_active);
 
 -- Add a comment
 COMMENT ON TABLE age_group_available_courses IS 'Defines which courses are available for each age group. Admins establish these first, then assign instructors to teach them.';

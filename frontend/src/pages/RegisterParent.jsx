@@ -67,7 +67,7 @@ function PasswordStrength({ password }) {
 
 const steps = [
   { key: 'personal', label: 'Personal Info', icon: '👤' },
-  { key: 'address', label: 'Address & Contact', icon: '🏫' },
+  { key: 'address', label: 'Address Info', icon: '📍' },
   { key: 'consent', label: 'Review & Consent', icon: '🔑' },
 ];
 
@@ -90,8 +90,6 @@ export default function RegisterParent() {
     // Address
     country: '', region: '', city: '',
     sub_city: '', woreda: '', house_number: '', postal_code: '',
-    // Emergency
-    emergency_contact_name: '', emergency_contact_relationship: '', emergency_contact_phone: '',
     // Consent
     terms_agreed: false, guardian_confirmed: false,
   });
@@ -128,11 +126,6 @@ export default function RegisterParent() {
       if (!form.country) errs.push('Country is required');
       if (!form.region) errs.push('Region is required');
       if (!form.city) errs.push('City is required');
-      if (!form.occupation) errs.push('Occupation is required');
-      if (!form.relationship_to_child) errs.push('Relationship to child is required');
-      if (!form.emergency_contact_name) errs.push('Emergency contact name is required');
-      if (!form.emergency_contact_relationship) errs.push('Emergency contact relationship is required');
-      if (!form.emergency_contact_phone || !/^\d{10,15}$/.test(form.emergency_contact_phone)) errs.push('Emergency contact phone must be 10-15 digits');
     } else if (step === 2) {
       if (!form.terms_agreed) errs.push('You must agree to the Terms and Conditions');
       if (!form.guardian_confirmed) errs.push('You must confirm you are the legal guardian');
@@ -173,7 +166,13 @@ export default function RegisterParent() {
         return;
       }
       const full_name = `${form.first_name} ${form.middle_name} ${form.last_name}`.trim();
-      const payload = { ...form, full_name, date_of_birth: form.date_of_birth || null };
+      const payload = {
+        ...form,
+        full_name,
+        date_of_birth: form.date_of_birth || null,
+        occupation: form.occupation || 'Not Specified',
+        relationship_to_child: form.relationship_to_child || 'Parent',
+      };
       await registerParent(payload);
       setSubmitted(true);
     } catch (err) {
@@ -187,7 +186,7 @@ export default function RegisterParent() {
   const allFieldsFilled = currentStep === 2
     ? form.first_name && form.last_name && form.email && form.password && form.confirm_password && form.terms_agreed && form.guardian_confirmed
     : currentStep === 1
-    ? form.first_name && form.last_name && form.gender && form.date_of_birth && form.nationality && form.phone && form.email
+    ? form.country && form.region && form.city
     : form.first_name && form.last_name && form.gender && form.date_of_birth && form.nationality && form.phone && form.email;
 
   return (
@@ -313,26 +312,14 @@ export default function RegisterParent() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input required placeholder="City *" value={form.city} onChange={update('city')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
-                    <input placeholder="Sub City" value={form.sub_city} onChange={update('sub_city')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
+                    <input placeholder="Sub City (Optional)" value={form.sub_city} onChange={update('sub_city')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input placeholder="Woreda" value={form.woreda} onChange={update('woreda')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
-                    <input placeholder="House Number" value={form.house_number} onChange={update('house_number')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
-                    <input placeholder="Postal Code" value={form.postal_code} onChange={update('postal_code')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
+                    <input placeholder="Woreda (Optional)" value={form.woreda} onChange={update('woreda')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
+                    <input placeholder="House Number (Optional)" value={form.house_number} onChange={update('house_number')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
+                    <input placeholder="Postal Code (Optional)" value={form.postal_code} onChange={update('postal_code')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-700 mt-6">📞 Emergency Contact</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input required placeholder="Full Name *" value={form.emergency_contact_name} onChange={update('emergency_contact_name')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400" />
-                    <input required placeholder="Relationship *" value={form.emergency_contact_relationship} onChange={update('emergency_contact_relationship')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400" />
-                    <input required placeholder="Phone *" value={form.emergency_contact_phone} onChange={update('emergency_contact_phone')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-700 mt-6">👔 Additional Info</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input placeholder="Occupation *" required value={form.occupation} onChange={update('occupation')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400" />
-                    <input placeholder="Relationship to Child *" required value={form.relationship_to_child} onChange={update('relationship_to_child')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400" />
-                  </div>
-                   <input placeholder="National ID (Optional)" value={form.national_id} onChange={update('national_id')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100" />
-                 </div>
+                </div>
               )}
 
               {/* Step 2: Consent & Submit */}
@@ -348,7 +335,7 @@ export default function RegisterParent() {
                       <p><span className="font-medium">Gender:</span> {form.gender}</p>
                       <p><span className="font-medium">Nationality:</span> {form.nationality}</p>
                       {age && <p><span className="font-medium">Age:</span> {age} years</p>}
-                      <p><span className="font-medium">Occupation:</span> {form.occupation}</p>
+                      <p><span className="font-medium">City:</span> {form.city}</p>
                       <p><span className="font-medium">Country:</span> {form.country}</p>
                     </div>
                   </div>

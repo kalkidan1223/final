@@ -1,21 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { MdGroups, MdSearch, MdRefresh, MdAdd, MdPerson, MdPause, MdPlayArrow, MdStar, MdEdit } from 'react-icons/md';
+import { MdGroups, MdSearch, MdRefresh, MdPerson, MdPause, MdPlayArrow, MdStar, MdEdit, MdNavigateNext } from 'react-icons/md';
+import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
-import FormField, { inputClass } from '../../components/FormField';
 import axiosClient from '../../api/axiosClient';
 
 const PAGE_SIZE = 12;
-const EMPTY_FORM = { 
-  full_name: '', 
-  email: '', 
-  phone: '', 
-  password: '', 
-  qualification: '', 
-  specialty: '', 
-  bio: '',
-  assigned_age_groups: [], // New: Array of age group IDs
-  assigned_courses: []      // New: Array of course IDs
-};
 
 function StatusBadge({ isActive }) {
   return (
@@ -98,19 +87,7 @@ function ViewModal({ instructor, onClose }) {
   );
 }
 
-function validate(form) {
-  const errors = {};
-  if (!form.full_name.trim() || form.full_name.trim().length < 2) errors.full_name = 'Full name required (min 2 chars)';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Valid email required';
-  if (!/^\d{10,15}$/.test(form.phone)) errors.phone = 'Phone: 10–15 digits only';
-  if (form.password && (form.password.length < 8 || !/[a-zA-Z]/.test(form.password) || !/[0-9]/.test(form.password))) errors.password = 'Min 8 chars, one letter + one number';
-  if (!form.qualification.trim()) errors.qualification = 'Qualification required';
-  if (!form.specialty.trim()) errors.specialty = 'Specialty required';
-  if (form.bio.trim() && form.bio.trim().length < 10) errors.bio = 'Bio must be ≥ 10 chars if provided';
-  return errors;
-}
-
-function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups, allCourses, loadingOptions }) {
+function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
   const [assignedAgeGroups, setAssignedAgeGroups] = useState(
     instructor.assigned_age_groups?.map(ag => ag.id) || []
   );
@@ -172,104 +149,134 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups, allCours
     }
   }
 
+  const toggleAgeGroup = (groupId) => {
+    setAssignedAgeGroups(prev => 
+      prev.includes(groupId) 
+        ? prev.filter(id => id !== groupId)
+        : [...prev, groupId]
+    );
+  };
+
+  const toggleCourse = (courseId) => {
+    setAssignedCourses(prev =>
+      prev.includes(courseId)
+        ? prev.filter(id => id !== courseId)
+        : [...prev, courseId]
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <h3 className="font-semibold text-slate-800">Edit Assignments</h3>
-            <p className="text-sm text-slate-500">{instructor.full_name}</p>
+            <h3 className="font-semibold text-slate-800">Edit Assignments: {instructor.full_name}</h3>
+            <p className="text-xs text-slate-500">Assign age groups and courses to this instructor</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
         </div>
-        
-        <div className="p-6 space-y-6">
-          {error && <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
-          {/* Age Groups */}
+        <div className="p-6 space-y-6">
+          {error && (
+            <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          {/* Age Groups Selection */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-3">
-              Assigned Age Groups
-              <span className="block text-xs font-normal text-slate-400 mt-1">Select the age groups this instructor can teach</span>
-            </label>
-            {loadingOptions ? (
-              <div className="text-sm text-slate-400">Loading age groups...</div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {ageGroups.map(ag => (
-                  <label key={ag.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${assignedAgeGroups.includes(ag.id) ? 'bg-violet-50 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">Assigned Age Groups</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {ageGroups?.map(group => {
+                const isSelected = assignedAgeGroups.includes(group.id);
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    onClick={() => toggleAgeGroup(group.id)}
+                    className={`flex items-center gap-2 p-3 rounded-xl border text-left text-sm transition ${
+                      isSelected
+                        ? 'border-violet-600 bg-violet-50 text-violet-900 font-medium'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                    }`}
+                  >
                     <input
                       type="checkbox"
-                      checked={assignedAgeGroups.includes(ag.id)}
-                      onChange={(e) => {
-                        setAssignedAgeGroups(prev => 
-                          e.target.checked 
-                            ? [...prev, ag.id]
-                            : prev.filter(id => id !== ag.id)
-                        );
-                      }}
-                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                      checked={isSelected}
+                      readOnly
+                      className="rounded text-violet-600 focus:ring-violet-500"
                     />
-                    <span className="text-sm font-medium">{ag.name} ({ag.min_age}-{ag.max_age} years)</span>
-                  </label>
-                ))}
-              </div>
-            )}
+                    <span className="truncate">{group.name || group.title}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Courses */}
+          {/* Available Courses */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-3">
-              Assigned Courses
-              <span className="block text-xs font-normal text-slate-400 mt-1">Select established courses this instructor can teach</span>
-            </label>
-            {loadingCourses ? (
-              <div className="text-sm text-slate-400">Loading available courses...</div>
-            ) : assignedAgeGroups.length === 0 ? (
-              <div className="text-sm text-slate-400 bg-amber-50 border border-amber-200 rounded-lg p-4">
-                ⚠️ Please select age groups first. Courses are specific to age groups.
-              </div>
-            ) : availableCourses.length === 0 ? (
-              <div className="text-sm text-slate-400 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                ℹ️ No courses have been established for the selected age groups yet.
-              </div>
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">
+              Available Courses {loadingCourses && <span className="text-xs font-normal text-slate-400">(Loading...)</span>}
+            </h4>
+            {assignedAgeGroups.length === 0 ? (
+              <p className="text-sm text-slate-400 bg-slate-50 p-4 rounded-xl text-center">
+                Select one or more age groups to view and assign courses.
+              </p>
+            ) : availableCourses.length === 0 && !loadingCourses ? (
+              <p className="text-sm text-slate-400 bg-slate-50 p-4 rounded-xl text-center">
+                No courses found for the selected age groups.
+              </p>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-3">
-                {availableCourses.map(course => (
-                  <label key={course.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition ${assignedCourses.includes(course.available_course_id) ? 'bg-violet-50 border-violet-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                    <input
-                      type="checkbox"
-                      checked={assignedCourses.includes(course.available_course_id)}
-                      onChange={(e) => {
-                        setAssignedCourses(prev =>
-                          e.target.checked 
-                            ? [...prev, course.available_course_id]
-                            : prev.filter(id => id !== course.available_course_id)
-                        );
-                      }}
-                      className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium truncate ${assignedCourses.includes(course.available_course_id) ? 'text-violet-700' : 'text-slate-700'}`}>
-                        {course.title}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {ageGroups.find(ag => ag.id === course.age_group_id)?.name || 'Unknown age group'}
-                        {course.description && ` • ${course.description}`}
-                      </p>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {availableCourses.map(course => {
+                  const isSelected = assignedCourses.includes(course.available_course_id || course.id);
+                  return (
+                    <div
+                      key={course.id}
+                      onClick={() => toggleCourse(course.available_course_id || course.id)}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                        isSelected
+                          ? 'border-violet-600 bg-violet-50 text-violet-900'
+                          : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        readOnly
+                        className="mt-1 rounded text-violet-600 focus:ring-violet-500"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{course.title}</p>
+                        {course.description && (
+                          <p className="text-xs text-slate-500 truncate mt-0.5">{course.description}</p>
+                        )}
+                      </div>
                     </div>
-                  </label>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
-          <button onClick={handleSave} disabled={saving} className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-6 py-2.5 text-sm font-semibold disabled:opacity-60 transition">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-xl transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-5 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition disabled:opacity-50"
+          >
             {saving ? 'Saving...' : 'Save Assignments'}
           </button>
-          <button onClick={onClose} className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Cancel</button>
         </div>
       </div>
     </div>
@@ -288,79 +295,27 @@ export default function AdminInstructors() {
   const [total, setTotal] = useState(0);
   const [viewInst, setViewInst] = useState(null);
   const [editInst, setEditInst] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
   const debounce = useRef(null);
   
-  // New: For course and age group selection
+  // For edit assignments modal
   const [ageGroups, setAgeGroups] = useState([]);
-  const [allCourses, setAllCourses] = useState([]);
-  const [loadingOptions, setLoadingOptions] = useState(false);
 
-  // Load age groups and courses when form is shown OR when editing
+  // Load age groups and courses when editing
   useEffect(() => {
-    if (showForm || editInst) {
+    if (editInst) {
       loadOptions();
     }
-  }, [showForm, editInst]);
+  }, [editInst]);
 
   async function loadOptions() {
-    setLoadingOptions(true);
     try {
       const ageGroupsRes = await axiosClient.get('/age-groups');
       setAgeGroups(ageGroupsRes.data.age_groups || []);
-      // Don't load courses here - they'll be loaded per age group
-      setAllCourses([]);
     } catch (err) {
       console.error('Failed to load options:', err);
       setError('Failed to load age groups');
-    } finally {
-      setLoadingOptions(false);
     }
   }
-
-  // Load available courses when age groups are selected
-  useEffect(() => {
-    async function loadAvailableCoursesForSelectedAgeGroups() {
-      if (form.assigned_age_groups.length === 0) {
-        setAllCourses([]);
-        return;
-      }
-
-      setLoadingOptions(true);
-      try {
-        // Fetch available courses for each selected age group
-        const coursePromises = form.assigned_age_groups.map(ageGroupId =>
-          axiosClient.get(`/admin/age-groups/${ageGroupId}/available-courses`)
-        );
-        const responses = await Promise.all(coursePromises);
-        
-        // Combine all available courses from all selected age groups
-        const allAvailableCourses = responses.flatMap((res, idx) => 
-          (res.data.available_courses || [])
-            .filter(c => c.is_active)
-            .map(c => ({
-              id: `${form.assigned_age_groups[idx]}_${c.id}`, // Unique ID combining age group and course
-              age_group_id: form.assigned_age_groups[idx],
-              title: c.course_title,
-              description: c.course_description,
-              available_course_id: c.id
-            }))
-        );
-        setAllCourses(allAvailableCourses);
-      } catch (err) {
-        console.error('Failed to load available courses:', err);
-      } finally {
-        setLoadingOptions(false);
-      }
-    }
-
-    if (showForm || editInst) {
-      loadAvailableCoursesForSelectedAgeGroups();
-    }
-  }, [form.assigned_age_groups, showForm, editInst]);
 
   const loadInstructors = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
@@ -402,26 +357,6 @@ export default function AdminInstructors() {
     } catch (err) { setError(err.response?.data?.error || 'Action failed'); }
   }
 
-  async function handleCreate(e) {
-    e.preventDefault();
-    const errs = validate(form);
-    if (Object.keys(errs).length) { setFieldErrors(errs); return; }
-    setFieldErrors({});
-    setError('');
-    setSubmitting(true);
-    try {
-      await axiosClient.post('/admin/instructors', { ...form, email: form.email.toLowerCase().trim(), full_name: form.full_name.trim(), qualification: form.qualification.trim(), specialty: form.specialty.trim(), bio: form.bio.trim() || undefined });
-      setSuccess('Instructor account created');
-      setForm(EMPTY_FORM);
-      setShowForm(false);
-      setTimeout(() => setSuccess(''), 3000);
-      loadInstructors(true);
-    } catch (err) {
-      const apiErrs = err.response?.data?.errors || [err.response?.data?.error || 'Failed to create'];
-      setError(apiErrs.join('. '));
-    } finally { setSubmitting(false); }
-  }
-
   async function handleEditAssignments(instructorId, assignments) {
     try {
       await axiosClient.patch(`/admin/instructors/${instructorId}/assignments`, assignments);
@@ -444,131 +379,21 @@ export default function AdminInstructors() {
             <div className="rounded-xl bg-violet-600 p-2.5"><MdGroups className="text-xl text-white" /></div>
             <div>
               <h1 className="text-2xl font-bold text-slate-800">Instructors</h1>
-              <p className="text-sm text-slate-500">Create and manage instructor accounts</p>
+              <p className="text-sm text-slate-500">Manage approved instructor accounts</p>
             </div>
           </div>
           <div className="flex gap-2">
             <button onClick={() => loadInstructors(true)} disabled={refreshing} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition">
               <MdRefresh className={refreshing ? 'animate-spin' : ''} />Refresh
             </button>
-            <button onClick={() => { setShowForm(v => !v); setError(''); setFieldErrors({}); }} className="flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 text-sm font-semibold transition">
-              <MdAdd />{showForm ? 'Cancel' : 'Add Instructor'}
-            </button>
+            <Link to="/admin/approval" className="flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 text-sm font-semibold transition">
+              Approve Instructors
+            </Link>
           </div>
         </div>
 
         {error && <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 flex justify-between">{error}<button onClick={() => setError('')}>&times;</button></div>}
         {success && <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">{success}</div>}
-
-        {/* Create Form */}
-        {showForm && (
-          <form onSubmit={handleCreate} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
-            <h2 className="text-base font-semibold text-slate-800">New Instructor Account</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Full Name" required error={fieldErrors.full_name}>
-                <input value={form.full_name} onChange={e => setForm(f => ({...f, full_name: e.target.value}))} placeholder="Sara Bekele" className={inputClass(fieldErrors.full_name)} />
-              </FormField>
-              <FormField label="Email" required error={fieldErrors.email}>
-                <input type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} placeholder="teacher@school.edu" className={inputClass(fieldErrors.email)} />
-              </FormField>
-              <FormField label="Phone" required error={fieldErrors.phone} hint="10–15 digits">
-                <input type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value.replace(/\D/g,'')}))} placeholder="0912345678" className={inputClass(fieldErrors.phone)} />
-              </FormField>
-              <FormField label="Temporary Password" required error={fieldErrors.password} hint="Min 8 chars, letter + number">
-                <input type="password" value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))} placeholder="Teacher@123" className={inputClass(fieldErrors.password)} />
-              </FormField>
-              <FormField label="Qualification" required error={fieldErrors.qualification}>
-                <input value={form.qualification} onChange={e => setForm(f => ({...f, qualification: e.target.value}))} placeholder="B.Ed. Primary Education" className={inputClass(fieldErrors.qualification)} />
-              </FormField>
-              <FormField label="Teaching Specialty" required error={fieldErrors.specialty}>
-                <input value={form.specialty} onChange={e => setForm(f => ({...f, specialty: e.target.value}))} placeholder="Mathematics, English…" className={inputClass(fieldErrors.specialty)} />
-              </FormField>
-              <FormField label="Bio" error={fieldErrors.bio} className="sm:col-span-2">
-                <textarea rows={3} value={form.bio} onChange={e => setForm(f => ({...f, bio: e.target.value}))} placeholder="Optional teacher background…" className={`${inputClass(fieldErrors.bio)} resize-y`} />
-              </FormField>
-
-              {/* Age Groups Assignment */}
-              <FormField label="Assigned Age Groups" className="sm:col-span-2" hint="Select the age groups this instructor can teach">
-                {loadingOptions ? (
-                  <div className="text-sm text-slate-400">Loading age groups...</div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {ageGroups.map(ag => (
-                      <label key={ag.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${form.assigned_age_groups.includes(ag.id) ? 'bg-violet-50 border-violet-300 text-violet-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={form.assigned_age_groups.includes(ag.id)}
-                          onChange={(e) => {
-                            setForm(f => ({
-                              ...f,
-                              assigned_age_groups: e.target.checked 
-                                ? [...f.assigned_age_groups, ag.id]
-                                : f.assigned_age_groups.filter(id => id !== ag.id)
-                            }));
-                          }}
-                          className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                        />
-                        <span className="text-sm font-medium">{ag.name} ({ag.min_age}-{ag.max_age} years)</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </FormField>
-
-              {/* Courses Assignment */}
-              <FormField label="Assigned Courses" className="sm:col-span-2" hint="Select established courses this instructor can teach">
-                {loadingOptions ? (
-                  <div className="text-sm text-slate-400">Loading available courses...</div>
-                ) : form.assigned_age_groups.length === 0 ? (
-                  <div className="text-sm text-slate-400 bg-amber-50 border border-amber-200 rounded-lg p-4">
-                    ⚠️ Please select age groups first. Courses are specific to age groups.
-                  </div>
-                ) : allCourses.length === 0 ? (
-                  <div className="text-sm text-slate-400 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    ℹ️ No courses have been established for the selected age groups yet.
-                    <br />
-                    <span className="text-xs">Go to <strong>Age Groups</strong> page and click <strong>"Establish Courses"</strong> to define available courses first.</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-3">
-                    {allCourses.map(course => (
-                      <label key={course.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer transition ${form.assigned_courses.includes(course.available_course_id) ? 'bg-violet-50 border-violet-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
-                        <input
-                          type="checkbox"
-                          checked={form.assigned_courses.includes(course.available_course_id)}
-                          onChange={(e) => {
-                            setForm(f => ({
-                              ...f,
-                              assigned_courses: e.target.checked 
-                                ? [...f.assigned_courses, course.available_course_id]
-                                : f.assigned_courses.filter(id => id !== course.available_course_id)
-                            }));
-                          }}
-                          className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${form.assigned_courses.includes(course.available_course_id) ? 'text-violet-700' : 'text-slate-700'}`}>
-                            {course.title}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {ageGroups.find(ag => ag.id === course.age_group_id)?.name || 'Unknown age group'}
-                            {course.description && ` • ${course.description}`}
-                          </p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </FormField>
-            </div>
-            <div className="flex gap-3">
-              <button type="submit" disabled={submitting} className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white px-6 py-2.5 text-sm font-semibold disabled:opacity-60 transition">
-                {submitting ? 'Creating…' : 'Create Instructor'}
-              </button>
-              <button type="button" onClick={() => { setShowForm(false); setFieldErrors({}); }} className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Cancel</button>
-            </div>
-          </form>
-        )}
 
         {/* Search + Filter */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-wrap gap-3">
@@ -594,8 +419,11 @@ export default function AdminInstructors() {
         ) : instructors.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center">
             <MdGroups className="text-5xl text-slate-200 mx-auto mb-3" />
-            <p className="text-slate-500 mb-4">No instructors found</p>
-            <button onClick={() => setShowForm(true)} className="rounded-xl bg-violet-600 text-white px-5 py-2 text-sm font-semibold hover:bg-violet-700 transition">Add first instructor</button>
+            <p className="text-slate-500 mb-2">No instructors found</p>
+            <p className="text-sm text-slate-400 mb-4">Instructors must be approved through the Admin Approvals page.</p>
+            <Link to="/admin/approval" className="inline-flex items-center gap-2 rounded-xl bg-amber-500 text-white px-5 py-2 text-sm font-semibold hover:bg-amber-600 transition">
+              Go to Approvals <MdNavigateNext />
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -655,8 +483,6 @@ export default function AdminInstructors() {
           onClose={() => setEditInst(null)} 
           onSave={handleEditAssignments}
           ageGroups={ageGroups}
-          allCourses={allCourses}
-          loadingOptions={loadingOptions}
         />
       )}
     </AdminLayout>
