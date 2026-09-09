@@ -5,6 +5,8 @@ const lessonContentController = require('../controllers/lessonContentController'
 
 const router = express.Router();
 
+router.patch('/:id/status', requireAuth, authorize('instructor', 'admin'), lessonContentController.updateVideoStatus);
+router.patch('/:id', requireAuth, authorize('instructor', 'admin'), lessonContentController.updateVideo);
 router.delete('/:id', requireAuth, authorize('instructor', 'admin'), lessonContentController.deleteVideo);
 
 module.exports = router;

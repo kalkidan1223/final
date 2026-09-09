@@ -1,7 +1,7 @@
 /**
  * instructorController.js
  * All instructor-facing endpoints.
- * Security: Every request verifies JWT → role=instructor → assignment ownership.
+ * Security: Every request verifies JWT → role=instructor → course ownership.
  */
 const { query, pool } = require('../config/db');
 
@@ -13,28 +13,21 @@ async function getInstructorId(userId) {
   return r.rows[0].id;
 }
 
-async function verifyAssignmentOwnership(assignmentId, instructorId) {
+// Verify this course is currently assigned to this instructor.
+async function verifyCourseOwnership(courseId, instructorId) {
   const r = await query(
-    'SELECT id FROM instructor_assignments WHERE id = $1 AND instructor_id = $2',
-    [assignmentId, instructorId]
-  );
-  if (!r.rows.length) throw Object.assign(new Error('Assignment not found or access denied'), { status: 403 });
-  return r.rows[0];
-}
-
-async function verifyStudentInAssignment(studentId, assignmentId) {
-  // A student belongs to this assignment via the course's age group matching the student's age group
-  // and the section/grade matching if provided.
-  const r = await query(
-    `SELECT s.id FROM students s
-     JOIN instructor_assignments ia ON ia.course_id IN (
-       SELECT ic.course_id FROM instructor_courses ic WHERE ic.instructor_id = ia.instructor_id
-     )
-     WHERE s.id = $1 AND ia.id = $2
+    `SELECT ia.*, c.title AS course_title, ag.name AS age_group_name,
+            ay.label AS academic_year
+     FROM instructor_assignments ia
+     JOIN courses c ON c.id = ia.course_id
+     JOIN age_groups ag ON ag.id = ia.age_group_id
+     LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
+     WHERE ia.course_id = $1 AND ia.instructor_id = $2 AND ia.status = 'active'
      LIMIT 1`,
-    [studentId, assignmentId]
+    [courseId, instructorId]
   );
-  if (!r.rows.length) throw Object.assign(new Error('Student does not belong to this assignment'), { status: 403 });
+  if (!r.rows.length) throw Object.assign(new Error('Course not found or access denied'), { status: 403 });
+  return r.rows[0];
 }
 
 /* ─── Dashboard ─── */
@@ -43,119 +36,68 @@ async function getDashboard(req, res, next) {
   try {
     const instructorId = await getInstructorId(req.user.id);
 
-    const [assignmentsRes, statsRes] = await Promise.all([
-      query(
-        `SELECT ia.id, ia.status, ia.grade, ia.section, ia.academic_year_id,
-                c.title AS course_title, c.description AS course_description,
-                ag.name AS age_group_name,
-                ay.label AS academic_year,
-                COUNT(DISTINCT s.id) AS student_count,
-                COUNT(DISTINCT l.id) AS lesson_count,
-                COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_count,
-                COUNT(DISTINCT m.id) AS material_count
-         FROM instructor_assignments ia
-         JOIN courses c ON c.id = ia.course_id
-         JOIN age_groups ag ON ag.id = ia.age_group_id
-         LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
-         LEFT JOIN students s ON s.age_group_id = ia.age_group_id
-         LEFT JOIN lessons l ON l.course_id = ia.course_id
-         LEFT JOIN learning_materials m ON m.lesson_id = l.id
-         LEFT JOIN activity_submissions sub ON sub.student_id = s.id
-         WHERE ia.instructor_id = $1
-         GROUP BY ia.id, c.title, c.description, ag.name, ay.label
-         ORDER BY ia.created_at DESC`,
-        [instructorId]
-      ),
-      query(
-        `SELECT
-           COUNT(DISTINCT ia.id) AS assignments,
-           COUNT(DISTINCT s.id) AS students,
-           COUNT(DISTINCT l.id) AS lessons,
-           COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_submissions
-         FROM instructor_assignments ia
-         JOIN courses c ON c.id = ia.course_id
-         LEFT JOIN students s ON s.age_group_id = ia.age_group_id
-         LEFT JOIN lessons l ON l.course_id = ia.course_id
-         LEFT JOIN activity_submissions sub ON sub.student_id = s.id
-         WHERE ia.instructor_id = $1`,
-        [instructorId]
-      ),
-    ]);
+    const coursesRes = await query(
+      `SELECT
+         c.id AS course_id,
+         c.title AS course_title,
+         c.description AS course_description,
+         c.thumbnail_url,
+         c.status AS course_status,
+         ag.name AS age_group_name,
+         ay.label AS academic_year,
+         ia.grade,
+         ia.section,
+         ia.id AS assignment_id,
+         COUNT(DISTINCT l.id)::int AS lesson_count,
+         COUNT(DISTINCT m.id)::int AS material_count,
+         COUNT(DISTINCT s.id)::int AS student_count,
+         COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_count
+       FROM instructor_assignments ia
+       JOIN courses c ON c.id = ia.course_id
+       JOIN age_groups ag ON ag.id = ia.age_group_id
+       LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
+       LEFT JOIN lessons l ON l.course_id = c.id
+       LEFT JOIN learning_materials m ON m.lesson_id = l.id
+       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
+       LEFT JOIN activity_submissions sub ON sub.student_id = s.id
+       WHERE ia.instructor_id = $1 AND ia.status = 'active'
+       GROUP BY c.id, c.title, c.description, c.thumbnail_url, c.status,
+                ag.name, ay.label, ia.grade, ia.section, ia.id
+       ORDER BY ia.created_at DESC`,
+      [instructorId]
+    );
+
+    const statsRes = await query(
+      `SELECT
+         COUNT(DISTINCT ia.id) AS courses,
+         COUNT(DISTINCT s.id) AS students,
+         COUNT(DISTINCT l.id) AS lessons,
+         COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_submissions,
+         COUNT(DISTINCT m.id) AS materials,
+         COUNT(DISTINCT v.id) AS videos
+       FROM instructor_assignments ia
+       JOIN courses c ON c.id = ia.course_id
+       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
+       LEFT JOIN lessons l ON l.course_id = ia.course_id
+       LEFT JOIN learning_materials m ON m.lesson_id = l.id
+       LEFT JOIN videos v ON v.lesson_id = l.id
+       LEFT JOIN activity_submissions sub ON sub.student_id = s.id
+       WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
+      [instructorId]
+    );
 
     const summary = {
-      assignments: parseInt(statsRes.rows[0]?.assignments || 0),
-      students:    parseInt(statsRes.rows[0]?.students || 0),
-      lessons:     parseInt(statsRes.rows[0]?.lessons || 0),
+      courses: parseInt(statsRes.rows[0]?.courses || 0),
+      students: parseInt(statsRes.rows[0]?.students || 0),
+      lessons: parseInt(statsRes.rows[0]?.lessons || 0),
+      materials: parseInt(statsRes.rows[0]?.materials || 0),
+      videos: parseInt(statsRes.rows[0]?.videos || 0),
       pending_submissions: parseInt(statsRes.rows[0]?.pending_submissions || 0),
       attendance_rate: 0,
       avg_score: 0,
     };
 
-    res.json({ summary, assignments: assignmentsRes.rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/* ─── Assignments ─── */
-
-async function listAssignments(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { rows } = await query(
-      `SELECT ia.id, ia.status, ia.grade, ia.section,
-              c.title AS course_title, c.description AS course_description,
-              ag.name AS age_group_name,
-              ay.label AS academic_year,
-              COUNT(DISTINCT s.id) AS student_count,
-              COUNT(DISTINCT l.id) AS lesson_count,
-              COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_count
-       FROM instructor_assignments ia
-       JOIN courses c ON c.id = ia.course_id
-       JOIN age_groups ag ON ag.id = ia.age_group_id
-       LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
-       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
-       LEFT JOIN lessons l ON l.course_id = ia.course_id
-       LEFT JOIN activity_submissions sub ON sub.student_id = s.id
-       WHERE ia.instructor_id = $1
-       GROUP BY ia.id, c.title, c.description, ag.name, ay.label
-       ORDER BY ia.created_at DESC`,
-      [instructorId]
-    );
-    res.json({ assignments: rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function getAssignment(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-
-    const { rows } = await query(
-      `SELECT ia.id, ia.status, ia.grade, ia.section,
-              c.title AS course_title, c.description AS course_description,
-              ag.name AS age_group_name,
-              ay.label AS academic_year,
-              COUNT(DISTINCT s.id) AS student_count,
-              COUNT(DISTINCT l.id) AS lesson_count,
-              COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_count,
-              COUNT(DISTINCT m.id) AS material_count
-       FROM instructor_assignments ia
-       JOIN courses c ON c.id = ia.course_id
-       JOIN age_groups ag ON ag.id = ia.age_group_id
-       LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
-       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
-       LEFT JOIN lessons l ON l.course_id = ia.course_id
-       LEFT JOIN learning_materials m ON m.lesson_id = l.id
-       LEFT JOIN activity_submissions sub ON sub.student_id = s.id
-       WHERE ia.id = $1 AND ia.instructor_id = $2
-       GROUP BY ia.id, c.title, c.description, ag.name, ay.label`,
-      [id, instructorId]
-    );
-    if (!rows.length) return res.status(403).json({ error: 'Assignment not found or access denied' });
-    res.json({ assignment: rows[0] });
+    res.json({ summary, courses: coursesRes.rows });
   } catch (err) {
     next(err);
   }
@@ -163,27 +105,36 @@ async function getAssignment(req, res, next) {
 
 /* ─── Students ─── */
 
-async function getAssignmentStudents(req, res, next) {
+async function getCourseStudents(req, res, next) {
   try {
     const instructorId = await getInstructorId(req.user.id);
     const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    // Get age_group_id for this assignment
-    const iaRes = await query('SELECT age_group_id FROM instructor_assignments WHERE id = $1', [id]);
-    if (!iaRes.rows.length) return res.status(404).json({ error: 'Assignment not found' });
+    const ia = await verifyCourseOwnership(id, instructorId);
 
     const { rows } = await query(
-      `SELECT s.id, s.full_name, s.date_of_birth, s.gender,
+      `SELECT s.id, s.full_name, s.date_of_birth, s.gender, s.grade, s.section,
               ag.name AS age_group_name,
               CASE WHEN s.user_id IS NULL THEN 'parent-managed' ELSE 'individual' END AS account_type
        FROM students s
        JOIN age_groups ag ON ag.id = s.age_group_id
-       WHERE s.age_group_id = $1 AND s.is_active = TRUE
+       WHERE s.age_group_id = $1
+         AND s.is_active = TRUE
+         AND ($2::varchar IS NULL OR s.grade = $2)
+         AND ($3::varchar IS NULL OR s.section = $3)
        ORDER BY s.full_name`,
-      [iaRes.rows[0].age_group_id]
+      [ia.age_group_id, ia.grade || null, ia.section || null]
     );
-    res.json({ students: rows });
+
+    res.json({
+      course: {
+        course_id: id,
+        course_title: ia.course_title,
+        age_group_name: ia.age_group_name,
+        grade: ia.grade,
+        section: ia.section,
+      },
+      students: rows,
+    });
   } catch (err) {
     next(err);
   }
@@ -194,7 +145,7 @@ async function getStudentProfile(req, res, next) {
     const instructorId = await getInstructorId(req.user.id);
     const { studentId } = req.params;
 
-    // Verify this student belongs to at least one of the instructor's assignments
+    // Verify this student belongs to at least one of the instructor's courses
     const accessCheck = await query(
       `SELECT s.id FROM students s
        JOIN instructor_assignments ia ON ia.instructor_id = $1 AND ia.age_group_id = s.age_group_id
@@ -254,259 +205,6 @@ async function getStudentProfile(req, res, next) {
   }
 }
 
-/* ─── Lessons ─── */
-
-async function getAssignmentLessons(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    const ia = await verifyAssignmentOwnership(id, instructorId);
-
-    const { rows } = await query(
-      `SELECT l.*, ia.course_id
-       FROM lessons l
-       JOIN instructor_assignments ia ON ia.id = $1 AND ia.course_id = l.course_id
-       ORDER BY l.order_index`,
-      [id]
-    );
-    res.json({ lessons: rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function createLesson(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    // Get course_id from assignment
-    const iaRes = await query('SELECT course_id FROM instructor_assignments WHERE id = $1', [id]);
-    const courseId = iaRes.rows[0].course_id;
-
-    const { title, description, order_index, status } = req.body;
-    if (!title) return res.status(400).json({ error: 'Lesson title is required' });
-
-    const { rows } = await query(
-      `INSERT INTO lessons (course_id, title, description, order_index)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [courseId, title, description || null, order_index || 1]
-    );
-    res.status(201).json({ lesson: rows[0] });
-  } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Lesson with this order already exists' });
-    next(err);
-  }
-}
-
-/* ─── Materials ─── */
-
-async function getAssignmentMaterials(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    const { rows } = await query(
-      `SELECT m.* FROM learning_materials m
-       JOIN lessons l ON l.id = m.lesson_id
-       JOIN instructor_assignments ia ON ia.course_id = l.course_id AND ia.id = $1
-       ORDER BY m.created_at DESC`,
-      [id]
-    );
-    res.json({ materials: rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/* ─── Activities ─── */
-
-async function getAssignmentActivities(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    const { rows } = await query(
-      `SELECT a.* FROM activities a
-       JOIN instructor_assignments ia ON ia.course_id = a.course_id AND ia.id = $1
-       ORDER BY a.created_at DESC`,
-      [id]
-    );
-    res.json({ activities: rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/* ─── Submissions ─── */
-
-async function getAssignmentSubmissions(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    const { rows } = await query(
-      `SELECT sub.id, sub.status, sub.score, a.max_score, sub.submitted_at,
-              s.full_name AS student_name,
-              a.title AS activity_title
-       FROM activity_submissions sub
-       JOIN students s ON s.id = sub.student_id
-       JOIN activities a ON a.id = sub.activity_id
-       JOIN instructor_assignments ia ON ia.course_id = a.course_id AND ia.id = $1
-       ORDER BY sub.submitted_at DESC`,
-      [id]
-    );
-    res.json({ submissions: rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/* ─── Attendance ─── */
-
-async function getAttendance(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-    const date = req.query.date || new Date().toISOString().split('T')[0];
-
-    // Support both old schema (session_date/present) and new (date/status)
-    const { rows } = await query(
-      `SELECT att.student_id,
-              COALESCE(att.status,
-                CASE WHEN att.present THEN 'present' ELSE 'absent' END,
-                'present') AS status
-       FROM attendance att
-       WHERE (att.assignment_id = $1 OR att.assignment_id IS NULL)
-         AND (att.date = $2 OR att.session_date = $2)`,
-      [id, date]
-    );
-    res.json({ attendance: rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function saveAttendance(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    const { date, records } = req.body;
-    if (!date || !Array.isArray(records)) return res.status(400).json({ error: 'date and records are required' });
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      // Upsert each attendance record
-      for (const rec of records) {
-        await client.query(
-          `INSERT INTO attendance (assignment_id, student_id, date, status, marked_by)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (assignment_id, student_id, date)
-           DO UPDATE SET status = EXCLUDED.status, marked_by = EXCLUDED.marked_by`,
-          [id, rec.student_id, date, rec.status, req.user.id]
-        );
-      }
-      await client.query('COMMIT');
-      res.json({ message: 'Attendance saved', count: records.length });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    next(err);
-  }
-}
-
-/* ─── Progress ─── */
-
-async function getAssignmentProgress(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    const iaRes = await query('SELECT age_group_id, course_id FROM instructor_assignments WHERE id = $1', [id]);
-    if (!iaRes.rows.length) return res.status(404).json({ error: 'Assignment not found' });
-    const { age_group_id, course_id } = iaRes.rows[0];
-
-    const { rows } = await query(
-      `SELECT s.id AS student_id, s.full_name AS student_name,
-              COUNT(DISTINCT sub.id) FILTER (WHERE sub.status != 'pending') AS activities_done,
-              COUNT(DISTINCT sub.id) AS activities_total,
-              COALESCE(AVG(sub.score::float / NULLIF(a.max_score,0) * 100), 0)::int AS avg_score
-       FROM students s
-       LEFT JOIN activity_submissions sub ON sub.student_id = s.id
-       LEFT JOIN activities a ON a.id = sub.activity_id
-       WHERE s.age_group_id = $1 AND s.is_active = TRUE
-       GROUP BY s.id, s.full_name
-       ORDER BY s.full_name`,
-      [age_group_id]
-    );
-
-    const progress = rows.map(r => ({
-      ...r,
-      progress_pct: r.activities_total > 0
-        ? Math.round((parseInt(r.activities_done) / parseInt(r.activities_total)) * 100)
-        : 0,
-    }));
-
-    res.json({ progress });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/* ─── Announcements ─── */
-
-async function getAnnouncements(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    const { rows } = await query(
-      `SELECT a.* FROM announcements a
-       WHERE a.assignment_id = $1
-       ORDER BY a.created_at DESC`,
-      [id]
-    );
-    res.json({ announcements: rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-async function createAnnouncement(req, res, next) {
-  try {
-    const instructorId = await getInstructorId(req.user.id);
-    const { id } = req.params;
-    await verifyAssignmentOwnership(id, instructorId);
-
-    const { title, content } = req.body;
-    if (!title || !content) return res.status(400).json({ error: 'Title and content are required' });
-
-    const { rows } = await query(
-      `INSERT INTO announcements (assignment_id, created_by, title, content)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [id, req.user.id, title, content]
-    );
-    res.status(201).json({ announcement: rows[0] });
-  } catch (err) {
-    next(err);
-  }
-}
-
 /* ─── Notifications ─── */
 
 async function getNotifications(req, res, next) {
@@ -557,10 +255,11 @@ async function getProfile(req, res, next) {
     );
     if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
 
-    // Get assignments
+    // Get active courses
     const instructorId = await getInstructorId(req.user.id);
-    const assignmentsRes = await query(
-      `SELECT ia.id, c.title AS course_title, ag.name AS age_group_name, ia.grade
+    const coursesRes = await query(
+      `SELECT ia.id AS assignment_id, c.id AS course_id, c.title AS course_title,
+              ag.name AS age_group_name, ia.grade
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
        JOIN age_groups ag ON ag.id = ia.age_group_id
@@ -568,7 +267,7 @@ async function getProfile(req, res, next) {
       [instructorId]
     );
 
-    res.json({ profile: { ...rows[0], assignments: assignmentsRes.rows } });
+    res.json({ profile: { ...rows[0], courses: coursesRes.rows } });
   } catch (err) {
     next(err);
   }
@@ -668,22 +367,121 @@ async function sendMessage(req, res, next) {
   }
 }
 
+/* ─── Courses (Instructor LMS workspace) ─── */
+
+/**
+ * GET /api/instructor/courses
+ * Every course assigned to this instructor (active assignments) with the
+ * classroom metadata and content summary the Courses tab needs.
+ */
+async function listCourses(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { rows } = await query(
+      `SELECT
+         c.id AS course_id,
+         c.title AS course_title,
+         c.description AS course_description,
+         c.thumbnail_url,
+         c.status AS course_status,
+         c.created_at,
+         ag.name AS age_group_name,
+         ay.label AS academic_year,
+         ia.grade,
+         ia.section,
+         ia.status AS assignment_status,
+         ia.id AS assignment_id,
+         COUNT(DISTINCT l.id)::int AS lesson_count,
+         COUNT(DISTINCT m.id)::int AS material_count,
+         COUNT(DISTINCT v.id)::int AS video_count,
+         COUNT(DISTINCT s.id)::int AS student_count
+       FROM instructor_assignments ia
+       JOIN courses c ON c.id = ia.course_id
+       JOIN age_groups ag ON ag.id = ia.age_group_id
+       LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
+       LEFT JOIN lessons l ON l.course_id = c.id
+       LEFT JOIN learning_materials m ON m.lesson_id = l.id
+       LEFT JOIN videos v ON v.lesson_id = l.id
+       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
+       WHERE ia.instructor_id = $1 AND ia.status = 'active'
+       GROUP BY c.id, c.title, c.description, c.thumbnail_url, c.status,
+                c.created_at, ag.name, ay.label, ia.grade, ia.section,
+                ia.status, ia.id
+       ORDER BY ia.created_at DESC`,
+      [instructorId]
+    );
+    res.json({ courses: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/instructor/courses/:id
+ * Full assigned-course detail: classroom metadata, student count, and the
+ * ordered lesson list with content counts so the Course Detail page can render
+ * the lesson management actions.
+ */
+async function getCourse(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { id } = req.params;
+
+    const courseRes = await query(
+      `SELECT ia.id AS assignment_id, ia.grade, ia.section, ia.academic_year_id,
+              ia.status AS assignment_status,
+              c.*, ag.name AS age_group_name, ay.label AS academic_year
+       FROM instructor_assignments ia
+       JOIN courses c ON c.id = ia.course_id
+       JOIN age_groups ag ON ag.id = ia.age_group_id
+       LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
+       WHERE c.id = $1 AND ia.instructor_id = $2 AND ia.status = 'active'
+       LIMIT 1`,
+      [id, instructorId]
+    );
+    if (courseRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+    const course = courseRes.rows[0];
+
+    const [lessonsRes, studentCountRes] = await Promise.all([
+      query(
+        `SELECT l.*,
+                COUNT(DISTINCT m.id)::int AS material_count,
+                COUNT(DISTINCT v.id)::int AS video_count,
+                COUNT(DISTINCT q.id)::int AS quiz_count,
+                COUNT(DISTINCT a.id)::int AS activity_count
+         FROM lessons l
+         LEFT JOIN learning_materials m ON m.lesson_id = l.id
+         LEFT JOIN videos v ON v.lesson_id = l.id
+         LEFT JOIN quizzes q ON q.lesson_id = l.id
+         LEFT JOIN activities a ON a.lesson_id = l.id
+         WHERE l.course_id = $1
+         GROUP BY l.id
+         ORDER BY l.order_index`,
+        [id]
+      ),
+      query(
+        `SELECT COUNT(DISTINCT s.id)::int AS student_count
+         FROM students s
+         WHERE s.age_group_id = $1
+           AND ($2::varchar IS NULL OR s.grade = $2)
+           AND ($3::varchar IS NULL OR s.section = $3)`,
+        [course.age_group_id, course.grade || null, course.section || null]
+      ),
+    ]);
+
+    course.student_count = studentCountRes.rows[0].student_count;
+    res.json({ course, lessons: lessonsRes.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getDashboard,
-  listAssignments,
-  getAssignment,
-  getAssignmentStudents,
   getStudentProfile,
-  getAssignmentLessons,
-  createLesson,
-  getAssignmentMaterials,
-  getAssignmentActivities,
-  getAssignmentSubmissions,
-  getAttendance,
-  saveAttendance,
-  getAssignmentProgress,
-  getAnnouncements,
-  createAnnouncement,
+  getCourseStudents,
   getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
@@ -692,4 +490,6 @@ module.exports = {
   getConversations,
   getConversation,
   sendMessage,
+  listCourses,
+  getCourse,
 };

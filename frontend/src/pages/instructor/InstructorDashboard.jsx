@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  MdSchool, MdPeople, MdMenuBook, MdAssignment, MdTrendingUp,
-  MdCalendarToday, MdPending, MdCheckCircle, MdNotifications,
+  MdSchool, MdPeople, MdMenuBook, MdVideoLibrary, MdPending,
   MdArrowForward, MdOpenInNew, MdInfoOutline
 } from 'react-icons/md';
 import InstructorLayout from '../../components/InstructorLayout';
@@ -34,10 +33,10 @@ function StatCard({ icon: Icon, label, value, color, to }) {
   return to ? <Link to={to}>{card}</Link> : card;
 }
 
-function AssignmentCard({ assignment }) {
+function CourseCard({ course }) {
   return (
     <Link
-      to={`/instructor/assignments/${assignment.id}`}
+      to={`/instructor/courses/${course.course_id}`}
       className="group bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 hover:shadow-lg transition-all overflow-hidden"
     >
       {/* Header */}
@@ -46,38 +45,38 @@ function AssignmentCard({ assignment }) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-slate-800 text-base group-hover:text-indigo-700 transition-colors">
-              {assignment.course_title}
+              {course.course_title}
             </h3>
             <div className="flex flex-wrap gap-2 mt-2">
               <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium border border-indigo-100">
-                {assignment.age_group_name}
+                {course.age_group_name}
               </span>
-              {assignment.grade && (
+              {course.grade && (
                 <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-medium">
-                  Grade {assignment.grade}
+                  Grade {course.grade}
                 </span>
               )}
-              {assignment.section && (
+              {course.section && (
                 <span className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-medium">
-                  Section {assignment.section}
+                  Section {course.section}
                 </span>
               )}
             </div>
           </div>
           <span className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
-            assignment.status === 'active'
+            course.course_status === 'published'
               ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
               : 'bg-slate-100 text-slate-600 border border-slate-200'
           }`}>
-            {assignment.status}
+            {course.course_status}
           </span>
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-3 text-center">
           {[
-            { label: 'Students', value: assignment.student_count ?? 0, icon: '👥' },
-            { label: 'Lessons',  value: assignment.lesson_count ?? 0,  icon: '📚' },
-            { label: 'Pending',  value: assignment.pending_count ?? 0, icon: '⏳' },
+            { label: 'Students', value: course.student_count ?? 0, icon: '👥' },
+            { label: 'Lessons',  value: course.lesson_count ?? 0,  icon: '📚' },
+            { label: 'Pending',  value: course.pending_count ?? 0, icon: '⏳' },
           ].map(s => (
             <div key={s.label} className="bg-slate-50 rounded-xl py-2.5 border border-slate-100">
               <div className="text-base">{s.icon}</div>
@@ -88,7 +87,7 @@ function AssignmentCard({ assignment }) {
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-slate-400">{assignment.academic_year || ''}</span>
+          <span className="text-xs text-slate-400">{course.academic_year || ''}</span>
           <span className="text-sm font-semibold text-indigo-600 group-hover:text-indigo-700 flex items-center gap-1">
             Open Course <MdOpenInNew className="text-sm" />
           </span>
@@ -124,16 +123,16 @@ export default function InstructorDashboard() {
             <p className="text-indigo-200 text-sm font-medium mb-1">{greeting} 👋</p>
             <h1 className="text-2xl sm:text-3xl font-extrabold mb-2">{user?.full_name || 'Instructor'}</h1>
             <p className="text-indigo-200 text-sm max-w-lg">
-              Manage your teaching assignments, create lessons, review submissions, and track student progress.
+              Manage your teaching courses, create lessons, review submissions, and track student progress.
             </p>
             <div className="flex flex-wrap gap-3 mt-5">
-              <Link to="/instructor/assignments"
+              <Link to="/instructor/courses"
                 className="bg-white text-indigo-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-50 transition shadow-lg">
-                My Assignments
+                My Courses
               </Link>
-              <Link to="/instructor/submissions"
+              <Link to="/instructor/students"
                 className="bg-white/10 border border-white/20 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-white/20 transition backdrop-blur-sm">
-                Review Submissions
+                My Students
               </Link>
             </div>
           </div>
@@ -146,17 +145,17 @@ export default function InstructorDashboard() {
           </div>
         )}
 
-        {/* No assignment state */}
-        {!loading && !error && data && data.assignments?.length === 0 && (
+        {/* No courses state */}
+        {!loading && !error && data && data.courses?.length === 0 && (
           <div className="rounded-2xl bg-amber-50 border-2 border-amber-200 border-dashed p-8 text-center">
-            <div className="text-5xl mb-3">📋</div>
-            <h3 className="font-bold text-slate-800 text-lg mb-2">No Teaching Assignments Yet</h3>
+            <div className="text-5xl mb-3">📚</div>
+            <h3 className="font-bold text-slate-800 text-lg mb-2">No Courses Assigned Yet</h3>
             <p className="text-slate-500 text-sm max-w-md mx-auto mb-4">
-              Your account has been approved, but no teaching assignment has been assigned yet. 
+              Your account has been approved, but no course has been assigned yet.
               Please contact the administrator.
             </p>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-100 text-amber-700 text-sm font-medium border border-amber-200">
-              <MdInfoOutline /> Contact your administrator for assignment
+              <MdInfoOutline /> Contact your administrator for a course assignment
             </div>
           </div>
         )}
@@ -168,33 +167,33 @@ export default function InstructorDashboard() {
           </div>
         ) : data?.summary && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            <StatCard icon={MdSchool}     label="Assignments"    value={data.summary.assignments}       color="indigo" to="/instructor/assignments" />
-            <StatCard icon={MdPeople}     label="My Students"    value={data.summary.students}          color="emerald" to="/instructor/students" />
-            <StatCard icon={MdMenuBook}   label="Lessons"        value={data.summary.lessons}           color="violet" />
-            <StatCard icon={MdPending}    label="Pending Review" value={data.summary.pending_submissions} color="amber" to="/instructor/submissions" />
-            <StatCard icon={MdCalendarToday} label="Attendance"  value={`${data.summary.attendance_rate ?? 0}%`} color="sky" to="/instructor/attendance" />
-            <StatCard icon={MdCheckCircle} label="Avg Score"     value={`${data.summary.avg_score ?? 0}%`}      color="rose" />
+            <StatCard icon={MdSchool}     label="Courses"      value={data.summary.courses}            color="indigo" to="/instructor/courses" />
+            <StatCard icon={MdPeople}     label="My Students"  value={data.summary.students}           color="emerald" to="/instructor/students" />
+            <StatCard icon={MdMenuBook}   label="Lessons"      value={data.summary.lessons}            color="violet" />
+            <StatCard icon={MdVideoLibrary} label="Videos"     value={data.summary.videos}             color="sky" />
+            <StatCard icon={MdSchool}     label="Materials"    value={data.summary.materials}          color="amber" />
+            <StatCard icon={MdPending}    label="Pending"      value={data.summary.pending_submissions} color="rose" />
           </div>
         )}
 
-        {/* Assignments grid */}
-        {!loading && data?.assignments?.length > 0 && (
+        {/* Courses grid */}
+        {!loading && data?.courses?.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <MdAssignment className="text-indigo-600" /> My Teaching Assignments
+                <MdMenuBook className="text-indigo-600" /> My Teaching Courses
               </h2>
-              <Link to="/instructor/assignments" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+              <Link to="/instructor/courses" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
                 View All <MdArrowForward className="text-sm" />
               </Link>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {data.assignments.map(a => <AssignmentCard key={a.id} assignment={a} />)}
+              {data.courses.map(c => <CourseCard key={c.course_id} course={c} />)}
             </div>
           </section>
         )}
 
-        {/* Loading skeleton for assignments */}
+        {/* Loading skeleton for courses */}
         {loading && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {[1, 2, 3].map(i => <div key={i} className="h-52 bg-slate-200 rounded-2xl animate-pulse" />)}

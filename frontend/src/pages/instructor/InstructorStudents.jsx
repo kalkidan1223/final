@@ -5,7 +5,7 @@ import InstructorLayout from '../../components/InstructorLayout';
 import axiosClient from '../../api/axiosClient';
 
 export default function InstructorStudents() {
-  const [assignments, setAssignments] = useState([]);
+  const [courses, setCourses]         = useState([]);
   const [selected, setSelected]       = useState(null);
   const [students, setStudents]       = useState([]);
   const [loadingA, setLoadingA]       = useState(true);
@@ -13,10 +13,10 @@ export default function InstructorStudents() {
   const [search, setSearch]           = useState('');
 
   useEffect(() => {
-    axiosClient.get('/instructor/assignments')
+    axiosClient.get('/instructor/courses')
       .then(({ data }) => {
-        const list = data.assignments || [];
-        setAssignments(list);
+        const list = data.courses || [];
+        setCourses(list);
         if (list.length > 0) setSelected(list[0]);
       })
       .finally(() => setLoadingA(false));
@@ -26,7 +26,7 @@ export default function InstructorStudents() {
     if (!selected) return;
     setLoadingS(true);
     setStudents([]);
-    axiosClient.get(`/instructor/assignments/${selected.id}/students`)
+    axiosClient.get(`/instructor/courses/${selected.course_id}/students`)
       .then(({ data }) => setStudents(data.students || []))
       .finally(() => setLoadingS(false));
   }, [selected]);
@@ -44,7 +44,7 @@ export default function InstructorStudents() {
             <MdPeople className="text-indigo-600" /> My Students
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Select an assignment to view its students. You can only see students in your assigned classes.
+            Select a course to view its students. You can only see students in your assigned classes.
           </p>
         </div>
 
@@ -54,31 +54,31 @@ export default function InstructorStudents() {
           Students shown here belong only to your assigned classes. You cannot see students from other instructors' classes.
         </div>
 
-        {/* Assignment selector */}
+        {/* Course selector */}
         {loadingA ? (
           <div className="flex gap-3">{[1,2,3].map(i => <div key={i} className="h-10 w-36 bg-slate-200 rounded-xl animate-pulse" />)}</div>
-        ) : assignments.length === 0 ? (
+        ) : courses.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-slate-200">
-            <div className="text-5xl mb-3">📋</div>
-            <h3 className="font-bold text-slate-700">No Assignments Yet</h3>
-            <p className="text-sm text-slate-400 mt-1">Contact admin to get teaching assignments.</p>
+            <div className="text-5xl mb-3">📚</div>
+            <h3 className="font-bold text-slate-700">No Courses Yet</h3>
+            <p className="text-sm text-slate-400 mt-1">Contact admin to get course assignments.</p>
           </div>
         ) : (
           <>
             <div className="flex flex-wrap gap-2">
-              {assignments.map(a => (
+              {courses.map(c => (
                 <button
-                  key={a.id}
-                  onClick={() => setSelected(a)}
+                  key={c.course_id}
+                  onClick={() => setSelected(c)}
                   className={`px-4 py-2 rounded-xl text-sm font-medium border transition ${
-                    selected?.id === a.id
+                    selected?.course_id === c.course_id
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  {a.course_title}
-                  {a.grade && ` · G${a.grade}`}
-                  {a.section && ` · ${a.section}`}
+                  {c.course_title}
+                  {c.grade && ` · G${c.grade}`}
+                  {c.section && ` · ${c.section}`}
                 </button>
               ))}
             </div>
@@ -94,13 +94,14 @@ export default function InstructorStudents() {
               />
             </div>
 
-            {/* Selected assignment info */}
+            {/* Selected course info */}
             {selected && (
               <div className="flex items-center gap-3 text-sm text-slate-500">
-                <span>Assignment:</span>
+                <span>Course:</span>
                 <span className="font-semibold text-slate-700">{selected.course_title}</span>
                 {selected.age_group_name && <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{selected.age_group_name}</span>}
                 {selected.grade && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Grade {selected.grade}</span>}
+                {selected.section && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Section {selected.section}</span>}
                 <span className="ml-auto font-medium">{filtered.length} student{filtered.length !== 1 ? 's' : ''}</span>
               </div>
             )}

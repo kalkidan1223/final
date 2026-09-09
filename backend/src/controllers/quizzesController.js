@@ -69,14 +69,37 @@ async function createQuiz(req, res, next) {
     const ok = await assertLessonOwnership(req, res, lessonId);
     if (!ok) return;
 
-    const { title, description, time_limit_seconds } = req.body;
+    const {
+      title, description, instructions, time_limit_seconds,
+      passing_score, max_score, attempt_limit, shuffle_questions,
+      show_result_immediately, status,
+    } = req.body;
     if (!title) return res.status(400).json({ error: 'title is required' });
+    if (attempt_limit !== undefined && (Number(attempt_limit) < 1 || !Number.isFinite(Number(attempt_limit)))) {
+      return res.status(400).json({ error: 'attempt_limit must be a positive number' });
+    }
+    if (status !== undefined && !['active', 'inactive', 'archived'].includes(status)) {
+      return res.status(400).json({ error: 'status must be one of active, inactive, archived' });
+    }
 
     const result = await query(
-      `INSERT INTO quizzes (lesson_id, title, description, time_limit_seconds)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO quizzes (lesson_id, title, description, instructions, time_limit_seconds,
+                            passing_score, max_score, attempt_limit, shuffle_questions, show_result_immediately, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [lessonId, title, description || null, time_limit_seconds || null]
+      [
+        lessonId,
+        title,
+        description || null,
+        instructions || null,
+        time_limit_seconds || null,
+        passing_score === undefined || passing_score === null ? null : Number(passing_score),
+        max_score === undefined || max_score === null ? null : Number(max_score),
+        attempt_limit === undefined || attempt_limit === null ? 1 : Number(attempt_limit),
+        shuffle_questions ?? false,
+        show_result_immediately ?? true,
+        status || 'active',
+      ]
     );
 
     res.status(201).json({ quiz: result.rows[0] });
@@ -121,8 +144,8 @@ async function getQuiz(req, res, next) {
         (await getInstructorIdForUser(req.user.id)) === quiz.owner_instructor_id);
 
     const columns = isOwnerOrAdmin
-      ? 'id, quiz_id, question_text, question_type, options, correct_answer, points, order_index'
-      : 'id, quiz_id, question_text, question_type, options, points, order_index';
+      ? 'id, quiz_id, question_text, question_type, options, correct_answer, points, order_index, explanation, question_config'
+      : 'id, quiz_id, question_text, question_type, options, points, order_index, question_config';
 
     const questionsResult = await query(
       `SELECT ${columns} FROM quiz_questions WHERE quiz_id = $1 ORDER BY order_index`,
@@ -144,15 +167,64 @@ async function updateQuiz(req, res, next) {
     const quiz = await assertQuizOwnership(req, res, req.params.id);
     if (!quiz) return;
 
-    const { title, description, time_limit_seconds } = req.body;
+    const {
+      title, description, instructions, time_limit_seconds, passing_score,
+      max_score, status, attempt_limit, shuffle_questions, show_result_immediately,
+    } = req.body;
+    if (status !== undefined && !['active', 'inactive', 'archived'].includes(status)) {
+      return res.status(400).json({ error: 'status must be one of active, inactive, archived' });
+    }
+
     const result = await query(
       `UPDATE quizzes
        SET title = COALESCE($1, title),
            description = COALESCE($2, description),
-           time_limit_seconds = COALESCE($3, time_limit_seconds)
-       WHERE id = $4
+           instructions = COALESCE($3, instructions),
+           time_limit_seconds = COALESCE($4, time_limit_seconds),
+           passing_score = COALESCE($5, passing_score),
+           max_score = COALESCE($6, max_score),
+           status = COALESCE($7, status),
+           attempt_limit = COALESCE($8, attempt_limit),
+           shuffle_questions = COALESCE($9, shuffle_questions),
+           show_result_immediately = COALESCE($10, show_result_immediately)
+       WHERE id = $11
        RETURNING *`,
-      [title, description, time_limit_seconds, quiz.id]
+      [
+        title,
+        description,
+        instructions,
+        time_limit_seconds,
+        passing_score === undefined || passing_score === null ? null : Number(passing_score),
+        max_score === undefined || max_score === null ? null : Number(max_score),
+        status || null,
+        attempt_limit === undefined || attempt_limit === null ? null : Number(attempt_limit),
+        shuffle_questions ?? null,
+        show_result_immediately ?? null,
+        quiz.id,
+      ]
+    );
+    res.json({ quiz: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PATCH /api/quizzes/:id/status  (owning instructor or admin)
+// ----------------------------------------------------------------------------
+async function updateQuizStatus(req, res, next) {
+  try {
+    const quiz = await assertQuizOwnership(req, res, req.params.id);
+    if (!quiz) return;
+
+    const { status } = req.body;
+    if (!['active', 'inactive', 'archived'].includes(status)) {
+      return res.status(400).json({ error: 'status must be one of active, inactive, archived' });
+    }
+
+    const result = await query(
+      'UPDATE quizzes SET status = $1 WHERE id = $2 RETURNING *',
+      [status, quiz.id]
     );
     res.json({ quiz: result.rows[0] });
   } catch (err) {
@@ -167,6 +239,17 @@ async function deleteQuiz(req, res, next) {
   try {
     const quiz = await assertQuizOwnership(req, res, req.params.id);
     if (!quiz) return;
+
+    // Never lose student history: quizzes with results are preserved.
+    const results = await query(
+      'SELECT 1 FROM quiz_results WHERE quiz_id = $1 LIMIT 1',
+      [quiz.id]
+    );
+    if (results.rows.length > 0) {
+      return res.status(409).json({
+        error: 'This quiz has student results. Deactivate or archive it instead to keep the history.',
+      });
+    }
 
     await query('DELETE FROM quizzes WHERE id = $1', [quiz.id]);
     res.status(204).send();
@@ -183,13 +266,27 @@ async function addQuestion(req, res, next) {
     const quiz = await assertQuizOwnership(req, res, req.params.id);
     if (!quiz) return;
 
-    const { question_text, question_type, options, correct_answer, points } = req.body;
-    const VALID_TYPES = ['mcq', 'true_false', 'fill_in_the_blank', 'matching'];
+    const { question_text, question_type, options, correct_answer, points, explanation, question_config } = req.body;
+    const VALID_TYPES = ['mcq', 'true_false', 'fill_in_the_blank', 'matching', 'short_answer', 'picture', 'audio'];
 
     if (!question_text || !VALID_TYPES.includes(question_type) || !correct_answer) {
       return res.status(400).json({
         error: `question_text, correct_answer, and question_type (one of ${VALID_TYPES.join(', ')}) are required`,
       });
+    }
+    if (question_type === 'mcq' && (!Array.isArray(options) || options.length < 2 || !options.includes(correct_answer))) {
+      return res.status(400).json({
+        error: 'A multiple-choice question needs at least two options and the correct answer must be one of them',
+      });
+    }
+    if (question_type === 'true_false' && !['true', 'false'].includes(String(correct_answer).toLowerCase())) {
+      return res.status(400).json({ error: 'A true/false question must use True or False as its correct answer' });
+    }
+    if ((question_type === 'picture' || question_type === 'audio') && !question_config?.media_url) {
+      return res.status(400).json({ error: 'A picture/audio question needs a media_url in question_config' });
+    }
+    if (!Number.isFinite(Number(points)) || Number(points) <= 0) {
+      return res.status(400).json({ error: 'points must be a positive number' });
     }
 
     const maxOrder = await query(
@@ -198,8 +295,9 @@ async function addQuestion(req, res, next) {
     );
 
     const result = await query(
-      `INSERT INTO quiz_questions (quiz_id, question_text, question_type, options, correct_answer, points, order_index)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO quiz_questions
+         (quiz_id, question_text, question_type, options, correct_answer, points, order_index, explanation, question_config)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         quiz.id,
@@ -209,10 +307,87 @@ async function addQuestion(req, res, next) {
         correct_answer,
         points || 1,
         maxOrder.rows[0].max_order + 1,
+        explanation || null,
+        question_config ? JSON.stringify(question_config) : null,
       ]
     );
 
     res.status(201).json({ question: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PUT /api/quizzes/:id/questions  (owning instructor or admin)
+// Replaces every question of the quiz in one call. Used by the Quiz Builder
+// so instructors can edit the full question set with a single save.
+// Body: { questions: [ { question_text, question_type, options, correct_answer, points, explanation, question_config } ] }
+// ----------------------------------------------------------------------------
+async function replaceQuizQuestions(req, res, next) {
+  const VALID_TYPES = ['mcq', 'true_false', 'fill_in_the_blank', 'matching', 'short_answer', 'picture', 'audio'];
+  try {
+    const quiz = await assertQuizOwnership(req, res, req.params.id);
+    if (!quiz) return;
+
+    const { questions } = req.body;
+    if (!Array.isArray(questions)) {
+      return res.status(400).json({ error: 'questions must be an array' });
+    }
+
+    for (const [index, q] of questions.entries()) {
+      if (!q.question_text || !VALID_TYPES.includes(q.question_type) || !q.correct_answer) {
+        return res.status(400).json({
+          error: `Question ${index + 1}: question_text, correct_answer and a valid question_type are required`,
+        });
+      }
+      if (q.question_type === 'mcq' && (!Array.isArray(q.options) || q.options.length < 2 || !q.options.includes(q.correct_answer))) {
+        return res.status(400).json({ error: `Question ${index + 1}: a multiple-choice question needs at least two options and the correct answer must be one of them` });
+      }
+      if (q.question_type === 'true_false' && !['true', 'false'].includes(String(q.correct_answer).toLowerCase())) {
+        return res.status(400).json({ error: `Question ${index + 1}: a true/false question must use True or False as its correct answer` });
+      }
+      if (!Number.isFinite(Number(q.points)) || Number(q.points) <= 0) {
+        return res.status(400).json({ error: `Question ${index + 1}: points must be a positive number` });
+      }
+    }
+
+    const conn = await pool.connect();
+    try {
+      await conn.query('BEGIN');
+      await conn.query('DELETE FROM quiz_questions WHERE quiz_id = $1', [quiz.id]);
+      for (let index = 0; index < questions.length; index += 1) {
+        const q = questions[index];
+        await conn.query(
+          `INSERT INTO quiz_questions
+             (quiz_id, question_text, question_type, options, correct_answer, points, order_index, explanation, question_config)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            quiz.id,
+            q.question_text,
+            q.question_type,
+            q.options ? JSON.stringify(q.options) : null,
+            q.correct_answer,
+            q.points || 1,
+            index,
+            q.explanation || null,
+            q.question_config ? JSON.stringify(q.question_config) : null,
+          ]
+        );
+      }
+      await conn.query('COMMIT');
+    } catch (err) {
+      await conn.query('ROLLBACK');
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    const result = await query(
+      'SELECT * FROM quiz_questions WHERE quiz_id = $1 ORDER BY order_index',
+      [quiz.id]
+    );
+    res.json({ questions: result.rows });
   } catch (err) {
     next(err);
   }
@@ -263,19 +438,10 @@ async function submitQuiz(req, res, next) {
       return res.status(403).json({ error: 'Only students can submit quizzes' });
     }
 
-    const { id } = req.params;
+const { id } = req.params;
     const { answers } = req.body;
     if (!answers || typeof answers !== 'object') {
       return res.status(400).json({ error: 'answers object is required' });
-    }
-    if (question_type === 'mcq' && (!Array.isArray(options) || options.length < 2 || !options.includes(correct_answer))) {
-      return res.status(400).json({ error: 'A multiple-choice question needs at least two options and the correct answer must be one of them' });
-    }
-    if (question_type === 'true_false' && !['true', 'false'].includes(String(correct_answer).toLowerCase())) {
-      return res.status(400).json({ error: 'A true/false question must use True or False as its correct answer' });
-    }
-    if (!Number.isFinite(Number(points)) || Number(points) <= 0) {
-      return res.status(400).json({ error: 'points must be a positive number' });
     }
 
     const quiz = await loadQuizWithOwner(id);
@@ -374,8 +540,10 @@ module.exports = {
   listQuizzesForLesson,
   getQuiz,
   updateQuiz,
+  updateQuizStatus,
   deleteQuiz,
   addQuestion,
+  replaceQuizQuestions,
   deleteQuestion,
   submitQuiz,
   getQuizResults,

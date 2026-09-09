@@ -8,7 +8,12 @@ const VALID_ACTIVITY_TYPES = [
   'drag_and_drop', 'multiple_choice', 'true_false', 'puzzle',
   'story_reading', 'pronunciation', 'vocabulary_practice',
   'letter_tracing', 'number_tracing',
+  'listening', 'picture_selection', 'file_submission', 'short_answer',
 ];
+
+const VALID_ACTIVITY_STATUSES = ['active', 'inactive', 'archived'];
+
+const VALID_DIFFICULTIES = ['beginner', 'easy', 'medium', 'hard', 'advanced'];
 
 async function getLessonOwnerInstructorId(lessonId) {
   const result = await query(
@@ -79,19 +84,33 @@ async function createActivity(req, res, next) {
     const {
       title, activity_type, instructions, age_group_id,
       resource_url, max_score, requires_upload, auto_gradable,
+      difficulty, estimated_time_minutes, start_date, due_date,
+      display_order, allow_resubmission, activity_config, status,
     } = req.body;
 
-    if (!title || !VALID_ACTIVITY_TYPES.includes(activity_type) || !instructions || !age_group_id) {
+    if (!title || !VALID_ACTIVITY_TYPES.includes(activity_type) || !instructions) {
       return res.status(400).json({
-        error: `title, instructions, age_group_id and a valid activity_type (one of ${VALID_ACTIVITY_TYPES.join(', ')}) are required`,
+        error: `title, instructions and a valid activity_type (one of ${VALID_ACTIVITY_TYPES.join(', ')}) are required`,
       });
     }
+    if (difficulty && !VALID_DIFFICULTIES.includes(difficulty)) {
+      return res.status(400).json({ error: `difficulty must be one of ${VALID_DIFFICULTIES.join(', ')}` });
+    }
+    if (status !== undefined && !VALID_ACTIVITY_STATUSES.includes(status)) {
+      return res.status(400).json({ error: `status must be one of ${VALID_ACTIVITY_STATUSES.join(', ')}` });
+    }
 
+    // The activity inherits its course/lesson age group automatically —
+    // the instructor never has to pick it again.
     const lessonAgeGroup = await query(
       `SELECT c.age_group_id FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = $1`,
       [lessonId]
     );
-    if (String(lessonAgeGroup.rows[0]?.age_group_id) !== String(age_group_id)) {
+    if (!lessonAgeGroup.rows[0]?.age_group_id) {
+      return res.status(400).json({ error: 'Lesson is not linked to an age group' });
+    }
+    const resolvedAgeGroupId = String(lessonAgeGroup.rows[0].age_group_id);
+    if (age_group_id && String(age_group_id) !== resolvedAgeGroupId) {
       return res.status(400).json({ error: 'Activity age group must match the course age group' });
     }
 
@@ -99,13 +118,15 @@ async function createActivity(req, res, next) {
     const result = await query(
       `INSERT INTO activities
          (lesson_id, instructor_id, age_group_id, title, activity_type, instructions,
-          resource_url, max_score, requires_upload, auto_gradable)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          resource_url, max_score, requires_upload, auto_gradable,
+          difficulty, estimated_time_minutes, start_date, due_date,
+          display_order, allow_resubmission, activity_config)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING *`,
       [
         lessonId,
         req.user.role === 'admin' ? (await getLessonOwnerInstructorId(lessonId)) : instructorId,
-        age_group_id,
+        resolvedAgeGroupId,
         title,
         activity_type,
         instructions,
@@ -113,6 +134,13 @@ async function createActivity(req, res, next) {
         max_score || 100,
         requires_upload ?? false,
         auto_gradable ?? false,
+        difficulty || 'beginner',
+        estimated_time_minutes || null,
+        start_date || null,
+        due_date || null,
+        display_order ?? 0,
+        allow_resubmission ?? false,
+        activity_config ? JSON.stringify(activity_config) : null,
       ]
     );
 
@@ -135,8 +163,8 @@ async function listActivitiesForLesson(req, res, next) {
     if (lessonCourse.rows.length === 0 || !(await canReadCourse(req.user, lessonCourse.rows[0]))) {
       return res.status(404).json({ error: 'Lesson not found' });
     }
-    const result = await query(
-      'SELECT * FROM activities WHERE lesson_id = $1 ORDER BY created_at',
+const result = await query(
+      'SELECT * FROM activities WHERE lesson_id = $1 ORDER BY display_order, created_at',
       [lessonId]
     );
     res.json({ activities: result.rows });
@@ -170,20 +198,80 @@ async function updateActivity(req, res, next) {
     const activity = await assertActivityOwnership(req, res, req.params.id);
     if (!activity) return;
 
-    const { title, instructions, resource_url, max_score, requires_upload } = req.body;
+    const {
+      title, instructions, resource_url, max_score, requires_upload,
+      auto_gradable, difficulty, estimated_time_minutes, start_date,
+      due_date, display_order, allow_resubmission, activity_config, status,
+    } = req.body;
+
+    if (status !== undefined && !VALID_ACTIVITY_STATUSES.includes(status)) {
+      return res.status(400).json({ error: `status must be one of ${VALID_ACTIVITY_STATUSES.join(', ')}` });
+    }
+    if (difficulty && !VALID_DIFFICULTIES.includes(difficulty)) {
+      return res.status(400).json({ error: `difficulty must be one of ${VALID_DIFFICULTIES.join(', ')}` });
+    }
+
     const result = await query(
       `UPDATE activities
        SET title = COALESCE($1, title),
            instructions = COALESCE($2, instructions),
            resource_url = COALESCE($3, resource_url),
            max_score = COALESCE($4, max_score),
-           requires_upload = COALESCE($5, requires_upload),
+           requires_upload = $5,
+           auto_gradable = COALESCE($6, auto_gradable),
+           difficulty = COALESCE($7, difficulty),
+           estimated_time_minutes = COALESCE($8, estimated_time_minutes),
+           start_date = COALESCE($9, start_date),
+           due_date = COALESCE($10, due_date),
+           display_order = COALESCE($11, display_order),
+           allow_resubmission = $12,
+           activity_config = COALESCE($13::jsonb, activity_config),
+           status = COALESCE($14, status),
            updated_at = now()
-       WHERE id = $6
+       WHERE id = $15
        RETURNING *`,
-      [title, instructions, resource_url, max_score, requires_upload, activity.id]
+      [
+        title || null,
+        instructions || null,
+        resource_url || null,
+        max_score || null,
+        requires_upload ?? activity.requires_upload,
+        auto_gradable ?? activity.auto_gradable,
+        difficulty || null,
+        estimated_time_minutes || null,
+        start_date || null,
+        due_date || null,
+        display_order ?? null,
+        allow_resubmission ?? activity.allow_resubmission,
+        activity_config ? JSON.stringify(activity_config) : null,
+        status || null,
+        activity.id,
+      ]
     );
 
+    res.json({ activity: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PATCH /api/activities/:id/status  (owning instructor or admin)
+// ----------------------------------------------------------------------------
+async function updateActivityStatus(req, res, next) {
+  try {
+    const activity = await assertActivityOwnership(req, res, req.params.id);
+    if (!activity) return;
+
+    const { status } = req.body;
+    if (!VALID_ACTIVITY_STATUSES.includes(status)) {
+      return res.status(400).json({ error: `status must be one of ${VALID_ACTIVITY_STATUSES.join(', ')}` });
+    }
+
+    const result = await query(
+      'UPDATE activities SET status = $1, updated_at = now() WHERE id = $2 RETURNING *',
+      [status, activity.id]
+    );
     res.json({ activity: result.rows[0] });
   } catch (err) {
     next(err);
@@ -198,6 +286,17 @@ async function deleteActivity(req, res, next) {
     const activity = await assertActivityOwnership(req, res, req.params.id);
     if (!activity) return;
 
+    // Never lose student history: activities with submissions are preserved.
+    const submissions = await query(
+      'SELECT 1 FROM activity_submissions WHERE activity_id = $1 LIMIT 1',
+      [activity.id]
+    );
+    if (submissions.rows.length > 0) {
+      return res.status(409).json({
+        error: 'This activity has student submissions. Deactivate or archive it instead to keep the results.',
+      });
+    }
+
     await query('DELETE FROM activities WHERE id = $1', [activity.id]);
     res.status(204).send();
   } catch (err) {
@@ -211,6 +310,7 @@ module.exports = {
   listActivitiesForLesson,
   getActivity,
   updateActivity,
+  updateActivityStatus,
   deleteActivity,
   loadActivityWithContext,
   assertActivityOwnership,

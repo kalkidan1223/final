@@ -8,6 +8,7 @@ const router = express.Router();
 
 router.get('/:id', requireAuth, activitiesController.getActivity);
 router.put('/:id', requireAuth, authorize('instructor', 'admin'), activitiesController.updateActivity);
+router.patch('/:id/status', requireAuth, authorize('instructor', 'admin'), activitiesController.updateActivityStatus);
 router.delete('/:id', requireAuth, authorize('instructor', 'admin'), activitiesController.deleteActivity);
 
 router.post(

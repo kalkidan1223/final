@@ -178,17 +178,17 @@ export default function InstructorProfile() {
           )}
         </div>
 
-        {/* Assignments summary */}
+        {/* Courses summary */}
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><MdSchool className="text-indigo-600" /> My Assignments</h3>
-          {(profile?.assignments || []).length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-4">No active assignments. Contact admin for assignment.</p>
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><MdSchool className="text-indigo-600" /> My Courses</h3>
+          {(profile?.courses || []).length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-4">No active courses. Contact admin for assignment.</p>
           ) : (
             <div className="space-y-2">
-              {profile.assignments.map(a => (
-                <div key={a.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-                  <span className="text-sm font-medium text-slate-800">{a.course_title}</span>
-                  <span className="text-xs text-slate-400">{a.age_group_name} {a.grade && `· Grade ${a.grade}`}</span>
+              {profile.courses.map(c => (
+                <div key={c.course_id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                  <span className="text-sm font-medium text-slate-800">{c.course_title}</span>
+                  <span className="text-xs text-slate-400">{c.age_group_name} {c.grade && `· Grade ${c.grade}`}</span>
                 </div>
               ))}
             </div>

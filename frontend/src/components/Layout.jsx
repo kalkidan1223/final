@@ -18,7 +18,7 @@ const ROLE_LINKS = {
   ],
   instructor: [
     { label: 'Dashboard',   to: '/instructor/dashboard' },
-    { label: 'Assignments', to: '/instructor/assignments' },
+    { label: 'Courses',     to: '/instructor/courses' },
     { label: 'Students',    to: '/instructor/students' },
   ],
   parent: [

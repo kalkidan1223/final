@@ -2,24 +2,16 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  MdDashboard, MdAssignment, MdPeople, MdMenuBook,
-  MdVideoLibrary, MdQuiz, MdFactCheck, MdCalendarToday,
-  MdTrendingUp, MdMessage, MdNotifications, MdPerson,
+  MdDashboard, MdPeople, MdMenuBook,
+  MdMessage, MdNotifications, MdPerson,
   MdLogout, MdMenu, MdClose, MdSchool, MdChevronRight,
   MdHelp
 } from 'react-icons/md';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard',       to: '/instructor/dashboard',     icon: MdDashboard,     end: true },
-  { label: 'My Assignments',  to: '/instructor/assignments',   icon: MdAssignment },
+  { label: 'Dashboard',       to: '/instructor/dashboard',     icon: MdDashboard,  end: true },
+  { label: 'Courses',         to: '/instructor/courses',       icon: MdMenuBook },
   { label: 'My Students',     to: '/instructor/students',      icon: MdPeople },
-  { label: 'Lessons',         to: '/instructor/lessons',       icon: MdMenuBook },
-  { label: 'Materials',       to: '/instructor/materials',     icon: MdVideoLibrary },
-  { label: 'Activities',      to: '/instructor/activities',    icon: MdFactCheck },
-  { label: 'Quizzes',         to: '/instructor/quizzes',       icon: MdQuiz },
-  { label: 'Submissions',     to: '/instructor/submissions',   icon: MdAssignment },
-  { label: 'Attendance',      to: '/instructor/attendance',    icon: MdCalendarToday },
-  { label: 'Progress',        to: '/instructor/progress',      icon: MdTrendingUp },
   { label: 'Messages',        to: '/instructor/messages',      icon: MdMessage },
   { label: 'Notifications',   to: '/instructor/notifications', icon: MdNotifications },
   { label: 'Profile',         to: '/instructor/profile',       icon: MdPerson },

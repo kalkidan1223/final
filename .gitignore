@@ -24,6 +24,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Uploaded files
+backend/uploads/
+
 # Misc
 coverage/
 .nyc_output/

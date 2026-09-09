@@ -30,10 +30,9 @@ import InstructorCourses from './pages/instructor/InstructorCourses';
 import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
 import InstructorLessonDetail from './pages/instructor/InstructorLessonDetail';
+import InstructorLessonCreate from './pages/instructor/InstructorLessonCreate';
 import InstructorQuizManage from './pages/instructor/InstructorQuizManage';
 import InstructorActivitySubmissions from './pages/instructor/InstructorActivitySubmissions';
-import InstructorAssignments from './pages/instructor/InstructorAssignments';
-import InstructorAssignmentWorkspace from './pages/instructor/InstructorAssignmentWorkspace';
 import InstructorStudentProfile from './pages/instructor/InstructorStudentProfile';
 import InstructorStudents from './pages/instructor/InstructorStudents';
 import InstructorMessages from './pages/instructor/InstructorMessages';
@@ -247,6 +246,30 @@ export default function App() {
         }
       />
       <Route
+        path="/instructor/courses/:courseId/lessons/create"
+        element={
+          <ProtectedRoute roles={['instructor', 'admin']}>
+            <InstructorLessonCreate />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/instructor/courses/:courseId/lessons/:lessonId"
+        element={
+          <ProtectedRoute roles={['instructor', 'admin']}>
+            <InstructorLessonDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/instructor/lessons/:lessonId/edit"
+        element={
+          <ProtectedRoute roles={['instructor', 'admin']}>
+            <InstructorLessonCreate />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/instructor/quizzes/:id"
         element={
           <ProtectedRoute roles={['instructor', 'admin']}>
@@ -261,13 +284,7 @@ export default function App() {
         }
       />
 
-      {/* ── Instructor Portal (New Assignment-based routes) ── */}
-      <Route path="/instructor/assignments"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
-      />
-      <Route path="/instructor/assignments/:id"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignmentWorkspace /></ProtectedRoute>}
-      />
+      {/* ── Instructor Portal ── */}
       <Route path="/instructor/students/:studentId"
         element={<ProtectedRoute roles={['instructor']}><InstructorStudentProfile /></ProtectedRoute>}
       />
@@ -275,25 +292,25 @@ export default function App() {
         element={<ProtectedRoute roles={['instructor']}><InstructorStudents /></ProtectedRoute>}
       />
       <Route path="/instructor/lessons"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
       />
       <Route path="/instructor/materials"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
       />
       <Route path="/instructor/activities"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
       />
       <Route path="/instructor/quizzes"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
       />
       <Route path="/instructor/submissions"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
       />
       <Route path="/instructor/attendance"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
       />
       <Route path="/instructor/progress"
-        element={<ProtectedRoute roles={['instructor']}><InstructorAssignments /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
       />
       <Route path="/instructor/messages"
         element={<ProtectedRoute roles={['instructor']}><InstructorMessages /></ProtectedRoute>}

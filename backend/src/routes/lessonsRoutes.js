@@ -10,6 +10,7 @@ const router = express.Router();
 
 router.get('/:id', requireAuth, lessonContentController.getLessonDetail);
 router.put('/:id', requireAuth, authorize('instructor', 'admin'), lessonsController.updateLesson);
+router.patch('/:id/status', requireAuth, authorize('instructor', 'admin'), lessonsController.updateLessonStatus);
 router.delete('/:id', requireAuth, authorize('instructor', 'admin'), lessonsController.deleteLesson);
 
 router.post(
@@ -17,6 +18,12 @@ router.post(
   requireAuth,
   authorize('instructor', 'admin'),
   lessonContentController.createMaterial
+);
+router.put(
+  '/:lessonId/materials/reorder',
+  requireAuth,
+  authorize('instructor', 'admin'),
+  lessonContentController.reorderMaterials
 );
 router.post(
   '/:lessonId/videos',

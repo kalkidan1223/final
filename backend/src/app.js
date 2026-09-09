@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const passport = require('./config/passport');
+const { UPLOAD_ROOT } = require('./middleware/upload');
 
 const authRoutes = require('./routes/authRoutes');
 const adminApprovalRoutes = require('./routes/adminApprovalRoutes');
@@ -21,6 +22,7 @@ const aiRoutes = require('./routes/aiRoutes');
 const materialsRoutes = require('./routes/materialsRoutes');
 const videosRoutes = require('./routes/videosRoutes');
 const instructorRoutes = require('./routes/instructorRoutes');
+const uploadsRoutes = require('./routes/uploadsRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -43,6 +45,9 @@ app.use(passport.initialize());
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// Serve uploaded learning-material files.
+app.use('/uploads', express.static(UPLOAD_ROOT));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentsRoutes);
 app.use('/api/admin', adminRoutes);
@@ -61,6 +66,7 @@ app.use('/api/ai/recommendations', aiRoutes);
 app.use('/api/materials', materialsRoutes);
 app.use('/api/videos', videosRoutes);
 app.use('/api/instructor', instructorRoutes);
+app.use('/api/uploads', uploadsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

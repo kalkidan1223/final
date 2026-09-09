@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import axiosClient from '../../api/axiosClient';
+import { resolveFileUrl } from '../../utils/fileUrl';
 
 export default function StudentLessonDetail() {
   const { id } = useParams();
@@ -50,7 +51,7 @@ export default function StudentLessonDetail() {
             <ul className="space-y-2">
               {materials.map((m) => (
                 <li key={m.id} className="rounded-xl bg-white p-4 shadow-sm">
-                  <a href={m.file_url} target="_blank" rel="noreferrer" className="font-medium text-sky-600 hover:underline">
+                  <a href={resolveFileUrl(m.file_url)} target="_blank" rel="noreferrer" className="font-medium text-sky-600 hover:underline">
                     📄 {m.title} <span className="text-xs text-slate-400">({m.type})</span>
                   </a>
                 </li>
