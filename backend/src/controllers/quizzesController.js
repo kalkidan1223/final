@@ -34,7 +34,12 @@ async function assertLessonOwnership(req, res, lessonId) {
 // Loads a quiz along with the instructor_id that owns its lesson's course.
 async function loadQuizWithOwner(quizId) {
   const result = await query(
-    `SELECT q.*, c.instructor_id AS owner_instructor_id, c.status, c.age_group_id, l.course_id
+    `SELECT q.*,
+            c.instructor_id AS owner_instructor_id,
+            c.instructor_id AS instructor_id,
+            c.status AS course_status,
+            c.age_group_id,
+            l.course_id
      FROM quizzes q
      JOIN lessons l ON l.id = q.lesson_id
      JOIN courses c ON c.id = l.course_id

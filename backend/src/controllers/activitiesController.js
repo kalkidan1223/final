@@ -46,7 +46,12 @@ async function assertLessonOwnership(req, res, lessonId) {
 // controller and the submissions controller.
 async function loadActivityWithContext(activityId) {
   const result = await query(
-    `SELECT a.*, l.course_id, c.instructor_id AS owner_instructor_id, c.status, c.age_group_id AS course_age_group_id
+    `SELECT a.*,
+            l.course_id,
+            c.instructor_id AS owner_instructor_id,
+            c.instructor_id AS instructor_id,
+            c.status AS course_status,
+            c.age_group_id AS course_age_group_id
      FROM activities a
      JOIN lessons l ON l.id = a.lesson_id
      JOIN courses c ON c.id = l.course_id
