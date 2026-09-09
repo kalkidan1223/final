@@ -64,6 +64,7 @@ psql -d learning_hub -f backend/migrations/004_child_approval_policy.sql
 psql -d learning_hub -f backend/migrations/005_parent_guardian_verification.sql
 psql -d learning_hub -f backend/migrations/006_child_request_review_notes.sql
 psql -d learning_hub -f backend/migrations/007_student_profile_details.sql
+psql -d learning_hub -f backend/migrations/016_sync_instructor_assignments.sql
 ```
 
 If you already created the database before the child-approval policy was added, back it up before applying migrations `004_child_approval_policy.sql` through `006_child_request_review_notes.sql`. Migration 006 is required for the administrator's child approval action because it stores the reviewer note.

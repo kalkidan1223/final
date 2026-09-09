@@ -84,7 +84,7 @@ function AssignmentFormModal({ existing, instructors, courses, ageGroups, academ
             >
               <option value="">Select instructor…</option>
               {instructors.map(i => (
-                <option key={i.instructor_id} value={i.instructor_id}>{i.full_name} — {i.email}</option>
+                <option key={i.id} value={i.id}>{i.full_name} — {i.email}</option>
               ))}
             </select>
           </div>

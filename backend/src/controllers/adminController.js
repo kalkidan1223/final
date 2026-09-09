@@ -640,12 +640,15 @@ async function updateInstructorAssignments(req, res, next) {
 
           // Check if a course instance already exists for this instructor and available course
           const existingCourse = await client.query(
-            'SELECT id FROM courses WHERE instructor_id = $1 AND available_course_id = $2',
+            'SELECT id, age_group_id FROM courses WHERE instructor_id = $1 AND available_course_id = $2 LIMIT 1',
             [id, availableCourseId]
           );
 
+          let courseId = existingCourse.rows[0]?.id;
+          let ageGroupId = existingCourse.rows[0]?.age_group_id;
+
           // If not, auto-create the course instance
-          if (existingCourse.rows.length === 0) {
+          if (!courseId) {
             const availableCourse = await client.query(
               'SELECT * FROM age_group_available_courses WHERE id = $1',
               [availableCourseId]
@@ -653,10 +656,29 @@ async function updateInstructorAssignments(req, res, next) {
             
             if (availableCourse.rows.length > 0) {
               const ac = availableCourse.rows[0];
-              await client.query(
+              const createdCourse = await client.query(
                 `INSERT INTO courses (instructor_id, age_group_id, title, description, available_course_id, status)
-                 VALUES ($1, $2, $3, $4, $5, 'draft')`,
+                 VALUES ($1, $2, $3, $4, $5, 'draft')
+                 RETURNING id, age_group_id`,
                 [id, ac.age_group_id, ac.course_title, ac.course_description, availableCourseId]
+              );
+              courseId = createdCourse.rows[0].id;
+              ageGroupId = createdCourse.rows[0].age_group_id;
+            }
+          }
+
+          // Sync the instructor portal teaching-workspace assignment so the assigned
+          // instructor can actually see this course under "My Assignments".
+          if (courseId) {
+            const existingAssignment = await client.query(
+              'SELECT id FROM instructor_assignments WHERE instructor_id = $1 AND course_id = $2 LIMIT 1',
+              [id, courseId]
+            );
+            if (existingAssignment.rows.length === 0) {
+              await client.query(
+                `INSERT INTO instructor_assignments (instructor_id, course_id, age_group_id, status, assigned_by)
+                 VALUES ($1, $2, $3, 'active', $4)`,
+                [id, courseId, ageGroupId, req.user.id]
               );
             }
           }

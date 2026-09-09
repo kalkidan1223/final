@@ -41,6 +41,26 @@ async function createInstructorAssignment(req, res, next) {
       [instructor_id, course_id, age_group_id, grade || null, section || null,
        academic_year_id || null, status || 'active', req.user.id]
     );
+
+    // Keep the course owner in sync so the assigned instructor also sees this
+    // course on their "My Courses" page (courses?mine=true reads instructor_id).
+    await query(
+      'UPDATE courses SET instructor_id = $1, updated_at = now() WHERE id = $2',
+      [instructor_id, course_id]
+    );
+
+    // Link the course's curriculum entry to the instructor so the admin's
+    // Instructor list (assigned_courses) stays consistent too.
+    const courseLink = await query('SELECT available_course_id FROM courses WHERE id = $1', [course_id]);
+    if (courseLink.rows[0]?.available_course_id) {
+      await query(
+        `INSERT INTO instructor_courses (instructor_id, available_course_id, assigned_by)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (instructor_id, available_course_id) DO NOTHING`,
+        [instructor_id, courseLink.rows[0].available_course_id, req.user.id]
+      );
+    }
+
     res.status(201).json({ assignment: rows[0] });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'This instructor is already assigned to this course' });
