@@ -120,8 +120,8 @@ async function createActivity(req, res, next) {
          (lesson_id, instructor_id, age_group_id, title, activity_type, instructions,
           resource_url, max_score, requires_upload, auto_gradable,
           difficulty, estimated_time_minutes, start_date, due_date,
-          display_order, allow_resubmission, activity_config)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          display_order, allow_resubmission, activity_config, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING *`,
       [
         lessonId,
@@ -141,6 +141,7 @@ async function createActivity(req, res, next) {
         display_order ?? 0,
         allow_resubmission ?? false,
         activity_config ? JSON.stringify(activity_config) : null,
+        status || 'active',
       ]
     );
 
