@@ -353,9 +353,9 @@ async function approveStudentRegistration(req, res, next) {
       const ageGroupId = ageGroupResult.rows[0]?.id;
 
       if (!ageGroupId) {
-        // Fallback to 11-12 age group
+        // Fallback to 10-12 or primary age group
         const fallback = await client.query(
-          "SELECT id FROM age_groups WHERE name = '11-12'"
+          "SELECT id FROM age_groups WHERE name = '10-12' OR name = '11-12' LIMIT 1"
         );
         if (fallback.rows.length === 0) {
           await client.query('ROLLBACK');
@@ -363,17 +363,21 @@ async function approveStudentRegistration(req, res, next) {
         }
       }
 
+      const assignedAgeGroupId = ageGroupId || (
+        await client.query("SELECT id FROM age_groups WHERE name = '10-12' OR name = '11-12' LIMIT 1")
+      ).rows[0]?.id;
+
       await client.query(
         `INSERT INTO students (user_id, parent_id, age_group_id, full_name, date_of_birth, gender,
            grade, section, preferred_language, admission_number, previous_school, academic_year,
-           blood_group, medical_condition, learning_disability)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+           blood_group, medical_condition, learning_disability, profile_image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING id`,
-        [user?.id || null, parentRow.id, ageGroupId || (await client.query("SELECT id FROM age_groups WHERE name = '11-12'")).rows[0].id,
+        [user?.id || null, parentRow.id, assignedAgeGroupId,
          reg.student_full_name, reg.date_of_birth, reg.gender, reg.current_grade || reg.grade || null,
          reg.section || null, reg.preferred_language || null, reg.admission_number || null,
          reg.previous_school || null, reg.academic_year || null, reg.blood_group || null,
-         reg.medical_condition || null, reg.learning_disability || null]
+         reg.medical_condition || null, reg.learning_disability || null, reg.student_photo_url || null]
       );
 
       await client.query(
@@ -381,6 +385,22 @@ async function approveStudentRegistration(req, res, next) {
          WHERE id = $3`,
         [req.user.id, notes || null, id]
       );
+
+      // Notify parent about approval
+      const parentUser = await client.query(
+        `SELECT user_id FROM parents WHERE id = $1`,
+        [parentRow.id]
+      );
+      if (parentUser.rows[0]?.user_id) {
+        await client.query(
+          `INSERT INTO notifications (user_id, type, title, message)
+           VALUES ($1, 'info', 'Child Registration Approved! 🎉', $2)`,
+          [
+            parentUser.rows[0].user_id,
+            `Great news! Your child "${reg.student_full_name}" has been approved by the administrator. You can now access their learning portal and courses!`
+          ]
+        );
+      }
 
       await client.query(
         `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
@@ -433,6 +453,22 @@ async function rejectStudentRegistration(req, res, next) {
     await logAudit(null, req.user.id, 'REJECT_STUDENT_REGISTRATION', 'student_registration_request', id,
       { status: 'pending' }, { status: 'rejected', reason }
     );
+
+    // Notify parent about rejection
+    const parentUser = await query(
+      `SELECT p.user_id FROM parents p JOIN student_registration_requests sr ON sr.parent_id = p.id WHERE sr.id = $1`,
+      [id]
+    );
+    if (parentUser.rows[0]?.user_id) {
+      await query(
+        `INSERT INTO notifications (user_id, type, title, message)
+         VALUES ($1, 'alert', 'Child Registration Update', $2)`,
+        [
+          parentUser.rows[0].user_id,
+          `Your registration request for "${reg.student_full_name}" was not approved. Reason: ${reason}`
+        ]
+      );
+    }
 
     res.json({ message: 'Student registration rejected', registration_id: id });
   } catch (err) {

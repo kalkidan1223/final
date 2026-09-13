@@ -23,11 +23,13 @@ const ROLE_LINKS = {
   ],
   parent: [
     { label: 'Dashboard',   to: '/parent/dashboard' },
-    { label: 'Courses',     to: '/courses' },
+    { label: 'My Children', to: '/parent/children' },
+    { label: 'Progress',    to: '/parent/progress' },
+    { label: 'Activities',  to: '/parent/activities' },
   ],
   student: [
-    { label: 'Dashboard',   to: '/student/dashboard' },
-    { label: 'Courses',     to: '/courses' },
+    { label: 'Child Portal', to: '/child' },
+    { label: 'My Courses', to: '/child/courses' },
   ],
 };
 

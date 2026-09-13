@@ -9,14 +9,34 @@ const axiosClient = axios.create({
 
 let accessToken = null;
 let refreshPromise = null;
+let activeChildId = typeof window !== 'undefined' ? localStorage.getItem('active_child_id') : null;
 
 export function setAccessToken(token) {
   accessToken = token;
 }
 
+export function setActiveChildId(id) {
+  activeChildId = id;
+  if (typeof window !== 'undefined') {
+    if (id) {
+      localStorage.setItem('active_child_id', id);
+    } else {
+      localStorage.removeItem('active_child_id');
+    }
+  }
+}
+
+export function getActiveChildId() {
+  return activeChildId || (typeof window !== 'undefined' ? localStorage.getItem('active_child_id') : null);
+}
+
 axiosClient.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  const childId = getActiveChildId();
+  if (childId) {
+    config.headers['X-Child-Id'] = childId;
   }
   return config;
 });

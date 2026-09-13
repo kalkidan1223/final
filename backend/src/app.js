@@ -7,6 +7,7 @@ const { UPLOAD_ROOT } = require('./middleware/upload');
 const authRoutes = require('./routes/authRoutes');
 const adminApprovalRoutes = require('./routes/adminApprovalRoutes');
 const studentsRoutes = require('./routes/studentsRoutes');
+const childRoutes = require('./routes/childRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const parentRoutes = require('./routes/parentRoutes');
 const coursesRoutes = require('./routes/coursesRoutes');
@@ -49,6 +50,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/uploads', express.static(UPLOAD_ROOT));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/child', childRoutes);
 app.use('/api/students', studentsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/approval', adminApprovalRoutes);

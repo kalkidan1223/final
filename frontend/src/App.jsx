@@ -41,13 +41,38 @@ import InstructorProfile from './pages/instructor/InstructorProfile';
 import ParentDashboard from './pages/parent/ParentDashboard';
 import ParentChildren from './pages/parent/ParentChildren';
 import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
+import ParentProgress from './pages/parent/ParentProgress';
+import ParentActivities from './pages/parent/ParentActivities';
+import ParentQuizzes from './pages/parent/ParentQuizzes';
+import ParentFeedback from './pages/parent/ParentFeedback';
+import ParentNotifications from './pages/parent/ParentNotifications';
+import ParentProfile from './pages/parent/ParentProfile';
+import ParentHelp from './pages/parent/ParentHelp';
 import ParentLayout from './components/ParentLayout';
-import StudentDashboard from './pages/student/StudentDashboard';
-import CourseCatalog from './pages/shared/CourseCatalog';
-import StudentCourseDetail from './pages/student/StudentCourseDetail';
-import StudentLessonDetail from './pages/student/StudentLessonDetail';
-import QuizTake from './pages/student/QuizTake';
-import ActivitySubmit from './pages/student/ActivitySubmit';
+
+
+// Child Portal
+import ChildLayout from './components/ChildLayout';
+import ChildDashboard from './pages/child/ChildDashboard';
+import ChildCourses from './pages/child/ChildCourses';
+import ChildCourseDetail from './pages/child/ChildCourseDetail';
+import ChildLessonDetail from './pages/child/ChildLessonDetail';
+import ChildProgress from './pages/child/ChildProgress';
+import ChildActivities from './pages/child/ChildActivities';
+import ChildQuizzes from './pages/child/ChildQuizzes';
+import ChildAchievements from './pages/child/ChildAchievements';
+import ChildNotifications from './pages/child/ChildNotifications';
+import ChildProfile from './pages/child/ChildProfile';
+import ChildQuizTake from './pages/child/ChildQuizTake';
+import WritingActivity from './pages/child/WritingActivity';
+import MatchingActivity from './pages/child/MatchingActivity';
+import ListeningActivity from './pages/child/ListeningActivity';
+import ReadingActivity from './pages/child/ReadingActivity';
+import WorksheetActivity from './pages/child/WorksheetActivity';
+import MaterialViewer from './components/child/MaterialViewer';
+import VideoPlayer from './components/child/VideoPlayer';
+import AudioPlayer from './components/child/AudioPlayer';
+
 import { ROLE_HOME } from './utils/roles';
 
 function Root() {
@@ -322,76 +347,57 @@ export default function App() {
         element={<ProtectedRoute roles={['instructor']}><InstructorProfile /></ProtectedRoute>}
       />
 
-      {/* ── Parent ── */}
+      {/* ── Parent Portal ── */}
       <Route path="/parent" element={<ProtectedRoute roles={['parent']}><ParentLayout /></ProtectedRoute>}>
+        <Route index element={<Navigate to="/parent/dashboard" replace />} />
         <Route path="dashboard" element={<ParentDashboard />} />
         <Route path="children" element={<ParentChildren />} />
         <Route path="children/:id" element={<ParentChildLearningSpace />} />
+        <Route path="progress" element={<ParentProgress />} />
+        <Route path="activities" element={<ParentActivities />} />
+        <Route path="quizzes" element={<ParentQuizzes />} />
+        <Route path="feedback" element={<ParentFeedback />} />
+        <Route path="notifications" element={<ParentNotifications />} />
+        <Route path="profile" element={<ParentProfile />} />
+        <Route path="help" element={<ParentHelp />} />
+        <Route path="register-child" element={<Navigate to="/parent/children?action=add" replace />} />
+        <Route path="learning" element={<Navigate to="/parent/children" replace />} />
+        <Route path="attendance" element={<Navigate to="/parent/progress" replace />} />
+        <Route path="settings" element={<Navigate to="/parent/profile" replace />} />
       </Route>
 
-      <Route
-        path="/parent/dashboard"
-        element={
-          <ProtectedRoute roles={['parent']}>
-            <ParentDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/parent/children/:id"
-        element={<ProtectedRoute roles={['parent']}><ParentChildLearningSpace /></ProtectedRoute>}
-      />
+      {/* ── Redirect legacy student routes to Child Portal ── */}
+      <Route path="/student/*" element={<Navigate to="/child" replace />} />
+      <Route path="/student" element={<Navigate to="/child" replace />} />
+      <Route path="/courses" element={<Navigate to="/child/courses" replace />} />
+      <Route path="/courses/:id" element={<Navigate to="/child/courses/:id" replace />} />
+      <Route path="/lessons/:id" element={<Navigate to="/child/lessons/:id" replace />} />
+      <Route path="/quizzes/:id" element={<Navigate to="/child/quizzes/:id" replace />} />
+      <Route path="/activities/:id" element={<Navigate to="/child/activities" replace />} />
 
-      <Route
-        path="/student/dashboard"
-        element={
-          <ProtectedRoute roles={['student']}>
-            <StudentDashboard />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Shared learning flow — both students and parents browse and act on behalf of a child */}
-      <Route
-        path="/courses"
-        element={
-          <ProtectedRoute roles={['student', 'parent']}>
-            <CourseCatalog />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/courses/:id"
-        element={
-          <ProtectedRoute roles={['student', 'parent']}>
-            <StudentCourseDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/lessons/:id"
-        element={
-          <ProtectedRoute roles={['student', 'parent']}>
-            <StudentLessonDetail />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/quizzes/:id"
-        element={
-          <ProtectedRoute roles={['student']}>
-            <QuizTake />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/activities/:id/submit"
-        element={
-          <ProtectedRoute roles={['student', 'parent']}>
-            <ActivitySubmit />
-          </ProtectedRoute>
-        }
-      />
+      {/* ── Child Learning Portal (Gamified, Interactive, Responsive) ── */}
+      <Route path="/child" element={<ProtectedRoute roles={['student', 'parent']}><ChildLayout /></ProtectedRoute>}>
+        <Route path="" element={<ChildDashboard />} />
+        <Route path="dashboard" element={<ChildDashboard />} />
+        <Route path="courses" element={<ChildCourses />} />
+        <Route path="courses/:id" element={<ChildCourseDetail />} />
+        <Route path="lessons/:id" element={<ChildLessonDetail />} />
+        <Route path="progress" element={<ChildProgress />} />
+        <Route path="activities" element={<ChildActivities />} />
+        <Route path="quizzes" element={<ChildQuizzes />} />
+        <Route path="achievements" element={<ChildAchievements />} />
+        <Route path="notifications" element={<ChildNotifications />} />
+        <Route path="profile" element={<ChildProfile />} />
+        <Route path="quizzes/:id" element={<ChildQuizTake />} />
+        <Route path="activities/:id/write" element={<WritingActivity />} />
+        <Route path="activities/:id/match" element={<MatchingActivity />} />
+        <Route path="activities/:id/listen" element={<ListeningActivity />} />
+        <Route path="activities/:id/read" element={<ReadingActivity />} />
+        <Route path="activities/:id/worksheet" element={<WorksheetActivity />} />
+        <Route path="materials/:id" element={<MaterialViewer />} />
+        <Route path="videos/:id" element={<VideoPlayer />} />
+        <Route path="audio/:id" element={<AudioPlayer />} />
+      </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
