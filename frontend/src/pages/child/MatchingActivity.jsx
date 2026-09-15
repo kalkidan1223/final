@@ -29,6 +29,13 @@ export default function MatchingActivity() {
       setActivity(response.data.activity);
       setIsGraded(response.data.activity.submission_status === 'graded');
       
+      // Notify backend that activity has started (sets status to in_progress)
+      try {
+        await axiosClient.post(`/child/activities/${id}/start`);
+      } catch (err) {
+        console.warn('Activity start track failed:', err);
+      }
+      
       // Parse activity_config for pairs
       if (response.data.activity.activity_config) {
         let config = response.data.activity.activity_config;

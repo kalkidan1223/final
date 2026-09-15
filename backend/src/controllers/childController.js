@@ -405,27 +405,40 @@ async function getLesson(req, res, next) {
       return res.status(403).json({ error: 'Access denied to this lesson' });
     }
 
-    // 1. Learning materials (PDFs, Audio, Images, Documents) with listened/accessed status
+    // 1. Learning materials (PDFs, Audio, Images, Documents) with detailed real-time progress
     const materialsRes = await query(
       `SELECT lm.*,
-              (EXISTS (SELECT 1 FROM material_listens ml WHERE ml.material_id = lm.id AND ml.student_id = $2)) as listened
+              COALESCE(smp.status, 'not_started') as material_status,
+              COALESCE(smp.progress_percentage, 0)::int as progress_percentage,
+              COALESCE(smp.pages_viewed, 0)::int as pages_viewed,
+              COALESCE(smp.total_pages, 1)::int as total_pages,
+              COALESCE(smp.last_position_seconds, 0)::int as last_position_seconds,
+              (smp.status = 'completed') as is_completed,
+              (smp.status = 'completed' OR EXISTS (SELECT 1 FROM material_listens ml WHERE ml.material_id = lm.id AND ml.student_id = $2)) as listened
        FROM learning_materials lm
+       LEFT JOIN student_material_progress smp ON smp.material_id = lm.id AND smp.student_id = $2
        WHERE lm.lesson_id = $1 AND lm.status = 'active'
        ORDER BY lm.display_order ASC, lm.created_at ASC`,
       [lessonId, child.id]
     );
 
-    // 2. Videos with watched status
+    // 2. Videos with verified watched percentage, intervals, and position
     const videosRes = await query(
       `SELECT v.*,
-              (EXISTS (SELECT 1 FROM video_watches vw WHERE vw.video_id = v.id AND vw.student_id = $2)) as watched
+              COALESCE(svp.status, 'not_started') as video_status,
+              COALESCE(svp.progress_percentage, 0)::int as progress_percentage,
+              COALESCE(svp.watched_seconds, 0)::int as watched_seconds,
+              COALESCE(svp.last_position_seconds, 0)::int as last_position_seconds,
+              (svp.status = 'completed') as is_completed,
+              (svp.status = 'completed' OR EXISTS (SELECT 1 FROM video_watches vw WHERE vw.video_id = v.id AND vw.student_id = $2)) as watched
        FROM videos v
+       LEFT JOIN student_video_progress svp ON svp.video_id = v.id AND svp.student_id = $2
        WHERE v.lesson_id = $1
        ORDER BY v.created_at ASC`,
       [lessonId, child.id]
     );
 
-    // 3. Activities with submission status, score, and instructor feedback
+    // 3. Activities with submission status, score, and verified activity progress
     const activitiesRes = await query(
       `SELECT a.*,
               asub.id as submission_id,
@@ -436,9 +449,12 @@ async function getLesson(req, res, next) {
               asub.feedback,
               asub.submitted_at,
               asub.reviewed_at as graded_at,
-              u.full_name as reviewer_name
+              u.full_name as reviewer_name,
+              COALESCE(sap.status, asub.status::text, 'not_started') as activity_status,
+              (asub.status = 'graded' OR sap.status = 'completed') as is_completed
        FROM activities a
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $2
+       LEFT JOIN student_activity_progress sap ON sap.activity_id = a.id AND sap.student_id = $2
        LEFT JOIN instructors i ON i.id = asub.reviewed_by
        LEFT JOIN users u ON u.id = i.user_id
        WHERE a.lesson_id = $1 AND a.status = 'active'
@@ -446,36 +462,68 @@ async function getLesson(req, res, next) {
       [lessonId, child.id]
     );
 
-    // 4. Quizzes with student's previous result
+    // 4. Quizzes with student's previous result and attempt status
     const quizzesRes = await query(
       `SELECT q.*,
               qr.id as result_id,
               qr.score,
               qr.total_points,
               qr.submitted_at as result_submitted_at,
+              COALESCE(ROUND((qr.score / NULLIF(qr.total_points, 0)) * 100), 0)::int as percentage,
+              (qr.id IS NOT NULL AND qr.score >= (qr.total_points * 0.6)) as is_passed,
+              (CASE
+                WHEN qr.id IS NOT NULL AND qr.score >= (qr.total_points * 0.6) THEN 'completed'
+                WHEN qr.id IS NOT NULL THEN 'failed'
+                ELSE COALESCE(sqa.status, 'not_started')
+               END) as quiz_status,
+              (qr.id IS NOT NULL AND qr.score >= (qr.total_points * 0.6)) as is_completed,
               (SELECT COUNT(*)::int FROM quiz_results qr2 WHERE qr2.quiz_id = q.id AND qr2.student_id = $2) as attempt_count
        FROM quizzes q
        LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $2
+       LEFT JOIN student_quiz_attempts sqa ON sqa.quiz_id = q.id AND sqa.student_id = $2
        WHERE q.lesson_id = $1
        ORDER BY q.created_at ASC`,
       [lessonId, child.id]
     );
 
-    // Record access in progress table
+    // 5. Active learning session timer
+    const sessionRes = await query(
+      `SELECT total_active_seconds, status
+       FROM learning_sessions
+       WHERE student_id = $1 AND lesson_id = $2
+       ORDER BY started_at DESC LIMIT 1`,
+      [child.id, lesson.id]
+    );
+
+    // 6. Verified lesson progress
+    const progressRes = await query(
+      `SELECT status, completion_percentage
+       FROM progress
+       WHERE student_id = $1 AND lesson_id = $2`,
+      [child.id, lesson.id]
+    );
+
+    // Record last accessed timestamp without overwriting completed status
     await query(
-      `INSERT INTO progress (student_id, course_id, lesson_id, status, last_accessed_at, updated_at)
-       VALUES ($1, $2, $3, 'in_progress', now(), now())
+      `INSERT INTO progress (student_id, course_id, lesson_id, status, completion_percentage, last_accessed_at, updated_at)
+       VALUES ($1, $2, $3, 'in_progress', 0, now(), now())
        ON CONFLICT (student_id, course_id, lesson_id)
        DO UPDATE SET last_accessed_at = now(), updated_at = now()`,
       [child.id, lesson.course_id, lesson.id]
     );
 
     res.json({
-      lesson,
+      lesson: {
+        ...lesson,
+        progress_status: progressRes.rows[0]?.status || 'not_started',
+        completion_percentage: progressRes.rows[0]?.completion_percentage || 0,
+        active_learning_seconds: sessionRes.rows[0]?.total_active_seconds || 0,
+      },
       materials: materialsRes.rows,
       videos: videosRes.rows,
       activities: activitiesRes.rows,
       quizzes: quizzesRes.rows,
+      active_learning_seconds: sessionRes.rows[0]?.total_active_seconds || 0,
     });
   } catch (err) {
     next(err);
@@ -589,6 +637,31 @@ async function submitActivity(req, res, next) {
         [child.id, activityId, submittedBy, submitted_content, file_url || null, initialStatus, autoScore]
       );
     }
+
+    // Upsert student_activity_progress lifecycle table
+    const actProgStatus = initialStatus === 'graded' ? 'completed' : 'submitted';
+    await query(
+      `INSERT INTO student_activity_progress (
+        student_id, activity_id, status, progress_percentage,
+        submission_id, started_at, submitted_at, completed_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, now(), now(), $6, now())
+      ON CONFLICT (student_id, activity_id)
+      DO UPDATE SET
+        status = EXCLUDED.status,
+        progress_percentage = EXCLUDED.progress_percentage,
+        submission_id = EXCLUDED.submission_id,
+        submitted_at = now(),
+        completed_at = EXCLUDED.completed_at,
+        updated_at = now()`,
+      [
+        child.id,
+        activityId,
+        actProgStatus,
+        initialStatus === 'graded' ? 100 : 80,
+        subResult.rows[0]?.id || null,
+        initialStatus === 'graded' ? new Date() : null,
+      ]
+    );
 
     // Update overall lesson progress
     await updateLessonProgress(child.id, activity.course_id, activity.lesson_id);
@@ -717,12 +790,31 @@ async function submitQuiz(req, res, next) {
       [quizId, child.id, score, totalPoints, JSON.stringify(answers || {})]
     );
 
+    const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
+    const isPassed = percentage >= 60;
+
+    // Record attempt lifecycle in student_quiz_attempts
+    await query(
+      `INSERT INTO student_quiz_attempts (
+        student_id, quiz_id, status, score, total_points,
+        percentage, is_passed, started_at, completed_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())`,
+      [
+        child.id,
+        quizId,
+        isPassed ? 'completed' : 'failed',
+        score,
+        totalPoints,
+        percentage,
+        isPassed,
+      ]
+    );
+
     // Update lesson progress
     await updateLessonProgress(child.id, first.course_id, first.lesson_id);
 
-    const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
     const message = percentage >= 80 ? '🎉 Amazing job! You did great!' :
-                    percentage >= 50 ? '⭐ Good work! Keep practicing!' : '💪 Good effort! Try again to improve!';
+                    percentage >= 60 ? '⭐ Good work! You passed!' : '💪 Keep practicing and try again!';
 
     res.json({
       success: true,
@@ -739,15 +831,109 @@ async function submitQuiz(req, res, next) {
   }
 }
 
-// POST /api/child/videos/:id/watch
-async function watchVideo(req, res, next) {
+/**
+ * Helper: Merge overlapping/consecutive watched intervals to calculate true unique watched seconds
+ */
+function mergeWatchIntervals(intervals) {
+  if (!intervals || intervals.length === 0) return 0;
+  const sorted = [...intervals].sort((a, b) => Number(a.start_seconds) - Number(b.start_seconds));
+  const merged = [];
+  let current = { start: Number(sorted[0].start_seconds), end: Number(sorted[0].end_seconds) };
+
+  for (let i = 1; i < sorted.length; i++) {
+    const nextStart = Number(sorted[i].start_seconds);
+    const nextEnd = Number(sorted[i].end_seconds);
+
+    if (nextStart <= current.end) {
+      current.end = Math.max(current.end, nextEnd);
+    } else {
+      merged.push(current);
+      current = { start: nextStart, end: nextEnd };
+    }
+  }
+  merged.push(current);
+
+  const totalSeconds = merged.reduce((acc, intv) => acc + Math.max(0, intv.end - intv.start), 0);
+  return Math.round(totalSeconds);
+}
+
+// POST /api/child/lessons/:lessonId/session/ping
+async function pingLearningSession(req, res, next) {
+  try {
+    const { lessonId } = req.params;
+    const { active_seconds_delta = 5, status = 'in_progress' } = req.body;
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    // Validate lesson & course
+    const lessonRes = await query(
+      `SELECT l.id, l.course_id FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = $1`,
+      [lessonId]
+    );
+    if (lessonRes.rows.length === 0) return res.status(404).json({ error: 'Lesson not found' });
+    const { course_id } = lessonRes.rows[0];
+
+    // Cap delta per ping to max 15 seconds to prevent spoofing
+    const delta = status === 'paused' ? 0 : Math.min(15, Math.max(0, Number(active_seconds_delta) || 0));
+
+    const sessionRes = await query(
+      `INSERT INTO learning_sessions (student_id, course_id, lesson_id, started_at, last_active_at, total_active_seconds, status)
+       VALUES ($1, $2, $3, now(), now(), $4, $5)
+       ON CONFLICT (student_id, lesson_id) DO UPDATE -- if table had unique or latest session
+       RETURNING id, total_active_seconds`,
+      // If no unique constraint, select latest session or insert
+      null
+    ).catch(async () => {
+      // Find latest unended session for student & lesson
+      const existing = await query(
+        `SELECT id, total_active_seconds FROM learning_sessions
+         WHERE student_id = $1 AND lesson_id = $2
+         ORDER BY started_at DESC LIMIT 1`,
+        [child.id, lessonId]
+      );
+
+      if (existing.rows.length > 0) {
+        const updateRes = await query(
+          `UPDATE learning_sessions
+           SET total_active_seconds = total_active_seconds + $1,
+               last_active_at = now(),
+               status = $2
+           WHERE id = $3
+           RETURNING id, total_active_seconds`,
+          [delta, status, existing.rows[0].id]
+        );
+        return updateRes;
+      } else {
+        const insertRes = await query(
+          `INSERT INTO learning_sessions (student_id, course_id, lesson_id, started_at, last_active_at, total_active_seconds, status)
+           VALUES ($1, $2, $3, now(), now(), $4, $5)
+           RETURNING id, total_active_seconds`,
+          [child.id, course_id, lessonId, delta, status]
+        );
+        return insertRes;
+      }
+    });
+
+    res.json({
+      success: true,
+      total_active_seconds: sessionRes.rows[0]?.total_active_seconds || 0,
+      status,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/child/videos/:id/progress
+async function updateVideoProgress(req, res, next) {
   try {
     const { id } = req.params;
+    const { current_position = 0, duration = 0, interval } = req.body;
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
     const vidRes = await query(
-      `SELECT v.id, v.lesson_id, c.id as course_id, c.age_group_id
+      `SELECT v.id, v.lesson_id, v.duration_seconds, c.id as course_id, c.age_group_id
        FROM videos v
        JOIN lessons l ON l.id = v.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -755,39 +941,116 @@ async function watchVideo(req, res, next) {
       [id]
     );
 
-    if (vidRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Video not found' });
-    }
-
+    if (vidRes.rows.length === 0) return res.status(404).json({ error: 'Video not found' });
     const vid = vidRes.rows[0];
-    if (vid.age_group_id !== child.age_group_id) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (vid.age_group_id !== child.age_group_id) return res.status(403).json({ error: 'Access denied' });
+
+    const effectiveDuration = Math.max(1, Number(duration) || Number(vid.duration_seconds) || 60);
+
+    // If a valid watched interval is provided, store it
+    if (interval && typeof interval.start === 'number' && typeof interval.end === 'number') {
+      const startSec = Math.max(0, Number(interval.start));
+      const endSec = Math.max(startSec, Number(interval.end));
+      const delta = endSec - startSec;
+      // Accept intervals up to 60 seconds per report to guard against spoofing
+      if (delta > 0 && delta <= 60) {
+        await query(
+          `INSERT INTO student_video_watch_intervals (student_id, video_id, start_seconds, end_seconds)
+           VALUES ($1, $2, $3, $4)`,
+          [child.id, id, startSec, endSec]
+        );
+      }
     }
 
-    await query(
-      `INSERT INTO video_watches (video_id, student_id, watched_at)
-       VALUES ($1, $2, now())
-       ON CONFLICT (video_id, student_id) DO UPDATE SET watched_at = now()`,
-      [id, child.id]
+    // Calculate unique watched seconds from all recorded intervals
+    const intervalsRes = await query(
+      `SELECT start_seconds, end_seconds FROM student_video_watch_intervals
+       WHERE student_id = $1 AND video_id = $2`,
+      [child.id, id]
     );
 
+    const uniqueWatched = mergeWatchIntervals(intervalsRes.rows);
+    const progressPct = Math.min(100, Math.round((uniqueWatched / effectiveDuration) * 100));
+    const isCompleted = progressPct >= 90;
+    const status = isCompleted ? 'completed' : 'in_progress';
+
+    // Upsert into student_video_progress
+    const progRes = await query(
+      `INSERT INTO student_video_progress (
+        student_id, video_id, duration_seconds, watched_seconds,
+        last_position_seconds, progress_percentage, status, started_at, completed_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, now())
+      ON CONFLICT (student_id, video_id)
+      DO UPDATE SET
+        duration_seconds = EXCLUDED.duration_seconds,
+        watched_seconds = EXCLUDED.watched_seconds,
+        last_position_seconds = EXCLUDED.last_position_seconds,
+        progress_percentage = EXCLUDED.progress_percentage,
+        status = CASE WHEN student_video_progress.status = 'completed' THEN 'completed' ELSE EXCLUDED.status END,
+        completed_at = CASE WHEN student_video_progress.completed_at IS NOT NULL THEN student_video_progress.completed_at ELSE EXCLUDED.completed_at END,
+        updated_at = now()
+      RETURNING *`,
+      [
+        child.id,
+        id,
+        effectiveDuration,
+        uniqueWatched,
+        Math.round(Number(current_position) || 0),
+        progressPct,
+        status,
+        isCompleted ? new Date() : null,
+      ]
+    );
+
+    // Sync legacy video_watches if completed
+    if (isCompleted) {
+      await query(
+        `INSERT INTO video_watches (video_id, student_id, watched_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (video_id, student_id) DO UPDATE SET watched_at = now()`,
+        [id, child.id]
+      );
+    }
+
+    // Trigger lesson progress re-evaluation
     await updateLessonProgress(child.id, vid.course_id, vid.lesson_id);
 
-    res.json({ success: true, watched: true });
+    res.json({
+      success: true,
+      status: progRes.rows[0]?.status || status,
+      progress_percentage: progRes.rows[0]?.progress_percentage || progressPct,
+      watched_seconds: uniqueWatched,
+      duration_seconds: effectiveDuration,
+      last_position_seconds: Math.round(Number(current_position) || 0),
+      is_completed: isCompleted || progRes.rows[0]?.status === 'completed',
+    });
   } catch (err) {
     next(err);
   }
 }
 
-// POST /api/child/materials/:id/listen
-async function listenMaterial(req, res, next) {
+// POST /api/child/videos/:id/watch (Legacy fallback with genuine interval)
+async function watchVideo(req, res, next) {
+  return updateVideoProgress(req, res, next);
+}
+
+// POST /api/child/materials/:id/progress
+async function updateMaterialProgress(req, res, next) {
   try {
     const { id } = req.params;
+    const {
+      duration = 0,
+      current_position = 0,
+      listened_seconds = 0,
+      pages_viewed = 0,
+      total_pages = 1,
+    } = req.body;
+
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
     const matRes = await query(
-      `SELECT lm.id, lm.lesson_id, c.id as course_id, c.age_group_id
+      `SELECT lm.id, lm.lesson_id, lm.material_type, c.id as course_id, c.age_group_id
        FROM learning_materials lm
        JOIN lessons l ON l.id = lm.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -795,152 +1058,333 @@ async function listenMaterial(req, res, next) {
       [id]
     );
 
-    if (matRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Material not found' });
-    }
-
+    if (matRes.rows.length === 0) return res.status(404).json({ error: 'Material not found' });
     const mat = matRes.rows[0];
-    if (mat.age_group_id !== child.age_group_id) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (mat.age_group_id !== child.age_group_id) return res.status(403).json({ error: 'Access denied' });
+
+    let progressPct = 0;
+    let isCompleted = false;
+
+    if (mat.material_type === 'audio') {
+      const dur = Math.max(1, Number(duration) || 60);
+      const listened = Number(listened_seconds) || Number(current_position) || 0;
+      progressPct = Math.min(100, Math.round((listened / dur) * 100));
+      isCompleted = progressPct >= 90;
+    } else if (mat.material_type === 'pdf') {
+      const pages = Math.max(1, Number(pages_viewed) || 1);
+      const totPages = Math.max(pages, Number(total_pages) || 1);
+      progressPct = Math.min(100, Math.round((pages / totPages) * 100));
+      isCompleted = progressPct >= 80;
+    } else {
+      // images / documents
+      progressPct = 100;
+      isCompleted = true;
     }
 
-    await query(
-      `INSERT INTO material_listens (material_id, student_id, listened_at)
-       VALUES ($1, $2, now())
-       ON CONFLICT (material_id, student_id) DO UPDATE SET listened_at = now()`,
-      [id, child.id]
+    const status = isCompleted ? 'completed' : 'in_progress';
+
+    const progRes = await query(
+      `INSERT INTO student_material_progress (
+        student_id, material_id, duration_seconds, listened_seconds,
+        last_position_seconds, pages_viewed, total_pages, progress_percentage,
+        status, started_at, completed_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10, now())
+      ON CONFLICT (student_id, material_id)
+      DO UPDATE SET
+        listened_seconds = GREATEST(student_material_progress.listened_seconds, EXCLUDED.listened_seconds),
+        last_position_seconds = EXCLUDED.last_position_seconds,
+        pages_viewed = GREATEST(student_material_progress.pages_viewed, EXCLUDED.pages_viewed),
+        total_pages = EXCLUDED.total_pages,
+        progress_percentage = GREATEST(student_material_progress.progress_percentage, EXCLUDED.progress_percentage),
+        status = CASE WHEN student_material_progress.status = 'completed' THEN 'completed' ELSE EXCLUDED.status END,
+        completed_at = CASE WHEN student_material_progress.completed_at IS NOT NULL THEN student_material_progress.completed_at ELSE EXCLUDED.completed_at END,
+        updated_at = now()
+      RETURNING *`,
+      [
+        child.id,
+        id,
+        Number(duration) || 0,
+        Number(listened_seconds) || 0,
+        Math.round(Number(current_position) || 0),
+        Number(pages_viewed) || 0,
+        Number(total_pages) || 1,
+        progressPct,
+        status,
+        isCompleted ? new Date() : null,
+      ]
     );
+
+    if (isCompleted) {
+      await query(
+        `INSERT INTO material_listens (material_id, student_id, listened_at)
+         VALUES ($1, $2, now())
+         ON CONFLICT (material_id, student_id) DO UPDATE SET listened_at = now()`,
+        [id, child.id]
+      );
+    }
 
     await updateLessonProgress(child.id, mat.course_id, mat.lesson_id);
 
-    res.json({ success: true, listened: true });
+    res.json({
+      success: true,
+      status: progRes.rows[0]?.status || status,
+      progress_percentage: progRes.rows[0]?.progress_percentage || progressPct,
+      is_completed: isCompleted || progRes.rows[0]?.status === 'completed',
+    });
   } catch (err) {
     next(err);
   }
 }
 
-// GET /api/child/progress
-async function getProgress(req, res, next) {
+// POST /api/child/materials/:id/listen (Legacy fallback)
+async function listenMaterial(req, res, next) {
+  return updateMaterialProgress(req, res, next);
+}
+
+// POST /api/child/activities/:activityId/start
+async function startActivity(req, res, next) {
   try {
+    const { activityId } = req.params;
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
-    const courseProgress = await query(
-      `SELECT c.id, c.title, c.thumbnail_url,
-              ag.name as age_group_name,
-              COUNT(DISTINCT l.id)::int as total_lessons,
-              COUNT(DISTINCT a.id)::int as total_activities,
-              COUNT(DISTINCT asub.activity_id)::int as completed_activities,
-              COUNT(DISTINCT q.id)::int as total_quizzes,
-              COUNT(DISTINCT qr.quiz_id)::int as completed_quizzes,
-              COALESCE(
-                ROUND(
-                  AVG(COALESCE(p.completion_percentage, 0))
-                ), 0
-              )::int as completion_percentage
-       FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
-       LEFT JOIN lessons l ON l.course_id = c.id
-       LEFT JOIN activities a ON a.lesson_id = l.id AND a.status = 'active'
-       LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $1
-       LEFT JOIN quizzes q ON q.lesson_id = l.id
-       LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $1
-       LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id = l.id
-       WHERE c.age_group_id = $2 AND c.status = 'published'
-       GROUP BY c.id, ag.name
-       ORDER BY c.created_at ASC`,
-      [child.id, child.age_group_id]
-    );
-
-    res.json({ course_progress: courseProgress.rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// GET /api/child/achievements
-async function getAchievements(req, res, next) {
-  try {
-    const child = await resolveChild(req);
-    if (!child) return res.status(404).json({ error: 'Child profile not found' });
-
-    const achievements = await computeAchievements(child.id);
-    res.json({ achievements });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// GET /api/child/notifications
-async function getNotifications(req, res, next) {
-  try {
-    const notifs = await query(
-      `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30`,
-      [req.user.id]
-    );
-    res.json({ notifications: notifs.rows });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// PATCH /api/child/notifications/:id/read
-async function markNotificationRead(req, res, next) {
-  try {
-    const { id } = req.params;
     await query(
-      `UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2`,
-      [id, req.user.id]
+      `INSERT INTO student_activity_progress (student_id, activity_id, status, progress_percentage, started_at, updated_at)
+       VALUES ($1, $2, 'in_progress', 10, now(), now())
+       ON CONFLICT (student_id, activity_id)
+       DO UPDATE SET
+         status = CASE WHEN student_activity_progress.status = 'not_started' THEN 'in_progress' ELSE student_activity_progress.status END,
+         updated_at = now()`,
+      [child.id, activityId]
     );
-    res.json({ success: true });
+
+    res.json({ success: true, status: 'in_progress' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/child/quizzes/:quizId/start
+async function startQuiz(req, res, next) {
+  try {
+    const { quizId } = req.params;
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    await query(
+      `INSERT INTO student_quiz_attempts (student_id, quiz_id, status, started_at)
+       VALUES ($1, $2, 'in_progress', now())`,
+      [child.id, quizId]
+    );
+
+    res.json({ success: true, status: 'in_progress' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/child/lessons/:lessonId/progress
+async function getLessonProgress(req, res, next) {
+  try {
+    const { lessonId } = req.params;
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    const [lessonRes, vidsRes, matsRes, actsRes, quizRes, sessRes] = await Promise.all([
+      query(
+        `SELECT p.status, p.completion_percentage, l.id, l.title, l.course_id
+         FROM lessons l
+         LEFT JOIN progress p ON p.lesson_id = l.id AND p.student_id = $2
+         WHERE l.id = $1`,
+        [lessonId, child.id]
+      ),
+      query(
+        `SELECT v.id, v.title, v.duration_seconds,
+                COALESCE(svp.status, 'not_started') as status,
+                COALESCE(svp.progress_percentage, 0)::int as progress_percentage,
+                COALESCE(svp.watched_seconds, 0)::int as watched_seconds,
+                COALESCE(svp.last_position_seconds, 0)::int as last_position_seconds,
+                (svp.status = 'completed') as is_completed
+         FROM videos v
+         LEFT JOIN student_video_progress svp ON svp.video_id = v.id AND svp.student_id = $2
+         WHERE v.lesson_id = $1`,
+        [lessonId, child.id]
+      ),
+      query(
+        `SELECT lm.id, lm.title, lm.material_type,
+                COALESCE(smp.status, 'not_started') as status,
+                COALESCE(smp.progress_percentage, 0)::int as progress_percentage,
+                COALESCE(smp.last_position_seconds, 0)::int as last_position_seconds,
+                (smp.status = 'completed') as is_completed
+         FROM learning_materials lm
+         LEFT JOIN student_material_progress smp ON smp.material_id = lm.id AND smp.student_id = $2
+         WHERE lm.lesson_id = $1 AND lm.status = 'active'`,
+        [lessonId, child.id]
+      ),
+      query(
+        `SELECT a.id, a.title, a.activity_type,
+                COALESCE(sap.status, asub.status::text, 'not_started') as status,
+                (asub.status = 'graded' OR sap.status = 'completed') as is_completed,
+                asub.score, asub.feedback
+         FROM activities a
+         LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $2
+         LEFT JOIN student_activity_progress sap ON sap.activity_id = a.id AND sap.student_id = $2
+         WHERE a.lesson_id = $1 AND a.status = 'active'`,
+        [lessonId, child.id]
+      ),
+      query(
+        `SELECT q.id, q.title,
+                (qr.id IS NOT NULL AND qr.score >= (qr.total_points * 0.6)) as is_completed,
+                (qr.id IS NOT NULL AND qr.score >= (qr.total_points * 0.6)) as passed,
+                qr.score, qr.total_points
+         FROM quizzes q
+         LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $2
+         WHERE q.lesson_id = $1`,
+        [lessonId, child.id]
+      ),
+      query(
+        `SELECT total_active_seconds FROM learning_sessions
+         WHERE student_id = $1 AND lesson_id = $2
+         ORDER BY started_at DESC LIMIT 1`,
+        [child.id, lessonId]
+      ),
+    ]);
+
+    const row = lessonRes.rows[0];
+    if (!row) return res.status(404).json({ error: 'Lesson not found' });
+
+    res.json({
+      lesson_id: row.id,
+      title: row.title,
+      status: row.status || 'not_started',
+      completion_percentage: row.completion_percentage || 0,
+      active_learning_seconds: sessRes.rows[0]?.total_active_seconds || 0,
+      components: {
+        videos: vidsRes.rows,
+        materials: matsRes.rows,
+        activities: actsRes.rows,
+        quizzes: quizRes.rows,
+      },
+      all_completed: row.status === 'completed',
+    });
   } catch (err) {
     next(err);
   }
 }
 
 /**
- * Helper: Recalculate lesson and course progress based on completed items
+ * Helper: Master Lesson Progress Calculation
+ * Verifies all required lesson components have actually been satisfied.
  */
 async function updateLessonProgress(studentId, courseId, lessonId) {
   try {
-    // Count totals vs completed
-    const [counts, watched, listened, subbed, quizzed] = await Promise.all([
-      query(
-        `SELECT
-          (SELECT COUNT(*)::int FROM learning_materials WHERE lesson_id = $1 AND status = 'active') as mats,
-          (SELECT COUNT(*)::int FROM videos WHERE lesson_id = $1) as vids,
-          (SELECT COUNT(*)::int FROM activities WHERE lesson_id = $1 AND status = 'active') as acts,
-          (SELECT COUNT(*)::int FROM quizzes WHERE lesson_id = $1) as quiz`,
-        [lessonId]
-      ),
-      query(`SELECT COUNT(*)::int as cnt FROM video_watches vw JOIN videos v ON v.id = vw.video_id WHERE v.lesson_id = $1 AND vw.student_id = $2`, [lessonId, studentId]),
-      query(`SELECT COUNT(*)::int as cnt FROM material_listens ml JOIN learning_materials lm ON lm.id = ml.material_id WHERE lm.lesson_id = $1 AND ml.student_id = $2`, [lessonId, studentId]),
-      query(`SELECT COUNT(*)::int as cnt FROM activity_submissions asub JOIN activities a ON a.id = asub.activity_id WHERE a.lesson_id = $1 AND asub.student_id = $2`, [lessonId, studentId]),
-      query(`SELECT COUNT(*)::int as cnt FROM quiz_results qr JOIN quizzes q ON q.id = qr.quiz_id WHERE q.lesson_id = $1 AND qr.student_id = $2`, [lessonId, studentId]),
+    const [vidsRes, matsRes, actsRes, quizRes] = await Promise.all([
+      query(`SELECT id, duration_seconds FROM videos WHERE lesson_id = $1`, [lessonId]),
+      query(`SELECT id, material_type FROM learning_materials WHERE lesson_id = $1 AND status = 'active'`, [lessonId]),
+      query(`SELECT id FROM activities WHERE lesson_id = $1 AND status = 'active'`, [lessonId]),
+      query(`SELECT id FROM quizzes WHERE lesson_id = $1`, [lessonId]),
     ]);
 
-    const c = counts.rows[0];
-    const totalItems = (c.vids || 0) + (c.acts || 0) + (c.quiz || 0);
-    const completedItems = (watched.rows[0]?.cnt || 0) + (subbed.rows[0]?.cnt || 0) + (quizzed.rows[0]?.cnt || 0);
+    const totalVideos = vidsRes.rows.length;
+    const totalMaterials = matsRes.rows.length;
+    const totalActivities = actsRes.rows.length;
+    const totalQuizzes = quizRes.rows.length;
+    const totalComponents = totalVideos + totalMaterials + totalActivities + totalQuizzes;
 
-    let percentage = 0;
-    if (totalItems > 0) {
-      percentage = Math.min(100, Math.round((completedItems / totalItems) * 100));
-    } else {
-      percentage = 100;
+    if (totalComponents === 0) {
+      return;
     }
 
-    const status = percentage >= 100 ? 'completed' : percentage > 0 ? 'in_progress' : 'not_started';
+    const [compVidsRes, compMatsRes, compActsRes, compQuizRes] = await Promise.all([
+      query(
+        `SELECT video_id FROM student_video_progress
+         WHERE student_id = $1 AND video_id = ANY($2::bigint[]) AND status = 'completed'`,
+        [studentId, totalVideos > 0 ? vidsRes.rows.map(v => v.id) : [-1]]
+      ),
+      query(
+        `SELECT material_id FROM student_material_progress
+         WHERE student_id = $1 AND material_id = ANY($2::bigint[]) AND status = 'completed'`,
+        [studentId, totalMaterials > 0 ? matsRes.rows.map(m => m.id) : [-1]]
+      ),
+      query(
+        `SELECT DISTINCT a.id FROM activities a
+         LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $1
+         LEFT JOIN student_activity_progress sap ON sap.activity_id = a.id AND sap.student_id = $1
+         WHERE a.lesson_id = $2 AND (asub.status = 'graded' OR sap.status = 'completed')`,
+        [studentId, lessonId]
+      ),
+      query(
+        `SELECT DISTINCT q.id FROM quizzes q
+         JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $1
+         WHERE q.lesson_id = $2 AND (qr.score >= (qr.total_points * 0.6))`,
+        [studentId, lessonId]
+      ),
+    ]);
+
+    const completedVideos = compVidsRes.rows.length;
+    const completedMaterials = compMatsRes.rows.length;
+    const completedActivities = compActsRes.rows.length;
+    const completedQuizzes = compQuizRes.rows.length;
+    const totalCompleted = completedVideos + completedMaterials + completedActivities + completedQuizzes;
+
+    const percentage = Math.min(100, Math.round((totalCompleted / totalComponents) * 100));
+    const allCompleted = totalCompleted >= totalComponents;
+    const status = allCompleted ? 'completed' : percentage > 0 ? 'in_progress' : 'not_started';
 
     await query(
       `INSERT INTO progress (student_id, course_id, lesson_id, status, completion_percentage, last_accessed_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, now(), now())
        ON CONFLICT (student_id, course_id, lesson_id)
-       DO UPDATE SET status = $4, completion_percentage = $5, last_accessed_at = now(), updated_at = now()`,
+       DO UPDATE SET
+         status = $4,
+         completion_percentage = $5,
+         last_accessed_at = now(),
+         updated_at = now()`,
       [studentId, courseId, lessonId, status, percentage]
     );
+
+    await updateCourseProgress(studentId, courseId);
   } catch (err) {
     console.error('Error updating lesson progress:', err);
+  }
+}
+
+/**
+ * Helper: Master Course Progress Calculation
+ * Course progress is determined purely by verified completed lessons.
+ */
+async function updateCourseProgress(studentId, courseId) {
+  try {
+    const lessonsCount = await query(
+      `SELECT COUNT(DISTINCT id)::int as total FROM lessons WHERE course_id = $1`,
+      [courseId]
+    );
+    const totalLessons = lessonsCount.rows[0]?.total || 0;
+    if (totalLessons === 0) return;
+
+    const completedCount = await query(
+      `SELECT COUNT(DISTINCT lesson_id)::int as completed
+       FROM progress
+       WHERE student_id = $1 AND course_id = $2 AND status = 'completed' AND lesson_id IS NOT NULL`,
+      [studentId, courseId]
+    );
+    const completedLessons = completedCount.rows[0]?.completed || 0;
+    const coursePercentage = Math.min(100, Math.round((completedLessons / totalLessons) * 100));
+    const courseStatus = coursePercentage >= 100 ? 'completed' : coursePercentage > 0 ? 'in_progress' : 'not_started';
+
+    await query(
+      `INSERT INTO progress (student_id, course_id, lesson_id, status, completion_percentage, last_accessed_at, updated_at)
+       VALUES ($1, $2, NULL, $3, $4, now(), now())
+       ON CONFLICT (student_id, course_id, lesson_id)
+       DO UPDATE SET
+         status = $3,
+         completion_percentage = $4,
+         last_accessed_at = now(),
+         updated_at = now()`,
+      [studentId, courseId, courseStatus, coursePercentage]
+    );
+  } catch (err) {
+    console.error('Error updating course progress:', err);
   }
 }
 
@@ -1038,6 +1482,101 @@ async function computeAchievements(studentId) {
   ];
 }
 
+// GET /api/child/progress - Overall progress summary for child
+async function getProgress(req, res, next) {
+  try {
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    const courseProgress = await query(
+      `SELECT c.id, c.title, c.thumbnail_url,
+              COUNT(DISTINCT l.id)::int as total_lessons,
+              COUNT(DISTINCT CASE WHEN p.status = 'completed' AND p.lesson_id IS NOT NULL THEN p.lesson_id END)::int as completed_lessons,
+              COALESCE(cp.completion_percentage, 0)::int as completion_percentage,
+              COALESCE(cp.status, 'not_started') as status
+       FROM courses c
+       LEFT JOIN lessons l ON l.course_id = c.id
+       LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id IS NOT NULL
+       LEFT JOIN progress cp ON cp.course_id = c.id AND cp.student_id = $1 AND cp.lesson_id IS NULL
+       WHERE c.age_group_id = $2 AND c.status = 'published'
+       GROUP BY c.id, cp.completion_percentage, cp.status
+       ORDER BY c.created_at DESC`,
+      [child.id, child.age_group_id]
+    );
+
+    const sessionRes = await query(
+      `SELECT COALESCE(SUM(total_active_seconds), 0)::int as total_active_seconds
+       FROM learning_sessions
+       WHERE student_id = $1`,
+      [child.id]
+    );
+
+    res.json({
+      course_progress: courseProgress.rows,
+      total_active_seconds: sessionRes.rows[0]?.total_active_seconds || 0,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/child/achievements
+async function getAchievements(req, res, next) {
+  try {
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    const badges = await computeAchievements(child.id);
+    const earnedCount = badges.filter(b => b.earned).length;
+
+    res.json({
+      badges,
+      total_badges: badges.length,
+      earned_badges: earnedCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/child/notifications
+async function getNotifications(req, res, next) {
+  try {
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    const result = await query(
+      `SELECT * FROM notifications 
+       WHERE user_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 50`,
+      [child.user_id]
+    );
+
+    res.json({ notifications: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/child/notifications/:id/read
+async function markNotificationRead(req, res, next) {
+  try {
+    const { id } = req.params;
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    await query(
+      'UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2',
+      [id, child.user_id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /api/child/activities - list all assigned activities across child's courses
 async function listAllActivities(req, res, next) {
   try {
@@ -1096,6 +1635,12 @@ module.exports = {
   listCourses,
   getCourse,
   getLesson,
+  getLessonProgress,
+  pingLearningSession,
+  updateVideoProgress,
+  updateMaterialProgress,
+  startActivity,
+  startQuiz,
   getActivity,
   listAllActivities,
   submitActivity,
@@ -1109,4 +1654,5 @@ module.exports = {
   getNotifications,
   markNotificationRead,
 };
+
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import { resolveFileUrl } from '../../utils/fileUrl';
@@ -10,12 +10,24 @@ export default function ChildLessonDetail() {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
 
+  // Active Learning Session Stopwatch
+  const [activeSeconds, setActiveSeconds] = useState(0);
+  const [isTabActive, setIsTabActive] = useState(true);
+
   // Interactive media modals
   const [activePdf, setActivePdf] = useState(null);
   const [activeImage, setActiveImage] = useState(null);
   const [activeAudio, setActiveAudio] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
 
+  // Video Resume & Interval Tracking State
+  const [videoResumePrompt, setVideoResumePrompt] = useState(null);
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const lastVideoReportRef = useRef(0);
+  const lastAudioReportRef = useRef(0);
+
+  // 1. Fetch Lesson & Initial Session Time
   useEffect(() => {
     fetchLesson();
   }, [id]);
@@ -25,6 +37,7 @@ export default function ChildLessonDetail() {
       setLoading(true);
       const res = await axiosClient.get(`/child/lessons/${id}`);
       setData(res.data);
+      setActiveSeconds(res.data?.active_learning_seconds || res.data?.lesson?.active_learning_seconds || 0);
     } catch (err) {
       setError(err.response?.data?.error || 'Oops! We could not load this lesson. Please try again!');
     } finally {
@@ -32,37 +45,197 @@ export default function ChildLessonDetail() {
     }
   };
 
-  const handleWatchVideo = async (video) => {
+  // 2. Window visibility listener for learning stopwatch
+  useEffect(() => {
+    const handleVisibility = () => {
+      const active = !document.hidden && document.hasFocus();
+      setIsTabActive(active);
+    };
+
+    window.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('blur', () => setIsTabActive(false));
+    window.addEventListener('focus', () => setIsTabActive(true));
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', () => setIsTabActive(false));
+      window.removeEventListener('focus', () => setIsTabActive(true));
+    };
+  }, []);
+
+  // 3. Active stopwatch & periodic session ping
+  useEffect(() => {
+    if (!data || !isTabActive) return;
+
+    // Increment visible active seconds each second
+    const secTimer = setInterval(() => {
+      setActiveSeconds((prev) => prev + 1);
+    }, 1000);
+
+    // Ping backend every 5 seconds with active delta
+    const pingTimer = setInterval(async () => {
+      try {
+        await axiosClient.post(`/child/lessons/${id}/session/ping`, { delta_seconds: 5 });
+      } catch (err) {
+        console.warn('Session ping failed:', err);
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(secTimer);
+      clearInterval(pingTimer);
+    };
+  }, [data, isTabActive, id]);
+
+  // Video launch handler with resume detection
+  const handleOpenVideo = (video) => {
     setActiveVideo(video);
-    try {
-      await axiosClient.post(`/child/videos/${video.id}/watch`);
-      // Update local state to show watched
-      setData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          videos: prev.videos.map((v) => (v.id === video.id ? { ...v, watched: true } : v)),
-        };
+    if (video.last_position_seconds > 5 && !video.is_completed) {
+      setVideoResumePrompt({
+        position: video.last_position_seconds,
+        video,
       });
-    } catch (e) {
-      console.warn('Watch video track failed:', e);
+    } else {
+      setVideoResumePrompt(null);
+    }
+    lastVideoReportRef.current = 0;
+  };
+
+  // Video time update event: tracks genuine watch intervals
+  const handleVideoTimeUpdate = async () => {
+    const vid = videoRef.current;
+    if (!vid || !activeVideo) return;
+
+    const current = vid.currentTime;
+    const dur = vid.duration || activeVideo.duration_seconds || 60;
+    const prev = lastVideoReportRef.current;
+
+    // Report in chunks of 3-5 seconds or at completion
+    if (current - prev >= 3 || current >= dur - 0.5) {
+      const fromSec = Math.max(0, prev);
+      const toSec = Math.min(dur, current);
+      lastVideoReportRef.current = current;
+
+      try {
+        const res = await axiosClient.post(`/child/videos/${activeVideo.id}/progress`, {
+          duration: Math.round(dur),
+          current_position: current,
+          interval: { from: fromSec, to: toSec },
+        });
+
+        if (res.data) {
+          setData((prevData) => {
+            if (!prevData) return prevData;
+            return {
+              ...prevData,
+              videos: prevData.videos.map((v) =>
+                v.id === activeVideo.id
+                  ? {
+                      ...v,
+                      watched: res.data.is_completed,
+                      is_completed: res.data.is_completed,
+                      progress_percentage: res.data.progress_percentage,
+                      watched_seconds: res.data.watched_seconds,
+                      last_position_seconds: res.data.last_position_seconds,
+                    }
+                  : v
+              ),
+            };
+          });
+        }
+      } catch (e) {
+        console.warn('Video progress ping failed:', e);
+      }
     }
   };
 
-  const handleListenAudio = async (material) => {
+  // Audio listen handler & progress tracking
+  const handleOpenAudio = (material) => {
     setActiveAudio(material);
+    lastAudioReportRef.current = 0;
+  };
+
+  const handleAudioTimeUpdate = async () => {
+    const aud = audioRef.current;
+    if (!aud || !activeAudio) return;
+
+    const current = aud.currentTime;
+    const dur = aud.duration || 60;
+    const prev = lastAudioReportRef.current;
+
+    if (current - prev >= 4 || current >= dur - 0.5) {
+      lastAudioReportRef.current = current;
+      try {
+        const res = await axiosClient.post(`/child/materials/${activeAudio.id}/progress`, {
+          duration: Math.round(dur),
+          current_position: current,
+          listened_seconds: current,
+        });
+
+        if (res.data) {
+          setData((prevData) => {
+            if (!prevData) return prevData;
+            return {
+              ...prevData,
+              materials: prevData.materials.map((m) =>
+                m.id === activeAudio.id
+                  ? {
+                      ...m,
+                      listened: res.data.is_completed,
+                      is_completed: res.data.is_completed,
+                      progress_percentage: res.data.progress_percentage,
+                    }
+                  : m
+              ),
+            };
+          });
+        }
+      } catch (e) {
+        console.warn('Audio progress ping failed:', e);
+      }
+    }
+  };
+
+  // PDF page view ping
+  const handleOpenPdf = async (material) => {
+    setActivePdf({
+      url: resolveFileUrl(material.file_url),
+      title: material.title,
+      id: material.id,
+    });
     try {
-      await axiosClient.post(`/child/materials/${material.id}/listen`);
-      setData((prev) => {
-        if (!prev) return prev;
+      await axiosClient.post(`/child/materials/${material.id}/progress`, {
+        pages_viewed: 1,
+        total_pages: 1,
+      });
+      setData((prevData) => {
+        if (!prevData) return prevData;
         return {
-          ...prev,
-          materials: prev.materials.map((m) => (m.id === material.id ? { ...m, listened: true } : m)),
+          ...prevData,
+          materials: prevData.materials.map((m) =>
+            m.id === material.id
+              ? {
+                  ...m,
+                  is_completed: true,
+                  progress_percentage: 100,
+                }
+              : m
+          ),
         };
       });
     } catch (e) {
-      console.warn('Listen material track failed:', e);
+      console.warn('PDF view ping failed:', e);
     }
+  };
+
+  const formatTimer = (totalSec) => {
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    if (hrs > 0) {
+      return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
   if (loading) {
@@ -96,13 +269,16 @@ export default function ChildLessonDetail() {
 
   const { lesson, materials = [], videos = [], activities = [], quizzes = [] } = data;
 
-  // Calculate live lesson progress
-  const totalItems = videos.length + activities.length + quizzes.length;
-  const completedVideos = videos.filter((v) => v.watched).length;
-  const completedActivities = activities.filter((a) => a.submission_status === 'graded' || a.submission_status === 'pending').length;
-  const completedQuizzes = quizzes.filter((q) => q.result_id).length;
-  const totalCompleted = completedVideos + completedActivities + completedQuizzes;
+  // Real engagement status calculation
+  const totalItems = materials.length + videos.length + activities.length + quizzes.length;
+  const completedMaterials = materials.filter((m) => m.is_completed || m.listened).length;
+  const completedVideos = videos.filter((v) => v.is_completed || v.watched).length;
+  const completedActivities = activities.filter((a) => a.is_completed || a.submission_status === 'graded').length;
+  const completedQuizzes = quizzes.filter((q) => q.is_completed || q.is_passed).length;
+
+  const totalCompleted = completedMaterials + completedVideos + completedActivities + completedQuizzes;
   const lessonProgressPct = totalItems > 0 ? Math.round((totalCompleted / totalItems) * 100) : 100;
+  const isAllCompleted = totalItems > 0 && totalCompleted >= totalItems;
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '📖', count: null },
@@ -139,15 +315,33 @@ export default function ChildLessonDetail() {
             </p>
           </div>
 
-          {/* Lesson Completion Progress Badge */}
-          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-purple-200 rounded-3xl p-4 min-w-[200px] text-center shadow-inner">
-            <div className="text-xs font-black uppercase tracking-wider text-purple-700">Lesson Progress</div>
-            <div className="text-2xl sm:text-3xl font-black text-indigo-700 my-1">{lessonProgressPct}%</div>
-            <div className="w-full bg-purple-200 h-2.5 rounded-full overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-500"
-                style={{ width: `${lessonProgressPct}%` }}
-              />
+          {/* Active Learning Session Stopwatch & Lesson Progress */}
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-3xl p-4 min-w-[170px] text-center shadow-inner">
+              <div className="flex items-center justify-center gap-1 text-[11px] font-black uppercase tracking-wider text-amber-800">
+                <span className={`w-2 h-2 rounded-full ${isTabActive ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`}></span>
+                Learning Time
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-amber-900 my-1">
+                ⏱ {formatTimer(activeSeconds)}
+              </div>
+              <div className="text-[10px] font-bold text-amber-700">
+                {isTabActive ? '🟢 Active Focus' : '⏸️ Paused (Away)'}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-purple-200 rounded-3xl p-4 min-w-[180px] text-center shadow-inner">
+              <div className="text-[11px] font-black uppercase tracking-wider text-purple-700">Lesson Progress</div>
+              <div className="text-2xl sm:text-3xl font-black text-indigo-700 my-1">{lessonProgressPct}%</div>
+              <div className="w-full bg-purple-200 h-2.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${lessonProgressPct}%` }}
+                />
+              </div>
+              <div className="text-[10px] font-bold text-purple-600 mt-1">
+                {isAllCompleted ? '🎉 Complete!' : `${totalCompleted}/${totalItems} Finished`}
+              </div>
             </div>
           </div>
         </div>
@@ -244,46 +438,107 @@ export default function ChildLessonDetail() {
 
               {/* Progress Checklist */}
               <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200 space-y-3">
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                  <span>✅</span> Lesson Completion Checklist
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                    <span>✅</span> Lesson Completion Checklist
+                  </h3>
+                  <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-full">
+                    {totalCompleted} of {totalItems} items completed
+                  </span>
+                </div>
 
                 <div className="space-y-2">
-                  {videos.map((v) => (
-                    <div key={v.id} className="flex items-center justify-between text-xs font-bold p-2.5 rounded-2xl bg-white border border-slate-100">
-                      <div className="flex items-center gap-2 truncate">
-                        <span>🎬</span>
-                        <span className="truncate">{v.title}</span>
+                  {/* Materials items */}
+                  {materials.map((m) => {
+                    const isDone = m.is_completed || m.listened;
+                    const inProg = !isDone && (m.progress_percentage > 0 || m.pages_viewed > 0);
+                    return (
+                      <div key={m.id} className="flex items-center justify-between text-xs font-bold p-3 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 truncate">
+                          <span>{m.material_type === 'audio' ? '🎧' : '📄'}</span>
+                          <span className="truncate">{m.title}</span>
+                          <span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-extrabold">{m.material_type}</span>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${
+                          isDone ? 'bg-emerald-100 text-emerald-700' :
+                          inProg ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {isDone ? '✓ Completed' : inProg ? `▶ ${m.progress_percentage}%` : '○ Not Started'}
+                        </span>
                       </div>
-                      <span className={v.watched ? 'text-emerald-600 font-extrabold' : 'text-slate-400'}>
-                        {v.watched ? '✓ Watched' : '○ Not Watched'}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
 
-                  {activities.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between text-xs font-bold p-2.5 rounded-2xl bg-white border border-slate-100">
-                      <div className="flex items-center gap-2 truncate">
-                        <span>🎯</span>
-                        <span className="truncate">{a.title}</span>
+                  {/* Videos items */}
+                  {videos.map((v) => {
+                    const isDone = v.is_completed || v.watched;
+                    const inProg = !isDone && (v.progress_percentage > 0 || v.watched_seconds > 0);
+                    return (
+                      <div key={v.id} className="flex items-center justify-between text-xs font-bold p-3 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 truncate">
+                          <span>🎬</span>
+                          <span className="truncate">{v.title}</span>
+                          {v.duration_seconds > 0 && (
+                            <span className="text-[10px] text-slate-500">({Math.round(v.duration_seconds / 60)}m)</span>
+                          )}
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${
+                          isDone ? 'bg-emerald-100 text-emerald-700' :
+                          inProg ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {isDone ? '✓ Watched (≥90%)' : inProg ? `▶ ${v.progress_percentage}% watched` : '○ Not Started'}
+                        </span>
                       </div>
-                      <span className={a.submission_status === 'graded' ? 'text-emerald-600 font-extrabold' : a.submission_status === 'pending' ? 'text-blue-600 font-extrabold' : 'text-slate-400'}>
-                        {a.submission_status === 'graded' ? `✓ Graded (${a.score}/${a.max_score || 10})` : a.submission_status === 'pending' ? '✓ Submitted' : '○ Not Completed'}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
 
-                  {quizzes.map((q) => (
-                    <div key={q.id} className="flex items-center justify-between text-xs font-bold p-2.5 rounded-2xl bg-white border border-slate-100">
-                      <div className="flex items-center gap-2 truncate">
-                        <span>📝</span>
-                        <span className="truncate">{q.title}</span>
+                  {/* Activities items */}
+                  {activities.map((a) => {
+                    const isGraded = a.is_completed || a.submission_status === 'graded';
+                    const isSub = !isGraded && (a.submission_status === 'pending' || a.submission_status === 'submitted');
+                    const inProg = !isGraded && !isSub && a.activity_status === 'in_progress';
+                    return (
+                      <div key={a.id} className="flex items-center justify-between text-xs font-bold p-3 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 truncate">
+                          <span>🎯</span>
+                          <span className="truncate">{a.title}</span>
+                          <span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-extrabold">{a.activity_type}</span>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${
+                          isGraded ? 'bg-emerald-100 text-emerald-700' :
+                          isSub ? 'bg-blue-100 text-blue-700' :
+                          inProg ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {isGraded ? `✓ Graded (${a.score}/${a.max_score || 10})` :
+                           isSub ? '✓ Submitted' :
+                           inProg ? '▶ In Progress' : '○ Not Started'}
+                        </span>
                       </div>
-                      <span className={q.result_id ? 'text-emerald-600 font-extrabold' : 'text-slate-400'}>
-                        {q.result_id ? `✓ Completed (${q.score}/${q.total_points})` : '○ Not Completed'}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
+
+                  {/* Quizzes items */}
+                  {quizzes.map((q) => {
+                    const isPassed = q.is_completed || q.is_passed;
+                    const hasAttempt = !isPassed && q.result_id;
+                    return (
+                      <div key={q.id} className="flex items-center justify-between text-xs font-bold p-3 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 truncate">
+                          <span>📝</span>
+                          <span className="truncate">{q.title}</span>
+                          <span className="text-[10px] text-slate-500">(Pass mark: 60%)</span>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${
+                          isPassed ? 'bg-emerald-100 text-emerald-700' :
+                          hasAttempt ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {isPassed ? `✓ Passed (${q.score}/${q.total_points})` :
+                           hasAttempt ? `❌ Failed (${q.percentage}%) - Retry` :
+                           '○ Not Started'}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -329,7 +584,7 @@ export default function ChildLessonDetail() {
 
                           {isPdf && (
                             <button
-                              onClick={() => setActivePdf(resolveFileUrl(mat.file_url))}
+                              onClick={() => handleOpenPdf(mat)}
                               className="ml-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition"
                             >
                               Open PDF 📄
@@ -347,7 +602,7 @@ export default function ChildLessonDetail() {
 
                           {isAudio && (
                             <button
-                              onClick={() => handleListenAudio(mat)}
+                              onClick={() => handleOpenAudio(mat)}
                               className="ml-auto px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow transition"
                             >
                               Listen 🎧
@@ -388,7 +643,7 @@ export default function ChildLessonDetail() {
                       key={vid.id}
                       className="bg-white rounded-3xl overflow-hidden border border-purple-100 shadow-sm hover:shadow-md transition flex flex-col justify-between"
                     >
-                      <div className="relative h-44 bg-slate-900 flex items-center justify-center group cursor-pointer" onClick={() => handleWatchVideo(vid)}>
+                      <div className="relative h-44 bg-slate-900 flex items-center justify-center group cursor-pointer" onClick={() => handleOpenVideo(vid)}>
                         {vid.thumbnail_url ? (
                           <img src={resolveFileUrl(vid.thumbnail_url)} alt={vid.title} className="w-full h-full object-cover opacity-80" />
                         ) : (
@@ -399,7 +654,7 @@ export default function ChildLessonDetail() {
                             ▶
                           </div>
                         </div>
-                        {vid.watched && (
+                        {(vid.is_completed || vid.watched) && (
                           <span className="absolute top-3 right-3 bg-emerald-500 text-white text-xs font-black px-2.5 py-1 rounded-full shadow">
                             ✓ Watched
                           </span>
@@ -407,12 +662,18 @@ export default function ChildLessonDetail() {
                       </div>
 
                       <div className="p-4 space-y-3">
-                        <h4 className="text-sm sm:text-base font-black text-slate-800 line-clamp-1">{vid.title}</h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm sm:text-base font-black text-slate-800 line-clamp-1">{vid.title}</h4>
+                          <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-full">
+                            {vid.progress_percentage || 0}%
+                          </span>
+                        </div>
                         <button
-                          onClick={() => handleWatchVideo(vid)}
-                          className="w-full py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold rounded-2xl text-xs shadow hover:opacity-95 transition"
+                          onClick={() => handleOpenVideo(vid)}
+                          className="w-full py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold rounded-2xl text-xs shadow hover:opacity-95 transition flex items-center justify-center gap-1.5"
                         >
-                          Watch Video 🎬
+                          <span>{vid.is_completed ? 'Rewatch Video' : vid.last_position_seconds > 0 ? 'Continue Video' : 'Watch Video'}</span>
+                          <span>🎬</span>
                         </button>
                       </div>
                     </div>
@@ -538,18 +799,62 @@ export default function ChildLessonDetail() {
         </div>
       </div>
 
-      {/* MODAL: Video Player */}
+      {/* MODAL: Video Player with Real Time Interval Tracking & Resume Prompt */}
       {activeVideo && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-3xl overflow-hidden max-w-3xl w-full border border-slate-700 shadow-2xl relative">
+          <div className="bg-slate-900 rounded-3xl overflow-hidden max-w-3xl w-full border border-slate-700 shadow-2xl relative flex flex-col">
             <div className="p-4 bg-slate-800 flex items-center justify-between text-white border-b border-slate-700">
-              <h3 className="font-bold text-sm truncate">{activeVideo.title}</h3>
-              <button onClick={() => setActiveVideo(null)} className="text-xl px-2 hover:text-rose-400 font-bold">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🎬</span>
+                <h3 className="font-bold text-sm truncate max-w-md">{activeVideo.title}</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveVideo(null);
+                  setVideoResumePrompt(null);
+                }}
+                className="text-xl px-2 hover:text-rose-400 font-bold"
+              >
                 ✕
               </button>
             </div>
-            <div className="aspect-video w-full bg-black">
-              {activeVideo.source_type === 'youtube' || activeVideo.video_url?.includes('youtube.com') || activeVideo.video_url?.includes('youtu.be') ? (
+
+            {/* Resume prompt banner */}
+            {videoResumePrompt && (
+              <div className="bg-indigo-900/90 text-indigo-100 p-3 flex items-center justify-between text-xs px-4 border-b border-indigo-700">
+                <span>
+                  📍 You were watching this earlier. Continue from{' '}
+                  <strong className="text-yellow-300 font-bold">
+                    {formatTimer(videoResumePrompt.position)}
+                  </strong>
+                  ?
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = videoResumePrompt.position;
+                      }
+                      setVideoResumePrompt(null);
+                    }}
+                    className="px-3 py-1 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-black rounded-xl text-xs shadow"
+                  >
+                    Resume ⏩
+                  </button>
+                  <button
+                    onClick={() => setVideoResumePrompt(null)}
+                    className="px-2 py-1 bg-slate-700 text-slate-300 rounded-xl text-xs hover:text-white"
+                  >
+                    Start Over
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="aspect-video w-full bg-black relative">
+              {activeVideo.source_type === 'youtube' ||
+              activeVideo.video_url?.includes('youtube.com') ||
+              activeVideo.video_url?.includes('youtu.be') ? (
                 <iframe
                   src={
                     activeVideo.video_url.includes('embed')
@@ -562,24 +867,52 @@ export default function ChildLessonDetail() {
                   allowFullScreen
                 />
               ) : (
-                <video src={resolveFileUrl(activeVideo.video_url)} controls autoPlay className="w-full h-full" />
+                <video
+                  ref={videoRef}
+                  src={resolveFileUrl(activeVideo.video_url)}
+                  controls
+                  autoPlay
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  className="w-full h-full"
+                />
               )}
+            </div>
+
+            <div className="p-3 bg-slate-800/90 text-xs text-slate-400 flex items-center justify-between border-t border-slate-700">
+              <span>
+                Watched: <strong className="text-purple-400 font-bold">{activeVideo.watched_seconds || 0}s</strong> ({activeVideo.progress_percentage || 0}%)
+              </span>
+              <span className={activeVideo.is_completed ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                {activeVideo.is_completed ? '✓ Lesson video requirement completed (≥90%)' : 'Watch ≥90% to complete'}
+              </span>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL: PDF Viewer */}
+      {/* MODAL: PDF Viewer with tracking */}
       {activePdf && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl overflow-hidden max-w-4xl w-full h-[85vh] flex flex-col shadow-2xl">
             <div className="p-4 bg-purple-600 text-white flex items-center justify-between">
-              <h3 className="font-bold text-sm">Practice Worksheet / PDF</h3>
+              <div className="flex items-center gap-2">
+                <span>📄</span>
+                <h3 className="font-bold text-sm truncate">{activePdf.title || 'Worksheet / PDF'}</h3>
+              </div>
               <button onClick={() => setActivePdf(null)} className="text-xl px-2 font-bold">
                 ✕
               </button>
             </div>
-            <iframe src={activePdf} title="PDF Viewer" className="w-full flex-1 border-0" />
+            <iframe src={activePdf.url} title="PDF Viewer" className="w-full flex-1 border-0" />
+            <div className="p-2.5 bg-slate-100 text-slate-600 text-xs flex items-center justify-between px-4 border-t border-slate-200">
+              <span className="font-bold text-emerald-600">✓ Progress Recorded</span>
+              <button
+                onClick={() => setActivePdf(null)}
+                className="px-4 py-1 bg-purple-600 text-white font-bold rounded-xl text-xs hover:bg-purple-700"
+              >
+                Close Worksheet
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -596,19 +929,29 @@ export default function ChildLessonDetail() {
         </div>
       )}
 
-      {/* MODAL: Audio Player */}
+      {/* MODAL: Audio Player with Interval Progress Tracking */}
       {activeAudio && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full text-center space-y-4 shadow-2xl border border-purple-100">
             <span className="text-6xl animate-pulse block">🎧</span>
             <h3 className="text-lg font-black text-slate-800">{activeAudio.title}</h3>
             <p className="text-xs text-slate-500 font-medium">Listen and repeat along!</p>
-            <audio src={resolveFileUrl(activeAudio.file_url)} controls autoPlay className="w-full mt-2" />
+            <audio
+              ref={audioRef}
+              src={resolveFileUrl(activeAudio.file_url)}
+              controls
+              autoPlay
+              onTimeUpdate={handleAudioTimeUpdate}
+              className="w-full mt-2"
+            />
+            <div className="text-xs font-bold text-purple-700">
+              {activeAudio.is_completed ? '✓ Requirement completed (≥90% listened)' : 'Listen to at least 90% to complete'}
+            </div>
             <button
               onClick={() => setActiveAudio(null)}
-              className="px-6 py-2 bg-purple-600 text-white font-bold rounded-2xl text-xs hover:bg-purple-700 transition"
+              className="px-6 py-2 bg-purple-600 text-white font-bold rounded-2xl text-xs hover:bg-purple-700 transition shadow"
             >
-              Done Listening ✓
+              Close Audio ✓
             </button>
           </div>
         </div>

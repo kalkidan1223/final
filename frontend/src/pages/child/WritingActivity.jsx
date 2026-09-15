@@ -40,6 +40,13 @@ export default function WritingActivity() {
       const response = await axiosClient.get(`/child/activities/${id}`);
       setActivity(response.data.activity);
       
+      // Notify backend that activity has started (sets status to in_progress)
+      try {
+        await axiosClient.post(`/child/activities/${id}/start`);
+      } catch (err) {
+        console.warn('Activity start track failed:', err);
+      }
+      
       // Load existing submission if any
       if (response.data.activity.submission_data) {
         try {

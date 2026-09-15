@@ -46,6 +46,13 @@ export default function ChildQuizTake() {
       setQuiz(response.data.quiz);
       setQuestions(response.data.questions || []);
       
+      // Notify backend that quiz attempt has started
+      try {
+        await axiosClient.post(`/child/quizzes/${id}/start`);
+      } catch (err) {
+        console.warn('Quiz start track failed:', err);
+      }
+      
       if (response.data.previous_result) {
         // Already taken, show results
         setResult({
@@ -157,8 +164,8 @@ export default function ChildQuizTake() {
   // Show Results
   if (result) {
     const pct = result.percentage;
-    const isPass = pct >= 70;
-    const stars = pct >= 90 ? '⭐⭐⭐' : pct >= 70 ? '⭐⭐' : pct >= 50 ? '⭐' : '';
+    const isPass = pct >= 60;
+    const stars = pct >= 90 ? '⭐⭐⭐' : pct >= 75 ? '⭐⭐' : pct >= 60 ? '⭐' : '';
 
     return (
       <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
@@ -166,7 +173,7 @@ export default function ChildQuizTake() {
         <div className={`bg-white rounded-2xl shadow-xl p-8 text-center ${isPass ? 'border-4 border-green-400' : 'border-4 border-orange-400'}`}>
           <div className="text-6xl mb-4">{isPass ? '🎉' : '💪'}</div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            {isPass ? 'Great Job!' : 'Good Effort!'}
+            {isPass ? 'Great Job! You Passed!' : 'Keep Practicing!'}
           </h1>
           <p className="text-xl text-gray-600 mb-4">
             You scored <span className="font-bold text-3xl">{result.score} / {result.total_points}</span>

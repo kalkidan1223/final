@@ -1095,14 +1095,22 @@ async function getChildProgress(req, res, next) {
       [id]
     );
 
-    // 5. Learning Streak (active learning days in last 14 days)
+    // 5. Active Learning Sessions & Total Time
+    const sessionStats = await query(
+      `SELECT COALESCE(SUM(total_active_seconds), 0)::int as total_active_seconds
+       FROM learning_sessions
+       WHERE student_id = $1`,
+      [id]
+    );
+
+    // 6. Learning Streak (active learning days in last 14 days)
     const streakResult = await query(
       `WITH activity_days AS (
         SELECT DISTINCT DATE(submitted_at) as act_date FROM activity_submissions WHERE student_id = $1
         UNION
         SELECT DISTINCT DATE(submitted_at) as act_date FROM quiz_results WHERE student_id = $1
         UNION
-        SELECT DISTINCT DATE(watched_at) as act_date FROM video_watches WHERE student_id = $1
+        SELECT DISTINCT DATE(started_at) as act_date FROM learning_sessions WHERE student_id = $1
       )
       SELECT COUNT(*)::int as streak_days
       FROM activity_days
@@ -1110,7 +1118,7 @@ async function getChildProgress(req, res, next) {
       [id]
     );
 
-    // 6. Recent activity items
+    // 7. Recent activity items
     const recentActivity = await query(
       `SELECT 
         'lesson' as type,
@@ -1129,11 +1137,15 @@ async function getChildProgress(req, res, next) {
 
     res.json({
       progress: {
-        overall: overallResult.rows[0] || {},
+        overall: {
+          ...(overallResult.rows[0] || {}),
+          total_active_seconds: sessionStats.rows[0]?.total_active_seconds || 0,
+        },
         courses: courseProgress.rows,
         activities: activityStats.rows[0] || {},
         quizzes: quizStats.rows[0] || {},
         learning_streak: streakResult.rows[0]?.streak_days || 0,
+        total_active_seconds: sessionStats.rows[0]?.total_active_seconds || 0,
         recent_activity: recentActivity.rows,
       },
     });

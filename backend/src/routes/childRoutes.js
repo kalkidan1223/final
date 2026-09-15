@@ -21,18 +21,26 @@ router.get('/lessons/:lessonId/materials', ...authChild, childController.getLess
 router.get('/lessons/:lessonId/activities', ...authChild, childController.getLesson);
 router.get('/lessons/:lessonId/quizzes', ...authChild, childController.getLesson);
 
-// Media Tracking
-router.post('/videos/:id/watch', ...authChild, childController.watchVideo);
-router.post('/materials/:id/listen', ...authChild, childController.listenMaterial);
+// Learning Session & Real-Time Progress
+router.post('/lessons/:lessonId/session/ping', ...authChild, childController.pingLearningSession);
+router.get('/lessons/:lessonId/progress', ...authChild, childController.getLessonProgress);
+
+// Media & Content Progress Tracking
+router.post('/videos/:id/progress', ...authChild, childController.updateVideoProgress);
+router.post('/videos/:id/watch', ...authChild, childController.watchVideo); // legacy fallback
+router.post('/materials/:id/progress', ...authChild, childController.updateMaterialProgress);
+router.post('/materials/:id/listen', ...authChild, childController.listenMaterial); // legacy fallback
 
 // Activities
 router.get('/activities', ...authChild, childController.listAllActivities);
 router.get('/activities/:activityId', ...authChild, childController.getActivity);
+router.post('/activities/:activityId/start', ...authChild, childController.startActivity);
 router.post('/activities/:activityId/submit', ...authChild, childController.submitActivity);
 
 // Quizzes
 router.get('/quizzes', ...authChild, childController.listAllQuizzes);
 router.get('/quizzes/:quizId', ...authChild, childController.getQuiz);
+router.post('/quizzes/:quizId/start', ...authChild, childController.startQuiz);
 router.post('/quizzes/:quizId/submit', ...authChild, childController.submitQuiz);
 
 // Progress, Achievements & Notifications
