@@ -250,6 +250,12 @@ async function getChildren(req, res, next) {
             FROM progress pr
             WHERE pr.student_id = s.id
           ) as last_activity,
+          (
+            SELECT COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int
+          ) as age,
+          (
+            CASE WHEN EXTRACT(YEAR FROM age(s.date_of_birth)) <= 9 THEN TRUE ELSE FALSE END
+          ) as can_parent_launch,
           FALSE as is_pending_request
          FROM students s
          LEFT JOIN users u ON u.id = s.user_id
@@ -332,6 +338,12 @@ async function getChildById(req, res, next) {
           WHEN srr.status = 'rejected' THEN 'rejected'
           ELSE 'pending'
         END as account_status,
+        (
+          SELECT COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int
+        ) as age,
+        (
+          CASE WHEN EXTRACT(YEAR FROM age(s.date_of_birth)) <= 9 THEN TRUE ELSE FALSE END
+        ) as can_parent_launch,
         srr.rejection_reason as account_rejection_reason,
         srr.reviewed_by,
         srr.reviewed_at

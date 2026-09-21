@@ -369,14 +369,24 @@ export default function ParentDashboard() {
                       </div>
                     ) : (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => handleLaunchChildPortal(child.id)}
-                          className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2"
-                        >
-                          <MdPlayCircleFilled className="text-base text-slate-900" />
-                          <span>Learn with Child (Launch Portal)</span>
-                        </button>
+                        {age !== null && age <= 9 ? (
+                          <button
+                            type="button"
+                            onClick={() => handleLaunchChildPortal(child.id)}
+                            className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2 active:scale-95"
+                          >
+                            <MdPlayCircleFilled className="text-base text-slate-900" />
+                            <span>Learn with Child (Ages 5–9)</span>
+                          </button>
+                        ) : (
+                          <div className="p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-[11px] text-blue-900 flex items-start gap-2">
+                            <span className="text-base">🎓</span>
+                            <div>
+                              <strong className="block font-bold">Independent Student (Age 10–12)</strong>
+                              <span>Learns independently using their own student credentials.</span>
+                            </div>
+                          </div>
+                        )}
 
                         <button
                           type="button"

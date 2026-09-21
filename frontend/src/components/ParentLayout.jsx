@@ -290,16 +290,18 @@ export default function ParentLayout() {
               </div>
             )}
 
-            {/* Quick Button: Launch Child Portal */}
-            <button
-              type="button"
-              onClick={() => handleLaunchChildPortal()}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 rounded-xl font-black text-xs shadow-sm transition"
-              title="Launch interactive learning portal for the selected child"
-            >
-              <MdPlayCircleFilled className="text-base" />
-              <span>Learn with Child</span>
-            </button>
+            {/* Quick Button: Launch Child Portal (Only for children aged 5-9) */}
+            {selectedChild && (selectedChild.can_parent_launch !== false && (selectedChild.age ? selectedChild.age <= 9 : true)) && (
+              <button
+                type="button"
+                onClick={() => handleLaunchChildPortal()}
+                className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 rounded-xl font-black text-xs shadow-sm transition"
+                title={`Launch interactive learning portal with ${selectedChild.full_name}`}
+              >
+                <MdPlayCircleFilled className="text-base" />
+                <span>Learn with Child</span>
+              </button>
+            )}
 
             {/* Notifications Bell */}
             <Link

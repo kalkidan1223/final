@@ -18,6 +18,7 @@ export default function ListeningActivity() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isStorySpeaking, setIsStorySpeaking] = useState(false);
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -132,6 +133,43 @@ export default function ListeningActivity() {
   const audioUrl = activity?.resource_url || activity?.audio_url;
   const resolvedAudioUrl = audioUrl ? resolveFileUrl(audioUrl) : null;
 
+  let storyText = null;
+  let storyTitle = null;
+  if (activity?.activity_config) {
+    let conf = activity.activity_config;
+    if (typeof conf === 'string') {
+      try { conf = JSON.parse(conf); } catch(e) {}
+    }
+    storyText = conf?.story_text;
+    storyTitle = conf?.audio_title || conf?.title;
+  }
+
+  const handleSpeakStory = () => {
+    if ('speechSynthesis' in window && storyText) {
+      if (isStorySpeaking) {
+        window.speechSynthesis.cancel();
+        setIsStorySpeaking(false);
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(storyText);
+      utterance.rate = 0.85;
+      setIsStorySpeaking(true);
+      utterance.onend = () => {
+        setIsStorySpeaking(false);
+        setPlayed(true);
+      };
+      utterance.onerror = () => {
+        setIsStorySpeaking(false);
+        setPlayed(true);
+      };
+      window.speechSynthesis.speak(utterance);
+      setPlayed(true);
+    } else {
+      setPlayed(true);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
       {/* Header */}
@@ -171,6 +209,26 @@ export default function ListeningActivity() {
           <div className="mt-4 p-4 bg-green-50 rounded-xl border-l-4 border-green-400">
             <h3 className="font-bold text-green-800 mb-2">🎯 What to Do</h3>
             <p className="text-gray-700">{activity.instructions}</p>
+          </div>
+        )}
+
+        {/* Ethiopian Folk Story Reader */}
+        {storyText && (
+          <div className="mt-5 p-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-200 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <h3 className="font-black text-amber-950 text-lg flex items-center gap-2">
+                <span>📖</span> ተረት (Folk Story): {storyTitle || 'የብልጡ ጥንቸልና የአንበሳው ተረት'}
+              </h3>
+              <button
+                onClick={handleSpeakStory}
+                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl text-xs shadow hover:scale-105 transition active:scale-95 flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <span>{isStorySpeaking ? '🔊 እያነበበ ነው...' : '🔊 ተረቱን አድምጥ (Listen to Story)'}</span>
+              </button>
+            </div>
+            <p className="text-slate-800 leading-relaxed font-medium text-base bg-white/90 p-4 rounded-xl shadow-inner whitespace-pre-wrap">
+              {storyText}
+            </p>
           </div>
         )}
 

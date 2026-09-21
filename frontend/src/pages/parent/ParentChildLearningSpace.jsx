@@ -240,15 +240,22 @@ export default function ParentChildLearningSpace() {
           </div>
         </div>
 
-        {/* Big Dual-Action Launch Button */}
-        <button
-          onClick={handleLaunchChildPortal}
-          className="w-full md:w-auto px-6 py-3.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black rounded-2xl shadow-lg hover:scale-105 active:scale-95 transition flex items-center justify-center gap-2 text-sm sm:text-base"
-        >
-          <MdPlayCircleFilled className="text-2xl text-slate-900" />
-          <span>Launch Child Learning Portal</span>
-          <span>➔</span>
-        </button>
+        {/* Action Button: Launch Portal for ages 5-9, or Independent status for 10-12 */}
+        {age !== null && age <= 9 ? (
+          <button
+            onClick={handleLaunchChildPortal}
+            className="w-full md:w-auto px-6 py-3.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black rounded-2xl shadow-lg hover:scale-105 active:scale-95 transition flex items-center justify-center gap-2 text-sm sm:text-base"
+          >
+            <MdPlayCircleFilled className="text-2xl text-slate-900" />
+            <span>Learn with Child (Child Portal)</span>
+            <span>➔</span>
+          </button>
+        ) : (
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 p-3 rounded-2xl text-xs text-white max-w-xs text-right md:text-left">
+            <span className="font-bold block text-amber-300">🎓 Independent Student</span>
+            <span className="text-[11px] text-purple-100">Learns independently. Monitor assignments, grades, and teacher feedback below.</span>
+          </div>
+        )}
       </div>
 
       {/* ── Key Metrics Overview ── */}

@@ -9,7 +9,8 @@ async function resolveChild(req) {
     const res = await query(
       `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
               u.email, u.full_name as user_full_name,
-              p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone
+              p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
+              COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 10)::int as age
        FROM students s
        JOIN age_groups ag ON ag.id = s.age_group_id
        JOIN users u ON u.id = s.user_id
@@ -30,12 +31,13 @@ async function resolveChild(req) {
     // Check if a specific child was requested via header, query or body
     const requestedChildId = req.headers['x-child-id'] || req.query.child_id || req.body?.child_id;
 
-    let res;
+    let child = null;
     if (requestedChildId) {
-      res = await query(
+      const res = await query(
         `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
                 s.full_name as user_full_name,
-                p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone
+                p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
+                COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
          FROM students s
          JOIN age_groups ag ON ag.id = s.age_group_id
          LEFT JOIN parents p ON p.id = s.parent_id
@@ -43,23 +45,49 @@ async function resolveChild(req) {
          WHERE s.id = $1 AND s.parent_id = $2 AND s.is_active = TRUE`,
         [requestedChildId, parentId]
       );
-    } else {
-      // Default to the parent's first child
-      res = await query(
+      // Only use requested child if age is within early learner bracket (5-9)
+      if (res.rows.length > 0 && res.rows[0].age <= 9) {
+        child = res.rows[0];
+      }
+    }
+
+    // If no eligible child was requested or requested child was older (>9),
+    // automatically find the parent's first early learner child (age <= 9)
+    if (!child) {
+      const res = await query(
         `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
                 s.full_name as user_full_name,
-                p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone
+                p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
+                COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
          FROM students s
          JOIN age_groups ag ON ag.id = s.age_group_id
          LEFT JOIN parents p ON p.id = s.parent_id
          LEFT JOIN users pu ON pu.id = p.user_id
          WHERE s.parent_id = $1 AND s.is_active = TRUE
+           AND COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7) <= 9
          ORDER BY s.created_at ASC
          LIMIT 1`,
         [parentId]
       );
+      child = res.rows[0] || null;
     }
-    return res.rows[0] || null;
+
+    if (!child) {
+      // Check if parent only has older independent children (ages 10-12)
+      const anyChildRes = await query(
+        `SELECT id FROM students WHERE parent_id = $1 AND is_active = TRUE LIMIT 1`,
+        [parentId]
+      );
+      if (anyChildRes.rows.length > 0) {
+        const err = new Error('Children aged 10-12 learn independently. Please log in directly with their student credentials.');
+        err.status = 403;
+        err.code = 'INDEPENDENT_STUDENT_ONLY';
+        throw err;
+      }
+      return null;
+    }
+
+    return child;
   }
 
   return null;
@@ -73,16 +101,24 @@ async function getProfile(req, res, next) {
       return res.status(404).json({ error: 'Child profile not found or access denied' });
     }
 
-    // List sibling children if parent is logged in
+    // List sibling children if parent is logged in (only include children aged <= 9)
     let siblingChildren = [];
     if (req.user.role === 'parent' && child.parent_db_id) {
       const sibRes = await query(
-        `SELECT id, full_name, profile_image_url, grade, section, date_of_birth
-         FROM students WHERE parent_id = $1 AND is_active = TRUE ORDER BY created_at ASC`,
+        `SELECT id, full_name, profile_image_url, grade, section, date_of_birth,
+                COALESCE(EXTRACT(YEAR FROM age(date_of_birth)), 7)::int as age
+         FROM students 
+         WHERE parent_id = $1 AND is_active = TRUE 
+           AND COALESCE(EXTRACT(YEAR FROM age(date_of_birth)), 7) <= 9
+         ORDER BY created_at ASC`,
         [child.parent_db_id]
       );
       siblingChildren = sibRes.rows;
     }
+
+    const age = child.age !== undefined 
+      ? child.age 
+      : (child.date_of_birth ? Math.floor((new Date() - new Date(child.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000)) : 7);
 
     res.json({
       child: {
@@ -92,6 +128,8 @@ async function getProfile(req, res, next) {
         gender: child.gender,
         grade: child.grade,
         section: child.section,
+        age,
+        is_early_learner: age <= 9,
         age_group_id: child.age_group_id,
         age_group_name: child.age_group_name,
         preferred_language: child.preferred_language,
@@ -176,7 +214,7 @@ async function getDashboard(req, res, next) {
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN lessons l ON l.course_id = c.id
-       LEFT JOIN activities a ON a.lesson_id = l.id AND a.status = 'active'
+       LEFT JOIN activities a ON a.lesson_id = l.id AND a.status IN ('active', 'published')
        LEFT JOIN quizzes q ON q.lesson_id = l.id
        LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id = l.id
        WHERE c.age_group_id = $2 AND c.status = 'published'
@@ -196,7 +234,7 @@ async function getDashboard(req, res, next) {
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $1
-       WHERE c.age_group_id = $2 AND c.status = 'published' AND a.status = 'active'
+       WHERE c.age_group_id = $2 AND c.status = 'published' AND a.status IN ('active', 'published')
          AND asub.id IS NULL
        ORDER BY l.order_index ASC, a.created_at ASC
        LIMIT 5`,
@@ -227,10 +265,18 @@ async function getDashboard(req, res, next) {
       [req.user.id]
     );
 
+    const age = child.age !== undefined
+      ? child.age
+      : (child.date_of_birth ? Math.floor((new Date() - new Date(child.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000)) : 7);
+
     res.json({
       child: {
         id: child.id,
         full_name: child.full_name,
+        age,
+        is_early_learner: age <= 9,
+        is_parent_managed: !child.user_id,
+        is_parent_session: req.user.role === 'parent',
         age_group_name: child.age_group_name,
         grade: child.grade,
         section: child.section,
@@ -457,12 +503,12 @@ async function getLesson(req, res, next) {
        LEFT JOIN student_activity_progress sap ON sap.activity_id = a.id AND sap.student_id = $2
        LEFT JOIN instructors i ON i.id = asub.reviewed_by
        LEFT JOIN users u ON u.id = i.user_id
-       WHERE a.lesson_id = $1 AND a.status = 'active'
+       WHERE a.lesson_id = $1 AND a.status IN ('active', 'published')
        ORDER BY a.display_order ASC, a.created_at ASC`,
       [lessonId, child.id]
     );
 
-    // 4. Quizzes with student's previous result and attempt status
+    // 4. Quizzes with student's previous result and attempt status (using LATERAL join to prevent duplicate rows)
     const quizzesRes = await query(
       `SELECT q.*,
               qr.id as result_id,
@@ -477,11 +523,23 @@ async function getLesson(req, res, next) {
                 ELSE COALESCE(sqa.status, 'not_started')
                END) as quiz_status,
               (qr.id IS NOT NULL AND qr.score >= (qr.total_points * 0.6)) as is_completed,
-              (SELECT COUNT(*)::int FROM quiz_results qr2 WHERE qr2.quiz_id = q.id AND qr2.student_id = $2) as attempt_count
+              (SELECT COUNT(*)::int FROM student_quiz_attempts sqa_c WHERE sqa_c.quiz_id = q.id AND sqa_c.student_id = $2 AND sqa_c.status IN ('completed', 'failed', 'submitted')) as attempt_count
        FROM quizzes q
-       LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $2
-       LEFT JOIN student_quiz_attempts sqa ON sqa.quiz_id = q.id AND sqa.student_id = $2
-       WHERE q.lesson_id = $1
+       LEFT JOIN LATERAL (
+         SELECT id, score, total_points, submitted_at
+         FROM quiz_results qr2
+         WHERE qr2.quiz_id = q.id AND qr2.student_id = $2
+         ORDER BY qr2.submitted_at DESC
+         LIMIT 1
+       ) qr ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT status, started_at
+         FROM student_quiz_attempts sqa2
+         WHERE sqa2.quiz_id = q.id AND sqa2.student_id = $2
+         ORDER BY sqa2.started_at DESC
+         LIMIT 1
+       ) sqa ON TRUE
+       WHERE q.lesson_id = $1 AND (q.status IN ('active', 'published') OR q.status IS NULL)
        ORDER BY q.created_at ASC`,
       [lessonId, child.id]
     );
@@ -550,7 +608,7 @@ async function getActivity(req, res, next) {
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $2
        LEFT JOIN instructors i ON i.id = asub.reviewed_by
        LEFT JOIN users u ON u.id = i.user_id
-       WHERE a.id = $1 AND a.status = 'active'`,
+       WHERE a.id = $1 AND a.status IN ('active', 'published')`,
       [activityId, child.id]
     );
 
@@ -717,10 +775,24 @@ async function getQuiz(req, res, next) {
       [quizId, child.id]
     );
 
+    // Completed attempts count
+    const countRes = await query(
+      `SELECT COUNT(*)::int as cnt FROM student_quiz_attempts 
+       WHERE student_id = $1 AND quiz_id = $2 AND status IN ('completed', 'failed', 'submitted')`,
+      [child.id, quizId]
+    );
+
+    const attemptCount = countRes.rows[0]?.cnt || 0;
+    const attemptLimit = quiz.attempt_limit || null;
+    const canAttempt = !attemptLimit || attemptCount < attemptLimit;
+
     res.json({
       quiz,
       questions: questionsRes.rows,
       previous_result: prevRes.rows[0] || null,
+      attempt_count: attemptCount,
+      attempt_limit: attemptLimit,
+      can_attempt: canAttempt,
     });
   } catch (err) {
     next(err);
@@ -737,7 +809,7 @@ async function submitQuiz(req, res, next) {
 
     // Validate quiz and fetch questions with correct answers
     const questionsRes = await query(
-      `SELECT qq.*, q.lesson_id, c.id as course_id, c.age_group_id, q.show_result_immediately
+      `SELECT qq.*, q.lesson_id, c.id as course_id, c.age_group_id, q.show_result_immediately, q.passing_score
        FROM quiz_questions qq
        JOIN quizzes q ON q.id = qq.quiz_id
        JOIN lessons l ON l.id = q.lesson_id
@@ -748,7 +820,7 @@ async function submitQuiz(req, res, next) {
     );
 
     if (questionsRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Quiz not found' });
+      return res.status(404).json({ error: 'Quiz not found or has no questions' });
     }
 
     const first = questionsRes.rows[0];
@@ -761,7 +833,7 @@ async function submitQuiz(req, res, next) {
     const questionReview = [];
 
     questionsRes.rows.forEach(q => {
-      const qPoints = q.points || 1;
+      const qPoints = Number(q.points) || 1;
       totalPoints += qPoints;
       const given = answers ? answers[q.id] : undefined;
       const isCorrect = given !== undefined && given !== null &&
@@ -782,6 +854,10 @@ async function submitQuiz(req, res, next) {
       });
     });
 
+    const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
+    const passThreshold = first.passing_score ? Number(first.passing_score) : 60;
+    const isPassed = percentage >= passThreshold;
+
     // Store in quiz_results
     const resultRes = await query(
       `INSERT INTO quiz_results (quiz_id, student_id, score, total_points, answers, submitted_at)
@@ -790,31 +866,61 @@ async function submitQuiz(req, res, next) {
       [quizId, child.id, score, totalPoints, JSON.stringify(answers || {})]
     );
 
-    const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
-    const isPassed = percentage >= 60;
-
-    // Record attempt lifecycle in student_quiz_attempts
-    await query(
-      `INSERT INTO student_quiz_attempts (
-        student_id, quiz_id, status, score, total_points,
-        percentage, is_passed, started_at, completed_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())`,
-      [
-        child.id,
-        quizId,
-        isPassed ? 'completed' : 'failed',
-        score,
-        totalPoints,
-        percentage,
-        isPassed,
-      ]
+    // Update active in_progress attempt or insert new attempt if none found
+    const activeAttempt = await query(
+      `SELECT id, attempt_number FROM student_quiz_attempts
+       WHERE student_id = $1 AND quiz_id = $2 AND status = 'in_progress'
+       ORDER BY started_at DESC LIMIT 1`,
+      [child.id, quizId]
     );
+
+    let attemptNumber = 1;
+    if (activeAttempt.rows.length > 0) {
+      attemptNumber = activeAttempt.rows[0].attempt_number;
+      await query(
+        `UPDATE student_quiz_attempts
+         SET status = $1, score = $2, total_points = $3, percentage = $4, passed = $5,
+             submitted_at = now(), completed_at = now()
+         WHERE id = $6`,
+        [
+          isPassed ? 'completed' : 'failed',
+          score,
+          totalPoints,
+          percentage,
+          isPassed,
+          activeAttempt.rows[0].id
+        ]
+      );
+    } else {
+      const prevAttempts = await query(
+        `SELECT COALESCE(MAX(attempt_number), 0) + 1 as next_attempt
+         FROM student_quiz_attempts WHERE student_id = $1 AND quiz_id = $2`,
+        [child.id, quizId]
+      );
+      attemptNumber = prevAttempts.rows[0]?.next_attempt || 1;
+      await query(
+        `INSERT INTO student_quiz_attempts (
+          student_id, quiz_id, attempt_number, status, score, total_points,
+          percentage, passed, started_at, submitted_at, completed_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now(), now())`,
+        [
+          child.id,
+          quizId,
+          attemptNumber,
+          isPassed ? 'completed' : 'failed',
+          score,
+          totalPoints,
+          percentage,
+          isPassed,
+        ]
+      );
+    }
 
     // Update lesson progress
     await updateLessonProgress(child.id, first.course_id, first.lesson_id);
 
-    const message = percentage >= 80 ? '🎉 Amazing job! You did great!' :
-                    percentage >= 60 ? '⭐ Good work! You passed!' : '💪 Keep practicing and try again!';
+    const message = percentage >= 80 ? '🎉 በጣም ጎበዝ! ድንቅ ውጤት አምጥተሃል/ሻል!' :
+                    percentage >= 60 ? '⭐ ጥሩ ሰርተሃል/ሻል! ፈተናውን አልፈሃል/ሻል!' : '💪 በርታ/ቺ! ደግመህ/ሽ በመሞከር የተሻለ ውጤት ማምጣት ትችላለህ/ያለሽ!';
 
     res.json({
       success: true,
@@ -822,7 +928,9 @@ async function submitQuiz(req, res, next) {
       score,
       total_points: totalPoints,
       percentage,
+      passed: isPassed,
       message,
+      attempt_number: attemptNumber,
       show_result_immediately: first.show_result_immediately !== false,
       review: first.show_result_immediately !== false ? questionReview : null,
     });
@@ -1171,13 +1279,59 @@ async function startQuiz(req, res, next) {
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
-    await query(
-      `INSERT INTO student_quiz_attempts (student_id, quiz_id, status, started_at)
-       VALUES ($1, $2, 'in_progress', now())`,
+    // Check if there is already an active 'in_progress' attempt
+    const existingAttempt = await query(
+      `SELECT id, attempt_number, status, started_at 
+       FROM student_quiz_attempts 
+       WHERE student_id = $1 AND quiz_id = $2 AND status = 'in_progress'
+       ORDER BY started_at DESC LIMIT 1`,
       [child.id, quizId]
     );
 
-    res.json({ success: true, status: 'in_progress' });
+    if (existingAttempt.rows.length > 0) {
+      return res.json({ 
+        success: true, 
+        status: 'in_progress', 
+        attempt_id: existingAttempt.rows[0].id,
+        attempt_number: existingAttempt.rows[0].attempt_number 
+      });
+    }
+
+    // Check attempt limit if specified on quiz
+    const quizCheck = await query(
+      `SELECT attempt_limit FROM quizzes WHERE id = $1`,
+      [quizId]
+    );
+    const attemptLimit = quizCheck.rows[0]?.attempt_limit;
+
+    const countRes = await query(
+      `SELECT COUNT(*)::int as cnt FROM student_quiz_attempts 
+       WHERE student_id = $1 AND quiz_id = $2 AND status IN ('completed', 'failed', 'submitted')`,
+      [child.id, quizId]
+    );
+    const completedAttempts = countRes.rows[0]?.cnt || 0;
+
+    if (attemptLimit && completedAttempts >= attemptLimit) {
+      return res.status(403).json({ 
+        error: `You have reached the maximum attempt limit (${attemptLimit}) for this quiz.` 
+      });
+    }
+
+    const nextAttempt = completedAttempts + 1;
+
+    const newAttempt = await query(
+      `INSERT INTO student_quiz_attempts (student_id, quiz_id, attempt_number, status, passed, started_at)
+       VALUES ($1, $2, $3, 'in_progress', FALSE, now())
+       RETURNING id, attempt_number, status`,
+      [child.id, quizId, nextAttempt]
+    );
+
+    res.json({ 
+      success: true, 
+      status: 'in_progress',
+      attempt_id: newAttempt.rows[0].id,
+      attempt_number: newAttempt.rows[0].attempt_number
+    });
   } catch (err) {
     next(err);
   }
@@ -1238,7 +1392,13 @@ async function getLessonProgress(req, res, next) {
                 (qr.id IS NOT NULL AND qr.score >= (qr.total_points * 0.6)) as passed,
                 qr.score, qr.total_points
          FROM quizzes q
-         LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $2
+         LEFT JOIN LATERAL (
+           SELECT id, score, total_points
+           FROM quiz_results
+           WHERE quiz_id = q.id AND student_id = $2
+           ORDER BY submitted_at DESC
+           LIMIT 1
+         ) qr ON TRUE
          WHERE q.lesson_id = $1`,
         [lessonId, child.id]
       ),
@@ -1592,7 +1752,7 @@ async function listAllActivities(req, res, next) {
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $1
-       WHERE c.age_group_id = $2 AND c.status = 'published' AND a.status = 'active'
+       WHERE c.age_group_id = $2 AND c.status = 'published' AND a.status IN ('active', 'published')
        ORDER BY c.created_at DESC, l.order_index ASC, a.display_order ASC, a.created_at ASC`,
       [child.id, child.age_group_id]
     );
@@ -1610,16 +1770,18 @@ async function listAllQuizzes(req, res, next) {
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
     const result = await query(
-      `SELECT q.*, l.id as lesson_id, l.title as lesson_title,
+      `SELECT DISTINCT ON (q.id) q.*, l.id as lesson_id, l.title as lesson_title,
               c.id as course_id, c.title as course_title,
-              (SELECT COUNT(*)::int FROM quiz_results qr WHERE qr.quiz_id = q.id AND qr.student_id = $1) as attempt_count,
+              (SELECT COUNT(*)::int FROM student_quiz_attempts sqa WHERE sqa.quiz_id = q.id AND sqa.student_id = $1 AND sqa.status IN ('completed', 'failed', 'submitted')) as attempt_count,
+              (SELECT COUNT(*)::int FROM student_quiz_attempts sqa WHERE sqa.quiz_id = q.id AND sqa.student_id = $1 AND sqa.status IN ('completed', 'failed', 'submitted')) as attempts,
               (SELECT MAX(qr.score) FROM quiz_results qr WHERE qr.quiz_id = q.id AND qr.student_id = $1) as best_score,
-              (SELECT total_points FROM quiz_results qr WHERE qr.quiz_id = q.id AND qr.student_id = $1 ORDER BY score DESC LIMIT 1) as best_total_points
+              (SELECT total_points FROM quiz_results qr WHERE qr.quiz_id = q.id AND qr.student_id = $1 ORDER BY score DESC LIMIT 1) as best_total_points,
+              (SELECT qr.score >= (qr.total_points * 0.6) FROM quiz_results qr WHERE qr.quiz_id = q.id AND qr.student_id = $1 ORDER BY qr.submitted_at DESC LIMIT 1) as is_passed
        FROM quizzes q
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
-       WHERE c.age_group_id = $2 AND c.status = 'published'
-       ORDER BY c.created_at DESC, l.order_index ASC, q.created_at ASC`,
+       WHERE c.age_group_id = $2 AND c.status = 'published' AND (q.status IN ('active', 'published') OR q.status IS NULL)
+       ORDER BY q.id, c.created_at DESC, l.order_index ASC, q.created_at ASC`,
       [child.id, child.age_group_id]
     );
 

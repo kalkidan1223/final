@@ -1,118 +1,155 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
+import { resolveFileUrl } from '../../utils/fileUrl';
 
 export default function ChildQuizTake() {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Mode: 'intro' | 'taking' | 'results'
+  const [mode, setMode] = useState('intro');
+  const [previousResult, setPreviousResult] = useState(null);
+  const [quizMeta, setQuizMeta] = useState({ attempt_count: 0, attempt_limit: null, can_attempt: true });
+  const [result, setResult] = useState(null);
+
+  // Timer
   const [timeLeft, setTimeLeft] = useState(null);
-  const [timer, setTimer] = useState(null);
+  const timerRef = useRef(null);
+  const startAttemptRef = useRef(false);
 
   useEffect(() => {
     fetchQuiz();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [id]);
-
-  useEffect(() => {
-    if (quiz?.time_limit_seconds && timeLeft !== null) {
-      setTimeLeft(quiz.time_limit_seconds);
-      const t = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(t);
-            handleTimeUp();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      setTimer(t);
-      return () => clearInterval(t);
-    }
-  }, [quiz, timeLeft]);
 
   const fetchQuiz = async () => {
     try {
       setLoading(true);
-      const response = await axiosClient.get(`/child/quizzes/${id}`);
-      setQuiz(response.data.quiz);
-      setQuestions(response.data.questions || []);
-      
-      // Notify backend that quiz attempt has started
-      try {
-        await axiosClient.post(`/child/quizzes/${id}/start`);
-      } catch (err) {
-        console.warn('Quiz start track failed:', err);
-      }
-      
-      if (response.data.previous_result) {
-        // Already taken, show results
-        setResult({
-          ...response.data.previous_result,
-          percentage: response.data.previous_result.total_points > 0 
-            ? Math.round((response.data.previous_result.score / response.data.previous_result.total_points) * 100)
-            : 0,
-        });
-      }
+      setError('');
+      const res = await axiosClient.get(`/child/quizzes/${id}`);
+      const data = res.data;
+      setQuiz(data.quiz);
+      setQuestions(data.questions || []);
+      setPreviousResult(data.previous_result || null);
+      setQuizMeta({
+        attempt_count: data.attempt_count || 0,
+        attempt_limit: data.attempt_limit || null,
+        can_attempt: data.can_attempt !== false,
+      });
+
+      // If already has results, show intro with option to view or retake
+      setMode('intro');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load quiz');
+      setError(err.response?.data?.error || 'ፈተናውን መጫን አልተቻለም / Failed to load quiz');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTimeUp = async () => {
-    if (!result && questions.length > 0) {
-      await submitQuiz(true);
+  // Start the quiz
+  const handleStartQuiz = async () => {
+    try {
+      setError('');
+      setSubmitting(true);
+
+      // Track attempt on backend idempotently
+      await axiosClient.post(`/child/quizzes/${id}/start`);
+
+      setAnswers({});
+      setCurrentQuestion(0);
+      setResult(null);
+      setMode('taking');
+
+      // Set up timer if time limit exists
+      if (quiz?.time_limit_seconds && quiz.time_limit_seconds > 0) {
+        setTimeLeft(quiz.time_limit_seconds);
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev <= 1) {
+              clearInterval(timerRef.current);
+              handleTimeUp();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'ፈተናውን ማስጀመር አልተቻለም / Could not start quiz');
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const handleTimeUp = async () => {
+    await doSubmit(true);
   };
 
   const handleAnswer = (questionId, value) => {
-    if (result) return;
-    setAnswers(prev => ({ ...prev, [questionId]: value }));
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
-  const submitQuiz = async (autoSubmit = false) => {
-    if (!autoSubmit) {
-      const unanswered = questions.filter(q => !answers[q.id]);
-      if (unanswered.length > 0) {
-        setError(`Please answer all questions! ${unanswered.length} question${unanswered.length > 1 ? 's' : ''} unanswered.`);
-        return;
-      }
-      setShowConfirm(true);
+  const submitQuiz = () => {
+    const unanswered = questions.filter((q) => answers[q.id] === undefined || answers[q.id] === '');
+    if (unanswered.length > 0) {
+      setError(`እባክዎን ሁሉንም ጥያቄዎች ይመልሱ! ${unanswered.length} ያልተመለሰ ጥያቄ አለ / Please answer all questions! (${unanswered.length} remaining)`);
       return;
     }
-    // Auto-submit (time up)
-    doSubmit();
+    setError('');
+    setShowConfirm(true);
   };
 
   const confirmSubmit = async () => {
     setShowConfirm(false);
-    await doSubmit();
+    await doSubmit(false);
   };
 
-  const doSubmit = async () => {
+  const doSubmit = async (autoSubmit = false) => {
     setSubmitting(true);
     setError('');
+    if (timerRef.current) clearInterval(timerRef.current);
+
     try {
-      const { data } = await axiosClient.post(`/child/quizzes/${id}/submit`, { answers });
+      const res = await axiosClient.post(`/child/quizzes/${id}/submit`, { answers });
+      const data = res.data;
+
       setResult({
         ...data.result,
-        percentage: data.total_points > 0 ? Math.round((data.score / data.total_points) * 100) : 0,
+        score: data.score,
+        total_points: data.total_points,
+        percentage: data.percentage,
+        passed: data.passed,
         message: data.message,
+        review: data.review || [],
       });
-      if (timer) clearInterval(timer);
+
+      // Update metadata attempt count
+      setQuizMeta((prev) => {
+        const nextCnt = prev.attempt_count + 1;
+        return {
+          ...prev,
+          attempt_count: nextCnt,
+          can_attempt: !prev.attempt_limit || nextCnt < prev.attempt_limit,
+        };
+      });
+
+      setMode('results');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not submit the quiz');
+      setError(err.response?.data?.error || 'ፈተናውን ማስገባት አልተቻለም / Failed to submit quiz. Please try again!');
     } finally {
       setSubmitting(false);
     }
@@ -129,453 +166,558 @@ export default function ChildQuizTake() {
     return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
-  const getProgressColor = (percent) => {
-    if (percent < 30) return 'bg-red-500';
-    if (percent < 60) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
-
+  // Loading Screen
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-500 border-t-transparent mx-auto"></div>
-          <p className="mt-4 text-gray-600 font-medium text-lg">Loading quiz... 📝</p>
+        <div className="text-center p-8 bg-white rounded-3xl shadow-lg border border-purple-100 max-w-sm">
+          <div className="text-5xl animate-bounce mb-4">📝</div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent mx-auto mb-3"></div>
+          <p className="text-gray-700 font-bold text-lg">ፈተናው እየተጫነ ነው...</p>
+          <p className="text-gray-400 text-xs">Loading Ethiopian Quiz...</p>
         </div>
       </div>
     );
   }
 
+  // Error without quiz screen
   if (error && !quiz) {
     return (
-      <div className="space-y-4 max-w-2xl mx-auto">
-        <button onClick={() => navigate(-1)} className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium">
-          <span className="mr-2">←</span> Back to Lesson
+      <div className="space-y-4 max-w-lg mx-auto my-12">
+        <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-purple-600 hover:text-purple-700 font-bold">
+          <span>←</span> Back
         </button>
-        <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-xl">
-          <p className="text-red-700 font-medium flex items-center gap-2">
-            <span>⚠️</span> {error}
-          </p>
+        <div className="bg-rose-50 border-2 border-rose-200 p-6 rounded-3xl text-center">
+          <span className="text-4xl block mb-2">⚠️</span>
+          <p className="text-rose-700 font-bold text-sm mb-4">{error}</p>
+          <button
+            onClick={fetchQuiz}
+            className="px-6 py-2 bg-purple-600 text-white font-bold rounded-2xl shadow hover:bg-purple-700 transition"
+          >
+            እንደገና ሞክር / Try Again 🔄
+          </button>
         </div>
       </div>
     );
   }
 
-  // Show Results
-  if (result) {
-    const pct = result.percentage;
-    const isPass = pct >= 60;
-    const stars = pct >= 90 ? '⭐⭐⭐' : pct >= 75 ? '⭐⭐' : pct >= 60 ? '⭐' : '';
+  // ─────────────────────────────────────────────────────────────
+  // 1. INTRO / START SCREEN
+  // ─────────────────────────────────────────────────────────────
+  if (mode === 'intro') {
+    const prevPct = previousResult?.total_points > 0
+      ? Math.round((Number(previousResult.score) / Number(previousResult.total_points)) * 100)
+      : null;
+    const isPrevPass = prevPct !== null && prevPct >= (quiz.passing_score || 60);
 
     return (
-      <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
-        {/* Result Header */}
-        <div className={`bg-white rounded-2xl shadow-xl p-8 text-center ${isPass ? 'border-4 border-green-400' : 'border-4 border-orange-400'}`}>
-          <div className="text-6xl mb-4">{isPass ? '🎉' : '💪'}</div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            {isPass ? 'Great Job! You Passed!' : 'Keep Practicing!'}
-          </h1>
-          <p className="text-xl text-gray-600 mb-4">
-            You scored <span className="font-bold text-3xl">{result.score} / {result.total_points}</span>
-          </p>
-          <div className="text-4xl font-bold mb-4">
-            {pct}% {stars}
-          </div>
-          <p className="text-lg text-gray-600">
-            {isPass 
-              ? 'Excellent work! You really know your stuff! 🌟' 
-              : "Don't worry! Keep practicing and you'll get there! 💪"}
-          </p>
-          <p className="mt-2 text-gray-500">{result.message || ''}</p>
+      <div className="max-w-2xl mx-auto space-y-6 animate-fade-in pb-12">
+        {/* Navigation back */}
+        <div className="flex items-center justify-between">
+          <Link
+            to={quiz.lesson_id ? `/child/lessons/${quiz.lesson_id}` : '/child/quizzes'}
+            className="inline-flex items-center gap-2 text-purple-700 hover:text-purple-800 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-purple-100 transition hover:scale-105"
+          >
+            <span>←</span> ወደ ትምህርቱ ተመለስ / Back to Lesson
+          </Link>
+          <Link
+            to="/child/quizzes"
+            className="text-xs font-extrabold text-slate-500 hover:text-purple-600"
+          >
+            📋 ሁሉም ፈተናዎች / All Quizzes
+          </Link>
         </div>
 
-        {/* Detailed Results */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-4">
-            <h2 className="text-2xl font-bold text-white">📊 Question Review</h2>
+        {/* Main Quiz Hero Card */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-md border-2 border-purple-100 text-center space-y-6">
+          <div className="w-20 h-20 mx-auto bg-gradient-to-tr from-amber-400 to-orange-400 rounded-3xl flex items-center justify-center text-4xl shadow-md transform hover:rotate-6 transition">
+            🧠
           </div>
-          <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-            {questions.map((q, index) => {
-              const userAnswer = answers[q.id];
-              const isCorrect = userAnswer && userAnswer.toString().toLowerCase() === q.correct_answer.toString().toLowerCase();
-              return (
-                <div key={q.id} className={`p-4 rounded-xl border-2 ${isCorrect ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
-                  <div className="flex items-start justify-between mb-3">
-                    <h4 className="font-bold text-gray-800 flex-1">
-                      Question {index + 1}: {q.question_text}
-                    </h4>
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {isCorrect ? '✅ Correct' : '❌ Incorrect'}
-                    </span>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <p className={`flex items-center gap-2 ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
-                      <span className="font-medium">Your answer:</span>
-                      <span>{userAnswer || 'Not answered'}</span>
-                    </p>
-                    <p className="text-green-700 flex items-center gap-2">
-                      <span className="font-medium">Correct answer:</span>
-                      <span>{q.correct_answer}</span>
-                    </p>
-                    {q.explanation && (
-                      <p className="text-blue-700 flex items-center gap-2">
-                        <span className="font-medium">💡 Hint:</span>
-                        <span>{q.explanation}</span>
-                      </p>
-                    )}
-                    {q.points && (
-                      <p className="text-gray-500">Points: {isCorrect ? q.points : 0} / {q.points}</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition"
-          >
-            Back to Lesson
-          </button>
-          <button
-            onClick={() => navigate(`/child/quizzes/${id}/results`)}
-            className="flex-1 px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-bold hover:from-purple-600 hover:to-pink-600 transition"
-          >
-            View Details →
-          </button>
+          <div className="space-y-2">
+            <span className="px-3.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-black uppercase tracking-wider">
+              🇪🇹 የህፃናት ፈተና / Kids Quiz
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-800">{quiz.title}</h1>
+            {quiz.lesson_title && (
+              <p className="text-xs sm:text-sm font-bold text-purple-700">
+                ትምህርት: {quiz.lesson_title} • {quiz.course_title}
+              </p>
+            )}
+            {quiz.description && (
+              <p className="text-sm text-slate-600 max-w-lg mx-auto">{quiz.description}</p>
+            )}
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-3 gap-3 max-w-md mx-auto">
+            <div className="bg-purple-50 p-3 rounded-2xl border border-purple-100">
+              <span className="text-xl block">❓</span>
+              <span className="text-xs font-bold text-slate-500">ጥያቄዎች</span>
+              <p className="text-base font-black text-purple-900">{questions.length}</p>
+            </div>
+            <div className="bg-amber-50 p-3 rounded-2xl border border-amber-100">
+              <span className="text-xl block">⏱️</span>
+              <span className="text-xs font-bold text-slate-500">ጊዜ</span>
+              <p className="text-base font-black text-amber-900">
+                {quiz.time_limit_seconds ? `${Math.round(quiz.time_limit_seconds / 60)} ደቂቃ` : 'ያልተገደበ'}
+              </p>
+            </div>
+            <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-100">
+              <span className="text-xl block">🎯</span>
+              <span className="text-xs font-bold text-slate-500">ማለፊያ</span>
+              <p className="text-base font-black text-emerald-900">{quiz.passing_score || 60}%</p>
+            </div>
+          </div>
+
+          {/* Previous Attempt Summary if taken before */}
+          {previousResult && (
+            <div className={`p-4 rounded-2xl border-2 text-left ${isPrevPass ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-600">
+                  የቀድሞ ውጤትህ/ሽ / Previous Result
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${isPrevPass ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800'}`}>
+                  {isPrevPass ? '✓ አልፈሃል/ሻል (Passed)' : '❌ አልተሳካም (Failed)'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm font-extrabold text-slate-800">
+                <span>ውጤት: {previousResult.score} / {previousResult.total_points}</span>
+                <span className="text-lg font-black text-purple-700">{prevPct}%</span>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-rose-50 border border-rose-300 p-3 rounded-xl text-rose-700 text-xs font-bold">
+              ⚠️ {error}
+            </div>
+          )}
+
+          {/* Action button */}
+          <div>
+            {quizMeta.can_attempt ? (
+              <button
+                onClick={handleStartQuiz}
+                disabled={submitting || questions.length === 0}
+                className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white font-black text-lg rounded-2xl shadow-lg hover:shadow-xl transition transform hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-2 mx-auto"
+              >
+                {submitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                    <span>በማስጀመር ላይ...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{previousResult ? '🔄 ፈተናውን እንደገና ሞክር / Retake Quiz' : '🚀 ፈተናውን ጀምር / Start Quiz'}</span>
+                    <span>➔</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="p-4 bg-slate-100 rounded-2xl text-slate-600 text-sm font-bold">
+                ⚠️ የፈተና ሙከራ ገደብህ አልቋል ({quizMeta.attempt_count}/{quizMeta.attempt_limit}) / Maximum attempt limit reached.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // 2. RESULTS SCREEN
+  // ─────────────────────────────────────────────────────────────
+  if (mode === 'results' && result) {
+    const pct = result.percentage;
+    const isPass = result.passed || pct >= (quiz?.passing_score || 60);
+    const stars = pct >= 90 ? '⭐⭐⭐' : pct >= 75 ? '⭐⭐' : pct >= 60 ? '⭐' : '💪';
+
+    return (
+      <div className="space-y-6 animate-fade-in max-w-2xl mx-auto pb-16">
+        {/* Top Result Banner */}
+        <div className={`bg-white rounded-3xl shadow-xl p-6 sm:p-8 text-center border-4 ${isPass ? 'border-emerald-400 bg-gradient-to-b from-emerald-50/40 to-white' : 'border-amber-400 bg-gradient-to-b from-amber-50/40 to-white'}`}>
+          <div className="text-6xl mb-3 animate-bounce">{isPass ? '🎉' : '💪'}</div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-800 mb-1">
+            {isPass ? 'በጣም ጎበዝ! አልፈሃል/ሻል!' : 'በርታ/ቺ! እንደገና መሞከር ትችላለህ/ያለሽ!'}
+          </h1>
+          <p className="text-sm font-extrabold text-slate-500 mb-4">
+            {isPass ? 'Great Job! You Passed the Quiz!' : "Keep Practicing! You'll get there!"}
+          </p>
+
+          <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-inner border border-slate-100 mb-4">
+            <span className="text-3xl sm:text-4xl font-black text-purple-700">{pct}%</span>
+            <span className="text-2xl">{stars}</span>
+            <span className="text-sm font-extrabold text-slate-600">
+              ({result.score} / {result.total_points} ነጥብ)
+            </span>
+          </div>
+
+          <p className="text-sm font-bold text-slate-700 max-w-md mx-auto">{result.message}</p>
+        </div>
+
+        {/* Detailed Question Review */}
+        {result.review && result.review.length > 0 && (
+          <div className="bg-white rounded-3xl shadow-md border border-purple-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 text-white flex items-center justify-between">
+              <h2 className="text-lg font-black flex items-center gap-2">
+                <span>📊</span> የጥያቄዎች ግምገማ / Question Review
+              </h2>
+              <span className="text-xs bg-white/20 px-2.5 py-1 rounded-full font-bold">
+                {result.review.length} ጥያቄዎች
+              </span>
+            </div>
+
+            <div className="p-5 sm:p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              {result.review.map((item, index) => {
+                const isCorrect = item.is_correct;
+                return (
+                  <div
+                    key={item.id || index}
+                    className={`p-4 sm:p-5 rounded-2xl border-2 transition ${
+                      isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h4 className="font-black text-slate-800 text-sm sm:text-base flex-1">
+                        {index + 1}. {item.question_text}
+                      </h4>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-black shrink-0 ${
+                        isCorrect ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
+                      }`}>
+                        {isCorrect ? '✅ ትክክል / Correct' : '❌ ስህተት / Incorrect'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs sm:text-sm pt-2 border-t border-slate-200/60">
+                      <p className="flex items-center gap-2">
+                        <span className="font-bold text-slate-500">የአንተ/ቺ መልስ:</span>
+                        <span className={`font-black ${isCorrect ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {item.student_answer ? String(item.student_answer) : 'ያልተመለሰ (Unanswered)'}
+                        </span>
+                      </p>
+
+                      {!isCorrect && item.correct_answer && (
+                        <p className="flex items-center gap-2 text-emerald-800">
+                          <span className="font-bold text-slate-500">ትክክለኛው መልስ:</span>
+                          <span className="font-black">{String(item.correct_answer)}</span>
+                        </p>
+                      )}
+
+                      {item.explanation && (
+                        <p className="bg-white/70 p-2.5 rounded-xl text-xs text-indigo-900 font-medium mt-1">
+                          💡 <strong>ማስታወሻ:</strong> {item.explanation}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <Link
+            to={quiz?.lesson_id ? `/child/lessons/${quiz.lesson_id}` : '/child/quizzes'}
+            className="w-full sm:flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-center transition"
+          >
+            ← ወደ ትምህርቱ ተመለስ / Back to Lesson
+          </Link>
+
+          {quizMeta.can_attempt && (
+            <button
+              onClick={handleStartQuiz}
+              className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 text-white font-black rounded-2xl text-center shadow-md transition"
+            >
+              🔄 እንደገና ፈትን / Retake Quiz
+            </button>
+          )}
+
+          <Link
+            to="/child/quizzes"
+            className="w-full sm:w-auto px-5 py-3.5 bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 font-bold rounded-2xl text-center transition"
+          >
+            📋 ፈተናዎች / Quizzes
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 3. QUIZ TAKING SCREEN
+  // ─────────────────────────────────────────────────────────────
   const currentQ = questions[currentQuestion];
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== '').length;
   const progressPercent = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <button onClick={() => navigate(-1)} className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium">
-            <span className="mr-2">←</span> Back to Lesson
-          </button>
-          {quiz.time_limit_seconds && (
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-lg ${timeLeft !== null && timeLeft < 60 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-purple-100 text-purple-700'}`}>
-              ⏱️ {formatTime(timeLeft)}
-            </div>
-          )}
-        </div>
+    <div className="space-y-6 animate-fade-in max-w-3xl mx-auto pb-16">
+      {/* Top Header with Timer */}
+      <div className="bg-white rounded-3xl shadow-sm border border-purple-100 p-5 sm:p-6 flex items-center justify-between gap-4">
+        <button
+          onClick={() => setMode('intro')}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-purple-600"
+        >
+          <span>✕</span> ሰርዝ / Quit Quiz
+        </button>
 
-        <div className="flex items-start gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-500 rounded-2xl flex items-center justify-center flex-shrink-0">
-            <span className="text-3xl">📝</span>
+        <h2 className="text-base sm:text-lg font-black text-slate-800 truncate">{quiz?.title}</h2>
+
+        {quiz?.time_limit_seconds > 0 && (
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl font-black text-sm ${
+            timeLeft !== null && timeLeft < 60 ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-purple-100 text-purple-700'
+          }`}>
+            <span>⏱️</span>
+            <span>{formatTime(timeLeft)}</span>
           </div>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">{quiz.title}</h1>
-            <p className="text-gray-600">{quiz.description || 'Test your knowledge!'}</p>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* Progress Bar */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center font-bold text-purple-700">
+      {/* Progress Bar & Current Question Counter */}
+      <div className="bg-white rounded-3xl shadow-sm border border-purple-100 p-5 sm:p-6 space-y-3">
+        <div className="flex items-center justify-between text-xs sm:text-sm font-black">
+          <div className="flex items-center gap-2 text-purple-700">
+            <span className="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center text-xs">
               {currentQuestion + 1}
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Question</p>
-              <p className="font-bold text-gray-800">{currentQuestion + 1} of {questions.length}</p>
-            </div>
+            </span>
+            <span>ጥያቄ {currentQuestion + 1} ከ {questions.length}</span>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">Progress</p>
-            <p className="font-bold text-purple-600">{Math.round(progressPercent)}%</p>
-          </div>
+          <span className="text-slate-500">{answeredCount} ተመልሷል / {questions.length}</span>
         </div>
-        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+
+        <div className="w-full bg-purple-100 h-3 rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
-          >
-            <div className={`h-full ${getProgressColor(progressPercent)} rounded-full`} />
-          </div>
-        </div>
-        <div className="flex justify-between text-sm text-gray-500 mt-2">
-          <span>{answeredCount} answered</span>
-          <span>{questions.length - answeredCount} remaining</span>
+          />
         </div>
       </div>
 
-      {/* Question */}
+      {/* Question Card */}
       {currentQ && (
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium">
-                {currentQ.question_type.replace(/_/g, ' ')}
+        <div className="bg-white rounded-3xl shadow-md border-2 border-purple-100 p-6 sm:p-8 space-y-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs font-black uppercase">
+                {currentQ.question_type}
               </span>
-              {currentQ.points && (
-                <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
-                  ⭐ {currentQ.points} point{currentQ.points > 1 ? 's' : ''}
-                </span>
-              )}
+              <span className="px-3 py-0.5 bg-amber-50 text-amber-800 rounded-full text-xs font-black">
+                ⭐ {currentQ.points || 1} ነጥብ
+              </span>
             </div>
-            <h3 className="text-2xl font-bold text-gray-800 leading-relaxed">
+
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 leading-relaxed">
               {currentQuestion + 1}. {currentQ.question_text}
             </h3>
           </div>
 
-          {/* Question Image/Audio */}
+          {/* Media attachment if any */}
           {currentQ.question_config?.media_url && (
-            <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+            <div className="p-3 bg-slate-50 rounded-2xl max-w-md mx-auto text-center">
               {currentQ.question_type === 'picture' ? (
-                <img src={resolveFileUrl(currentQ.question_config.media_url)} alt="Question image" className="max-w-full h-auto rounded-lg" />
+                <img
+                  src={resolveFileUrl(currentQ.question_config.media_url)}
+                  alt="Question"
+                  className="max-h-60 rounded-xl mx-auto shadow-sm"
+                />
               ) : currentQ.question_type === 'audio' ? (
                 <audio src={resolveFileUrl(currentQ.question_config.media_url)} controls className="w-full" />
               ) : null}
             </div>
           )}
 
-          {/* Options */}
-          <form className="space-y-4">
-            {currentQ.question_type === 'mcq' && currentQ.options && (
-              <div className="space-y-3" role="radiogroup" aria-label="Answer options">
-                {currentQ.options.map((option, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => handleAnswer(currentQ.id, option)}
-                    className={`w-full p-5 rounded-xl border-2 text-left text-lg transition-all ${
-                      answers[currentQ.id] === option
-                        ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-200'
-                        : 'bg-gray-50 border-gray-200 hover:bg-purple-50 hover:border-purple-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${
-                        answers[currentQ.id] === option ? 'bg-purple-500' : 'bg-gray-200 text-gray-500'
+          {/* Options / Answer Input */}
+          <div className="space-y-3 pt-2">
+            {/* MCQ Options */}
+            {currentQ.question_type === 'mcq' && Array.isArray(currentQ.options) && (
+              <div className="grid grid-cols-1 gap-3">
+                {currentQ.options.map((option, idx) => {
+                  const isSelected = answers[currentQ.id] === option;
+                  const letter = String.fromCharCode(65 + idx);
+
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleAnswer(currentQ.id, option)}
+                      className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left font-bold text-base sm:text-lg transition-all flex items-center gap-4 ${
+                        isSelected
+                          ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-200 text-purple-900 shadow-sm'
+                          : 'bg-slate-50/70 border-slate-200 hover:bg-purple-50/50 hover:border-purple-300 text-slate-800'
+                      }`}
+                    >
+                      <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black transition ${
+                        isSelected ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'
                       }`}>
-                        {String.fromCharCode(65 + index)}
-                      </div>
-                      <span className="flex-1 text-left text-lg">{option}</span>
-                      {answers[currentQ.id] === option && (
-                        <svg className="w-6 h-6 text-purple-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                        </svg>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                        {letter}
+                      </span>
+                      <span className="flex-1 text-left leading-snug">{option}</span>
+                      {isSelected && <span className="text-xl text-purple-600">✓</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
+            {/* True / False Options */}
             {currentQ.question_type === 'true_false' && (
-              <div className="flex gap-4" role="radiogroup">
-                {['True', 'False'].map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => handleAnswer(currentQ.id, opt)}
-                    className={`flex-1 p-6 rounded-xl border-2 text-center font-bold text-2xl transition-all ${
-                      answers[currentQ.id] === opt
-                        ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-200 text-purple-700'
-                        : 'bg-gray-50 border-gray-200 hover:bg-purple-50 hover:border-purple-300 text-gray-700'
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { value: 'True', amharic: 'እውነት (True)', icon: '👍' },
+                  { value: 'False', amharic: 'ሀሰት (False)', icon: '👎' },
+                ].map((opt) => {
+                  const isSelected = answers[currentQ.id] === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleAnswer(currentQ.id, opt.value)}
+                      className={`p-6 rounded-3xl border-2 font-black text-center transition flex flex-col items-center gap-2 ${
+                        isSelected
+                          ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-200 text-purple-900 shadow-md'
+                          : 'bg-slate-50 border-slate-200 hover:bg-purple-50 text-slate-700'
+                      }`}
+                    >
+                      <span className="text-4xl">{opt.icon}</span>
+                      <span className="text-base sm:text-lg">{opt.amharic}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
+            {/* Short Answer / Fill in Blank */}
             {(currentQ.question_type === 'short_answer' || currentQ.question_type === 'fill_in_the_blank') && (
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Your Answer
-                </label>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500">መልስህን/ሽን እዚህ ጻፍ / Type your answer:</label>
                 <input
                   type="text"
                   value={answers[currentQ.id] || ''}
                   onChange={(e) => handleAnswer(currentQ.id, e.target.value)}
-                  className="w-full px-4 py-4 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-200 text-lg"
-                  placeholder="Type your answer here..."
+                  placeholder="መልስ..."
+                  className="w-full px-5 py-4 border-2 border-slate-200 focus:border-purple-500 rounded-2xl text-lg font-bold text-slate-800 outline-none transition"
                   autoFocus
                 />
               </div>
             )}
+          </div>
 
-            {currentQ.question_type === 'matching' && currentQ.options && (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-600 mb-3">Match the items:</p>
-                {currentQ.options.map((pair, index) => (
-                  <div key={index} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-                    <span className="flex-1 font-medium text-gray-800">{pair.left}</span>
-                    <span className="text-gray-400">→</span>
-                    <select
-                      value={answers[`${currentQ.id}_${index}`] || ''}
-                      onChange={(e) => handleAnswer(`${currentQ.id}_${index}`, e.target.value)}
-                      className="flex-1 px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-200"
-                    >
-                      <option value="">Select match...</option>
-                      {currentQ.options.map((_, optIndex) => (
-                        <option key={optIndex} value={currentQ.options[optIndex].right}>
-                          {currentQ.options[optIndex].right}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            )}
-          </form>
-
-          {/* Answer Feedback */}
-          {answers[currentQ.id] && (
-            <div className="mt-6 p-4 bg-green-50 rounded-xl flex items-center gap-2 text-green-700">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
-              <span className="font-medium">Answer selected: {answers[currentQ.id]}</span>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <div className="mt-8 flex items-center justify-between pt-6 border-t border-gray-100">
+          {/* Stepper Navigation */}
+          <div className="flex items-center justify-between pt-6 border-t border-slate-100">
             <button
               onClick={() => goToQuestion(currentQuestion - 1)}
               disabled={currentQuestion === 0}
-              className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2"
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-700 font-bold rounded-xl text-xs sm:text-sm transition flex items-center gap-1.5"
             >
-              ← Previous
+              <span>←</span> የቀደመው / Prev
             </button>
 
-            <div className="flex items-center gap-2">
-              {questions.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => goToQuestion(index)}
-                  className={`w-10 h-10 rounded-xl font-bold transition-all ${
-                    index === currentQuestion
-                      ? 'bg-purple-500 text-white ring-2 ring-purple-200'
-                      : answers[questions[index]?.id]
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {index + 1}
-                </button>
-              ))}
+            {/* Quick question pill buttons */}
+            <div className="hidden sm:flex items-center gap-1.5">
+              {questions.map((q, idx) => {
+                const isAns = answers[q.id] !== undefined && answers[q.id] !== '';
+                const isCurr = idx === currentQuestion;
+
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => goToQuestion(idx)}
+                    className={`w-8 h-8 rounded-xl text-xs font-black transition ${
+                      isCurr
+                        ? 'bg-purple-600 text-white ring-2 ring-purple-300'
+                        : isAns
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
             </div>
 
-            <button
-              onClick={() => goToQuestion(currentQuestion + 1)}
-              disabled={currentQuestion === questions.length - 1}
-              className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center gap-2"
-            >
-              Next →
-            </button>
+            {currentQuestion < questions.length - 1 ? (
+              <button
+                onClick={() => goToQuestion(currentQuestion + 1)}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow transition flex items-center gap-1.5"
+              >
+                <span>ቀጣይ / Next</span>
+                <span>→</span>
+              </button>
+            ) : (
+              <button
+                onClick={submitQuiz}
+                className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 text-white font-black rounded-xl text-xs sm:text-sm shadow-md transition flex items-center gap-1.5"
+              >
+                <span>📤 አስገባ / Submit</span>
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Question Navigator */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h3 className="font-bold text-gray-800 mb-4">Question Navigator</h3>
-        <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2">
-          {questions.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => goToQuestion(index)}
-              className={`w-12 h-12 rounded-xl font-bold transition-all ${
-                index === currentQuestion
-                  ? 'bg-purple-500 text-white ring-2 ring-purple-200'
-                  : answers[questions[index]?.id]
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {index + 1}
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-500">
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-gray-100 rounded"></span> Not answered</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded"></span> Answered</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-purple-500 rounded"></span> Current</span>
-        </div>
-      </div>
-
-      {/* Submit Section */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <span>📤</span> Ready to Submit?
-        </h2>
-        
+      {/* Ready to Submit Card */}
+      <div className="bg-white rounded-3xl shadow-sm border border-purple-100 p-6 text-center space-y-3">
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl mb-4">
-            <p className="text-red-700 font-medium flex items-center gap-2">
-              <span>⚠️</span> {error}
-            </p>
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold">
+            ⚠️ {error}
           </div>
         )}
 
-        <div className="bg-purple-50 rounded-xl p-4 mb-4">
-          <h3 className="font-bold text-purple-800 mb-2">✨ Check Your Work!</h3>
-          <p className="text-gray-700 mb-2">You've answered <strong>{answeredCount} out of {questions.length}</strong> questions.</p>
-          <p className="text-gray-600 text-sm">Make sure you're happy with all your answers before submitting.</p>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-left space-y-1">
+            <h4 className="font-black text-slate-800 text-base">ሁሉንም መልሰሃል/ሻል? / All done?</h4>
+            <p className="text-xs text-slate-500 font-medium">
+              {answeredCount} ከ {questions.length} ጥያቄዎች ተመልሰዋል ({questions.length - answeredCount} ይቀራል)
+            </p>
+          </div>
+
+          <button
+            onClick={submitQuiz}
+            disabled={submitting}
+            className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 text-white font-black rounded-2xl shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {submitting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <span>በማስገባት ላይ...</span>
+              </>
+            ) : (
+              <>
+                <span>📤 ፈተናውን አስገባ / Submit Quiz</span>
+              </>
+            )}
+          </button>
         </div>
-
-        <button
-          onClick={() => handleSubmit()}
-          disabled={submitting || answeredCount < questions.length}
-          className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-bold text-lg hover:from-purple-600 hover:to-pink-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {submitting ? (
-            <>
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              <span>Submitting...</span>
-            </>
-          ) : (
-            <>
-              <span>📤</span>
-              <span>Submit Quiz</span>
-            </>
-          )}
-        </button>
-
-        {answeredCount < questions.length && (
-          <p className="mt-3 text-center text-sm text-gray-500">
-            Please answer all {questions.length - answeredCount} remaining question{questions.length - answeredCount > 1 ? 's' : ''} first.
-          </p>
-        )}
       </div>
 
       {/* Confirmation Modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Submit Quiz?</h3>
-            <p className="text-gray-600 mb-6 text-center">
-              You've answered all {questions.length} questions. Your teacher will see your results immediately.
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
+            <div className="w-16 h-16 bg-purple-100 rounded-2xl mx-auto flex items-center justify-center text-3xl">
+              📤
+            </div>
+            <h3 className="text-xl font-black text-slate-800">ፈተናውን ማስገባት ትፈልጋለህ/ሽ?</h3>
+            <p className="text-xs text-slate-500 font-medium">
+              Are you sure you want to submit? Your answers will be graded immediately!
             </p>
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition"
               >
-                Review Answers
+                ተመለስ / Review
               </button>
               <button
                 onClick={confirmSubmit}
                 disabled={submitting}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 disabled:opacity-50"
+                className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 text-white font-black rounded-2xl text-xs shadow-md transition disabled:opacity-50"
               >
-                {submitting ? 'Submitting...' : 'Yes, Submit Quiz'}
+                {submitting ? 'እያስገባ ነው...' : 'አዎ አስገባ / Yes, Submit'}
               </button>
             </div>
           </div>

@@ -311,9 +311,39 @@ export default function WritingActivity() {
 
         {activity.instructions && (
           <div className="mt-4 p-4 bg-green-50 rounded-xl border-l-4 border-green-400">
-            <h3 className="font-bold text-green-800 mb-2">🎯 What to Do</h3>
-            <p className="text-gray-700">{activity.instructions}</p>
+            <h3 className="font-bold text-green-800 mb-2">🎯 What to Do (ምን ማድረግ እንዳለብህ)</h3>
+            <p className="text-gray-700 font-medium">{activity.instructions}</p>
           </div>
+        )}
+
+        {/* Ethiopian Fidel Tracing Reference Cards */}
+        {activity.activity_config && (
+          (() => {
+            let conf = activity.activity_config;
+            if (typeof conf === 'string') {
+              try { conf = JSON.parse(conf); } catch(e) {}
+            }
+            if (conf?.letters && Array.isArray(conf.letters)) {
+              return (
+                <div className="mt-4 p-5 bg-gradient-to-r from-amber-50 to-emerald-50 rounded-2xl border-2 border-amber-200 shadow-sm">
+                  <h3 className="font-black text-amber-950 mb-3 flex items-center gap-2 text-base">
+                    <span>✍️</span> ፊደላቱን አይተህ በስክሪኑ ላይ ጻፍ (Practice Drawing These Fidels):
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                    {conf.letters.map((char, idx) => (
+                      <div
+                        key={idx}
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white border-2 border-amber-300 shadow-md flex items-center justify-center text-4xl sm:text-5xl font-black text-purple-800 hover:scale-110 transition transform select-none"
+                      >
+                        {char}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()
         )}
 
         {isGraded && activity.score !== null && (
