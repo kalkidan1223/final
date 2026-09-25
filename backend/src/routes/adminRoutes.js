@@ -61,6 +61,9 @@ router.get('/reports', requireAuth, authorize('admin'), adminController.listRepo
 
 // --- Notifications ---
 router.get('/notifications', requireAuth, authorize('admin'), adminController.listAllNotifications);
+router.get('/notifications/unread', requireAuth, authorize('admin'), adminController.getUnreadNotifications);
+router.patch('/notifications/read-all', requireAuth, authorize('admin'), adminController.markAllNotificationsRead);
+router.patch('/notifications/:id/read', requireAuth, authorize('admin'), adminController.markNotificationRead);
 router.post('/notifications/send', requireAuth, authorize('admin'), adminExtController.sendNotification);
 
 // --- Lessons (admin supervise) ---

@@ -57,6 +57,7 @@ import ChildDashboard from './pages/child/ChildDashboard';
 import ChildCourses from './pages/child/ChildCourses';
 import ChildCourseDetail from './pages/child/ChildCourseDetail';
 import ChildLessonDetail from './pages/child/ChildLessonDetail';
+import ChildActivityDetail from './pages/child/ChildActivityDetail';
 import ChildProgress from './pages/child/ChildProgress';
 import ChildActivities from './pages/child/ChildActivities';
 import ChildQuizzes from './pages/child/ChildQuizzes';
@@ -373,7 +374,7 @@ export default function App() {
       <Route path="/courses/:id" element={<Navigate to="/child/courses/:id" replace />} />
       <Route path="/lessons/:id" element={<Navigate to="/child/lessons/:id" replace />} />
       <Route path="/quizzes/:id" element={<Navigate to="/child/quizzes/:id" replace />} />
-      <Route path="/activities/:id" element={<Navigate to="/child/activities" replace />} />
+      <Route path="/activities/:id" element={<Navigate to="/child/activities/:id" replace />} />
 
       {/* ── Child Learning Portal (Gamified, Interactive, Responsive) ── */}
       <Route path="/child" element={<ProtectedRoute roles={['student', 'parent']}><ChildLayout /></ProtectedRoute>}>
@@ -382,6 +383,7 @@ export default function App() {
         <Route path="courses" element={<ChildCourses />} />
         <Route path="courses/:id" element={<ChildCourseDetail />} />
         <Route path="lessons/:id" element={<ChildLessonDetail />} />
+        <Route path="activities/:id" element={<ChildActivityDetail />} />
         <Route path="progress" element={<ChildProgress />} />
         <Route path="activities" element={<ChildActivities />} />
         <Route path="quizzes" element={<ChildQuizzes />} />

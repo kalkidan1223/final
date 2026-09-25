@@ -16,4 +16,6 @@ function requireRole(allowedRoles) {
   return authorize(...allowedRoles);
 }
 
-module.exports = { authorize, requireRole };
+const allowRoles = (...allowedRoles) => authorize(...allowedRoles);
+
+module.exports = { authorize, requireRole, allowRoles };

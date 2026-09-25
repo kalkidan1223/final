@@ -4,7 +4,7 @@ const authController = require('../controllers/authController');
 const authRegistrationController = require('../controllers/authRegistrationController');
 const adminApprovalController = require('../controllers/adminApprovalController');
 const passport = require('../config/passport');
-const { generateToken } = require('../utils/jwt');
+const { signAccessToken, signRefreshToken } = require('../utils/jwt');
 
 const router = express.Router();
 
@@ -47,8 +47,8 @@ router.get('/google/callback',
       }
 
       // Generate JWT tokens
-      const token = generateToken(user);
-      const refreshToken = generateToken(user, true);
+      const token = signAccessToken(user);
+      const refreshToken = signRefreshToken(user);
 
       // Redirect to frontend with tokens
       res.redirect(

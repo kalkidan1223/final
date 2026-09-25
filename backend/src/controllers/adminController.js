@@ -954,6 +954,61 @@ async function listAllNotifications(req, res, next) {
   }
 }
 
+// PATCH /api/admin/notifications/:id/read
+async function markNotificationRead(req, res, next) {
+  try {
+    const { id } = req.params;
+    const result = await query(
+      `UPDATE notifications SET is_read = TRUE WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    res.json({ notification: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/admin/notifications/read-all
+async function markAllNotificationsRead(req, res, next) {
+  try {
+    const result = await query(
+      `UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE RETURNING id`,
+      [req.user.id]
+    );
+    res.json({ updated: result.rowCount, message: 'All notifications marked as read' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/admin/notifications/unread
+async function getUnreadNotifications(req, res, next) {
+  try {
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS unread_count FROM notifications WHERE user_id = $1 AND is_read = FALSE`,
+      [req.user.id]
+    );
+    const recentResult = await query(
+      `SELECT n.*, u.full_name AS user_name
+       FROM notifications n
+       JOIN users u ON u.id = n.user_id
+       WHERE n.user_id = $1 AND n.is_read = FALSE
+       ORDER BY n.created_at DESC
+       LIMIT 10`,
+      [req.user.id]
+    );
+    res.json({
+      unread_count: countResult.rows[0]?.unread_count || 0,
+      notifications: recentResult.rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // =============================================================================
 // ANALYTICS / DETAILED DASHBOARD
 // =============================================================================
@@ -1061,5 +1116,8 @@ module.exports = {
   deleteAgeGroup,
   listReports,
   listAllNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  getUnreadNotifications,
   getAnalytics,
 };

@@ -14,8 +14,8 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
   }
 
   const status = err.statusCode || 500;
-  const message = status === 500 ? 'Internal server error' : err.message;
-  res.status(status).json({ error: message });
+  const message = status === 500 && process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
+  res.status(status).json({ error: message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
 }
 
 module.exports = { notFoundHandler, errorHandler };
