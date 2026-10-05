@@ -53,7 +53,7 @@ frontend/    React application
 
 ### 2. Database Setup
 
-Create a PostgreSQL database and run the SQL files in order:
+Create a PostgreSQL database and run the schema followed by the migration files in order:
 
 ```bash
 createdb learning_hub
@@ -64,11 +64,18 @@ psql -d learning_hub -f backend/migrations/004_child_approval_policy.sql
 psql -d learning_hub -f backend/migrations/005_parent_guardian_verification.sql
 psql -d learning_hub -f backend/migrations/006_child_request_review_notes.sql
 psql -d learning_hub -f backend/migrations/007_student_profile_details.sql
-psql -d learning_hub -f backend/migrations/016_sync_instructor_assignments.sql
-psql -d learning_hub -f backend/migrations/017_instructor_lms_content_management.sql
+psql -d learning_hub -f backend/migrations/008_google_oauth.sql
+psql -d learning_hub -f backend/migrations/009_instructor_assignments.sql
+psql -d learning_hub -f backend/migrations/010_age_group_available_courses.sql
+psql -d learning_hub -f backend/migrations/011_fix_instructor_course_assignments.sql
+psql -d learning_hub -f backend/migrations/012_link_courses_to_available_courses.sql
+psql -d learning_hub -f backend/migrations/013_instructor_registration.sql
+psql -d learning_hub -f backend/migrations/014_instructor_portal_extensions.sql
 ```
 
 If you already created the database before the child-approval policy was added, back it up before applying migrations `004_child_approval_policy.sql` through `006_child_request_review_notes.sql`. Migration 006 is required for the administrator's child approval action because it stores the reviewer note.
+
+If this is a fresh setup, use the full sequence above. If the database already exists, apply only the remaining migration files after the last one you have already run.
 
 ### Child Approval Policy
 
@@ -141,8 +148,3 @@ Log in at [http://localhost:5173/login](http://localhost:5173/login) — you wil
 - The former direct invite-based student registration flow has been removed to enforce administrator approval.
 - After pulling changes, run any newly added migrations before testing admin approvals or registration flows.
 
-
-
-## License
-
-This project is intended for educational and academic use.
