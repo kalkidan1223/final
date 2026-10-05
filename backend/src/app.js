@@ -24,19 +24,36 @@ const materialsRoutes = require('./routes/materialsRoutes');
 const videosRoutes = require('./routes/videosRoutes');
 const instructorRoutes = require('./routes/instructorRoutes');
 const uploadsRoutes = require('./routes/uploadsRoutes');
+const childLearningRoutes = require('./routes/childLearningRoutes');
+const lessonResourceRoutes = require('./routes/lessonResourceRoutes');
+const referenceRoutes = require('./routes/referenceRoutes');
+const homePinRoutes = require('./routes/homePinRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
-const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map(o => o.trim());
+const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173,http://localhost:5174')
+  .split(',')
+  .map(o => o.trim());
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    // Allow requests with no origin (like mobile apps, curl, or Postman)
+    if (!origin) return callback(null, true);
+
+    // Allow configured origins
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // In development mode, allow any localhost or 127.0.0.1 port
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
     }
+
+    // Rather than throwing an error which triggers a 500 Internal Server Error,
+    // tell cors to reject the request cleanly.
+    return callback(null, false);
   },
   credentials: true,
 }));
@@ -69,6 +86,10 @@ app.use('/api/materials', materialsRoutes);
 app.use('/api/videos', videosRoutes);
 app.use('/api/instructor', instructorRoutes);
 app.use('/api/uploads', uploadsRoutes);
+app.use('/api/child/learning', childLearningRoutes);
+app.use('/api/instructor', lessonResourceRoutes);
+app.use('/api/reference', referenceRoutes);
+app.use('/api/home', homePinRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -2,15 +2,50 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 
-const ACHIEVEMENTS = [
-  { id: 'first_lesson', name: 'First Lesson', icon: '🌟', description: 'Complete your first lesson', color: 'from-yellow-400 to-orange-400' },
-  { id: 'five_activities', name: 'Activity Star', icon: '✨', description: 'Complete 5 activities', color: 'from-green-400 to-teal-400' },
-  { id: 'ten_activities', name: 'Super Learner', icon: '🚀', description: 'Complete 10 activities', color: 'from-blue-400 to-indigo-400' },
-  { id: 'quiz_master', name: 'Quiz Master', icon: '🧠', description: 'Score 90%+ on a quiz', color: 'from-purple-400 to-fuchsia-400' },
-  { id: 'perfect_score', name: 'Perfect Score', icon: '💯', description: 'Get 100% on a quiz', color: 'from-pink-400 to-rose-400' },
-  { id: 'course_explorer', name: 'Course Explorer', icon: '🗺️', description: 'Start 3 different courses', color: 'from-cyan-400 to-sky-400' },
-  { id: 'quiz_three', name: 'Quiz Enthusiast', icon: '📝', description: 'Take 3 quizzes', color: 'from-amber-400 to-yellow-500' },
-];
+/** Play interactive sound effects */
+function playClickSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } catch (e) {
+    // Audio not supported
+  }
+}
+
+function playAchievementSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 880; // A5
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (e) {
+    // Audio not supported
+  }
+}
 
 export default function ChildAchievements() {
   const [loading, setLoading] = useState(true);
@@ -25,7 +60,7 @@ export default function ChildAchievements() {
     try {
       setLoading(true);
       const res = await axiosClient.get('/child/achievements');
-      setAchievements(res.data.achievements || []);
+      setAchievements(res.data.badges || res.data.achievements || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load achievements');
     } finally {
@@ -66,24 +101,26 @@ export default function ChildAchievements() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {achievements.map((a) => (
+        {achievements.map((a, index) => (
           <div
             key={a.id}
-            className={`rounded-2xl p-6 border transition ${
+            className={`rounded-2xl p-6 border transition-all duration-300 ${
               a.earned
-                ? `bg-gradient-to-br ${a.color} text-white shadow-xl border-transparent`
-                : 'bg-white border-gray-200 opacity-70'
+                ? `bg-gradient-to-br ${a.color} text-white shadow-xl border-transparent hover:scale-105 hover:shadow-2xl animate-slide-up`
+                : 'bg-white border-gray-200 opacity-70 hover:opacity-100 hover:scale-105 animate-slide-up'
             }`}
+            style={{ animationDelay: `${index * 0.1}s` }}
+            onMouseEnter={() => a.earned && playAchievementSound()}
           >
             <div className="flex items-start gap-4">
-              <span className={`text-4xl ${a.earned ? '' : 'grayscale'}`} aria-hidden="true">{a.icon}</span>
+              <span className={`text-4xl ${a.earned ? 'animate-pop' : 'grayscale'}`} aria-hidden="true">{a.icon}</span>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-lg">{a.name}</h3>
                 <p className={`text-sm ${a.earned ? 'text-white/90' : 'text-gray-500'}`}>{a.description}</p>
               </div>
             </div>
             {a.earned ? (
-              <span className="inline-flex items-center gap-1 mt-3 px-3 py-1 bg-white/20 rounded-full text-xs font-bold">
+              <span className="inline-flex items-center gap-1 mt-3 px-3 py-1 bg-white/20 rounded-full text-xs font-bold badge-shine">
                 <span>✅</span> Earned
               </span>
             ) : (

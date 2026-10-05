@@ -126,6 +126,14 @@ export default function ChildQuizTake() {
       const res = await axiosClient.post(`/child/quizzes/${id}/submit`, { answers });
       const data = res.data;
 
+      // A passing attempt unlocks this step on the lesson journey. The backend
+      // re-verifies the pass server-side before recording completion.
+      if (data.passed) {
+        axiosClient
+          .post(`/child/learning/progress/quiz/${id}/complete`)
+          .catch(() => {});
+      }
+
       setResult({
         ...data.result,
         score: data.score,

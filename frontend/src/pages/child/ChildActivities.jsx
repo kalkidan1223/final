@@ -11,15 +11,7 @@ const TYPE_ICONS = {
   picture_selection: '🖼️', file_submission: '📤', short_answer: '✏️',
 };
 
-const TYPE_ROUTES = {
-  writing: 'write', reading: 'read', drawing: 'write', speaking: 'write',
-  worksheet: 'worksheet', matching: 'match', coloring: 'write', counting: 'write',
-  fill_in_the_blank: 'read', drag_and_drop: 'match', multiple_choice: 'read',
-  true_false: 'read', puzzle: 'match', story_reading: 'read', pronunciation: 'listen',
-  vocabulary_practice: 'read', letter_tracing: 'write', number_tracing: 'write',
-  listening: 'listen', picture_selection: 'match', file_submission: 'worksheet',
-  short_answer: 'read',
-};
+
 
 export default function ChildActivities() {
   const [loading, setLoading] = useState(true);
@@ -89,13 +81,15 @@ export default function ChildActivities() {
             <h2 className="text-2xl font-bold text-gray-800 mb-4">{course}</h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map((a) => {
-                const routeType = TYPE_ROUTES[a.activity_type] || 'write';
                 const isCompleted = a.submission_status === 'graded';
+                const isLocked = !!a.is_locked;
                 return (
                   <Link
                     key={a.id}
-                    to={isCompleted ? `/child/activities/${a.id}/results` : `/child/activities/${a.id}/${routeType}`}
-                    className="group block bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 p-5 border border-gray-100 hover:border-green-200"
+                    to={isLocked ? '#' : `/child/activities/${a.id}`}
+                    onClick={(e) => { if (isLocked) e.preventDefault(); }}
+                    aria-disabled={isLocked}
+                    className={`group block bg-white rounded-xl shadow-md transition-all duration-300 p-5 border border-gray-100 ${isLocked ? 'opacity-60 cursor-not-allowed border-gray-200' : 'hover:shadow-lg hover:border-green-200'}`}
                   >
                     <div className="flex items-start gap-4">
                       <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-teal-500 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -110,7 +104,9 @@ export default function ChildActivities() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-3">
-                      {isCompleted ? (
+                      {isLocked ? (
+                        <span className="px-2 py-1 bg-gray-200 text-gray-600 rounded-full text-xs font-bold">🔒 Locked</span>
+                      ) : isCompleted ? (
                         <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">✅ Completed</span>
                       ) : a.submission_status === 'pending' ? (
                         <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold">⏳ Pending Review</span>

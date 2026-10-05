@@ -113,6 +113,16 @@ async function registerParent(req, res, next) {
         }, null, null, null]
       );
 
+      // Notify all active administrators about the new registration
+      const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
+      for (const admin of adminResult.rows) {
+        await client.query(
+          `INSERT INTO notifications (user_id, type, title, message)
+           VALUES ($1, 'alert', 'New Parent Registration Pending Approval', $2)`,
+          [admin.id, `Parent "${result.rows[0].full_name}" (${result.rows[0].email}) submitted registration and requires administrator approval.`]
+        );
+      }
+
       await client.query('COMMIT');
       res.status(201).json({
         message: 'Registration submitted successfully. Your account is now pending administrator approval.',
@@ -351,6 +361,16 @@ async function registerInstructor(req, res, next) {
         [null, 'INSTRUCTOR_REGISTRATION', 'instructor_registration_request', result.rows[0].id,
          null, { full_name: result.rows[0].full_name, email: result.rows[0].email }, null, null, null]
       );
+
+      // Notify all active administrators about the new instructor application
+      const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
+      for (const admin of adminResult.rows) {
+        await client.query(
+          `INSERT INTO notifications (user_id, type, title, message)
+           VALUES ($1, 'alert', 'New Instructor Application Pending Review', $2)`,
+          [admin.id, `Instructor candidate "${result.rows[0].full_name}" (${result.rows[0].email}, Specialization: ${specialization || 'General'}) submitted an application.`]
+        );
+      }
 
       await client.query('COMMIT');
       res.status(201).json({

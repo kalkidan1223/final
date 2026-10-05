@@ -385,6 +385,7 @@ async function listCourses(req, res, next) {
          c.thumbnail_url,
          c.status AS course_status,
          c.created_at,
+         c.age_group_id,
          ag.name AS age_group_name,
          ay.label AS academic_year,
          ia.grade,
@@ -405,7 +406,7 @@ async function listCourses(req, res, next) {
        LEFT JOIN students s ON s.age_group_id = ia.age_group_id
        WHERE ia.instructor_id = $1 AND ia.status = 'active'
        GROUP BY c.id, c.title, c.description, c.thumbnail_url, c.status,
-                c.created_at, ag.name, ay.label, ia.grade, ia.section,
+                c.created_at, c.age_group_id, ag.name, ay.label, ia.grade, ia.section,
                 ia.status, ia.id
        ORDER BY ia.created_at DESC`,
       [instructorId]

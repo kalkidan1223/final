@@ -114,6 +114,27 @@ export default function AdminNotifications() {
     }
   }
 
+  async function handleMarkRead(id) {
+    try {
+      await axiosClient.patch(`/admin/notifications/${id}/read`);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to mark notification as read');
+    }
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      await axiosClient.patch('/admin/notifications/read-all');
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setSuccess('All notifications marked as read');
+      setTimeout(() => setSuccess(''), 3000);
+      loadNotifications(true);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to mark all as read');
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -128,7 +149,10 @@ export default function AdminNotifications() {
               <p className="text-sm text-slate-500">Send and monitor platform notifications</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleMarkAllRead} className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
+              Mark all as read
+            </button>
             <button onClick={() => loadNotifications(true)} disabled={refreshing} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition">
               <MdRefresh className={refreshing ? 'animate-spin' : ''} />Refresh
             </button>
@@ -260,10 +284,19 @@ export default function AdminNotifications() {
                       <span className="text-sm font-semibold text-slate-800">{n.title}</span>
                     </div>
                     <p className="text-sm text-slate-600 mb-2">{n.message}</p>
-                    <div className="flex flex-wrap gap-3 text-xs text-slate-400">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
                       <span className="flex items-center gap-1"><MdPerson className="text-xs" />{n.user_name || `User #${n.user_id}`}</span>
                       <span>{new Date(n.created_at).toLocaleString()}</span>
-                      {n.is_read && <span className="text-emerald-600">✓ Read</span>}
+                      {n.is_read ? (
+                        <span className="text-emerald-600">✓ Read</span>
+                      ) : (
+                        <button
+                          onClick={() => handleMarkRead(n.id)}
+                          className="text-violet-600 hover:text-violet-800 font-semibold hover:underline"
+                        >
+                          Mark as read
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

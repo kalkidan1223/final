@@ -2,6 +2,29 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 
+/** Play interactive sound effects */
+function playClickSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } catch (e) {
+    // Audio not supported
+  }
+}
+
 export default function ChildProgress() {
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState([]);
@@ -102,6 +125,7 @@ export default function ChildProgress() {
           value={totalLessons}
           icon="📖"
           gradient="from-blue-400 to-blue-600"
+          index={0}
         />
         <StatCard
           label="Activities Done"
@@ -109,6 +133,7 @@ export default function ChildProgress() {
           icon="✏️"
           gradient="from-green-400 to-green-600"
           subLabel={`of ${totalActivities}`}
+          index={1}
         />
         <StatCard
           label="Quizzes Done"
@@ -116,6 +141,7 @@ export default function ChildProgress() {
           icon="📝"
           gradient="from-purple-400 to-purple-600"
           subLabel={`of ${totalQuizzes}`}
+          index={2}
         />
         <StatCard
           label="Courses Started"
@@ -123,6 +149,7 @@ export default function ChildProgress() {
           icon="📚"
           gradient="from-pink-400 to-pink-600"
           subLabel={`of ${progress.length}`}
+          index={3}
         />
       </div>
 
@@ -248,11 +275,13 @@ export default function ChildProgress() {
   );
 }
 
-function StatCard({ label, value, icon, gradient, subLabel }) {
+function StatCard({ label, value, icon, gradient, subLabel, index }) {
   return (
-    <div className={`bg-white rounded-2xl shadow-lg p-5 hover:shadow-xl transition-all duration-300 border border-gray-100`}>
+    <div className={`bg-white rounded-2xl shadow-lg p-5 hover:shadow-xl transition-all duration-300 border border-gray-100 hover:scale-105 hover:-translate-y-1 animate-slide-up`}
+         style={{ animationDelay: `${index * 0.1}s` }}
+         onMouseEnter={() => playClickSound()}>
       <div className="flex items-center justify-between mb-3">
-        <div className={`p-3 rounded-xl ${gradient}`}>
+        <div className={`p-3 rounded-xl ${gradient} animate-pulse`}>
           <span className="text-2xl" aria-hidden="true">{icon}</span>
         </div>
       </div>

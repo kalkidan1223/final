@@ -1,13 +1,58 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
+import EthiopianChildHome from '../../components/child/EthiopianChildHome';
+import GamificationPanel from '../../components/child/GamificationPanel';
+
+/** Play interactive sound effects */
+function playClickSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } catch (e) {
+    // Audio not supported
+  }
+}
+
+function playSuccessSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 523.25;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (e) {
+    // Audio not supported
+  }
+}
 
 export default function ChildDashboard() {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     fetchDashboard();
@@ -16,6 +61,7 @@ export default function ChildDashboard() {
   const fetchDashboard = async () => {
     try {
       setLoading(true);
+      setError('');
       const res = await axiosClient.get('/child/dashboard');
       setData(res.data);
     } catch (err) {
@@ -25,18 +71,26 @@ export default function ChildDashboard() {
     }
   };
 
-  const speakText = (text) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9;
-      utterance.pitch = 1.1;
-      setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    }
-  };
+  const child = data?.child || {};
+  const stats = data?.stats || {};
+  const continueLearning = data?.continue_learning;
+  const courses = data?.courses || [];
+  const todaysActivities = data?.todays_activities || [];
+  const streakDays = data?.learning_streak || 0;
+  const achievements = data?.achievements || [];
+
+  // Age group check: 5-9 = Early Learner, 10-12 = Independent Student
+  const isEarlyLearner = child.is_early_learner !== undefined
+    ? child.is_early_learner
+    : child.age
+      ? child.age <= 9
+      : true;
+
+  // The early learner screen owns its own loading, error and voice handling,
+  // so it is mounted before either of those guard clauses below.
+  if (isEarlyLearner) {
+    return <EthiopianChildHome data={data} loading={loading} error={error} onRetry={fetchDashboard} />;
+  }
 
   if (loading) {
     return (
@@ -65,330 +119,42 @@ export default function ChildDashboard() {
     );
   }
 
-  const child = data?.child || {};
-  const stats = data?.stats || {};
-  const continueLearning = data?.continue_learning;
-  const courses = data?.courses || [];
-  const todaysActivities = data?.todays_activities || [];
-  const streakDays = data?.learning_streak || 0;
-  const achievements = data?.achievements || [];
-
-  // Age group check: 5-9 = Early Learner, 10-12 = Independent Student
-  const isEarlyLearner = child.is_early_learner !== undefined ? child.is_early_learner : (child.age ? child.age <= 9 : true);
-  const totalStars = (stats.completed_activities || 0) * 10 + (stats.completed_quizzes || 0) * 20 + ((stats.watched_videos || 0) * 5) + 15;
-
-  // =========================================================================
-  // VIEW A: EARLY LEARNER DASHBOARD (AGES 5 - 9)
-  // Simplified, teacher-guided, voice-assisted, playful touch-friendly design
-  // for Ethiopian young children
-  // =========================================================================
-  if (isEarlyLearner) {
-    const recommendedLesson = continueLearning || (courses.length > 0 && courses[0]?.lessons?.[0] ? courses[0].lessons[0] : null);
-    const recommendedCourse = courses.length > 0 ? courses[0] : null;
-
-    return (
-      <div className="space-y-8 pb-16 animate-fade-in">
-        {/* Parent Proxy Guided Mode Pill */}
-        {child.is_parent_managed && (
-          <div className="bg-amber-100 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-2xl flex items-center justify-between text-xs sm:text-sm font-bold shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">👨‍👩‍👧</span>
-              <span>የወላጅ መመሪያ ሁነታ (Parent Guided Mode): ከልጅዎ ጋር አብረው እየተማሩ ነው! (ዕድሜ 5–9)</span>
-            </div>
-            <span className="bg-amber-200 text-amber-900 px-2.5 py-0.5 rounded-full text-xs font-black">
-              ኮከብ ተማሪ
-            </span>
-          </div>
-        )}
-
-        {/* 1. Playful Hero Greeting with Voice Assistant (Ethiopian Context) */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 rounded-3xl p-6 sm:p-10 text-white shadow-2xl">
-          {/* Fun floating emoji graphics */}
-          <div className="absolute top-2 right-4 text-7xl opacity-25 pointer-events-none select-none animate-pulse">⭐</div>
-          <div className="absolute -bottom-4 right-32 text-8xl opacity-20 pointer-events-none select-none">🦁</div>
-          <div className="absolute top-1/2 left-2/3 text-7xl opacity-15 pointer-events-none select-none">📜</div>
-
-          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-1 rounded-full text-xs sm:text-sm font-black uppercase tracking-wider text-yellow-200">
-                <span>🇪🇹</span> የኢትዮጵያ ህፃናት መማሪያ • Brana Kids (ዕድሜ {child.age || '5–9'})
-              </div>
-              <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
-                ሰላም, {child.full_name || 'ትንሹ ኮከብ'}! 👋
-              </h1>
-              <p className="text-base sm:text-lg text-amber-100 font-bold max-w-xl">
-                እንኳን ወደ ብራና የህፃናት መማሪያ በደህና መጣህ/ሽ! ዛሬ የአማርኛ ፊደላትና የግዕዝ ቁጥሮችን አብረን እንማር!
-              </p>
-
-              {/* Text to Speech Read Aloud Button */}
-              <button
-                onClick={() => speakText(`Selam ${child.full_name || 'Little Star'}! Welcome to Brana Ethiopian Children Learning Hub! Let us learn Fidels, numbers, and enjoy fun games today!`)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white text-emerald-800 hover:bg-amber-50 font-black rounded-2xl shadow-lg transition active:scale-95 text-xs sm:text-sm"
-              >
-                <span>{isSpeaking ? '🔊 እያነበበ ነው...' : '🔊 ድምፅ አሰማ (Read To Me)'}</span>
-              </button>
-            </div>
-
-            {/* Visual Star Jar & Streak Counter */}
-            <div className="flex flex-row md:flex-col gap-3 w-full md:w-auto">
-              <div className="flex-1 bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl p-4 sm:p-5 flex items-center gap-4 shadow-lg min-w-[200px]">
-                <div className="w-14 h-14 rounded-2xl bg-amber-400 flex items-center justify-center text-3xl shadow-inner animate-bounce">
-                  ⭐
-                </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wider text-amber-200">የኔ ኮከቦች (Stars)</div>
-                  <div className="text-2xl sm:text-3xl font-black text-white">{totalStars}</div>
-                  <div className="text-[11px] text-amber-100 font-semibold">የተሰበሰቡ ኮከቦች!</div>
-                </div>
-              </div>
-
-              <div className="flex-1 bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl p-4 sm:p-5 flex items-center gap-4 shadow-lg min-w-[200px]">
-                <div className="w-14 h-14 rounded-2xl bg-orange-500 flex items-center justify-center text-3xl shadow-inner">
-                  🔥
-                </div>
-                <div>
-                  <div className="text-xs font-black uppercase tracking-wider text-amber-200">የትምህርት ጥረት (Streak)</div>
-                  <div className="text-2xl sm:text-3xl font-black text-white">{streakDays} ቀናት</div>
-                  <div className="text-[11px] text-amber-100 font-semibold">የየዕለት ጥናት!</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. MAIN CENTERPIECE: INSTRUCTOR'S PRESCRIBED LESSON OF THE DAY */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-3xl">🌟</span>
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-800">የዛሬው ልዩ ትምህርት (Today's Guided Lesson)</h2>
-                <p className="text-xs sm:text-sm font-bold text-slate-500">በመምህርህ የተመረጠ የዛሬ ትምህርት</p>
-              </div>
-            </div>
-          </div>
-
-          {continueLearning ? (
-            <div className="bg-gradient-to-br from-amber-500 via-orange-500 to-rose-500 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 border-4 border-white">
-              <div className="space-y-3 z-10 max-w-xl text-center md:text-left">
-                <div className="inline-flex items-center gap-2 bg-black/20 backdrop-blur-sm px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider text-yellow-100">
-                  <span>👨‍🏫</span> በመምህርህ የተመረጠ (Teacher's Pick)
-                </div>
-                <h3 className="text-2xl sm:text-4xl font-black tracking-tight leading-snug">
-                  {continueLearning.title}
-                </h3>
-                <p className="text-base sm:text-lg font-bold text-amber-100">
-                  ትምህርት (Course): {continueLearning.course_title}
-                </p>
-
-                <div className="flex items-center gap-3 justify-center md:justify-start pt-1">
-                  <button
-                    onClick={() => speakText(`Today's lesson is ${continueLearning.title}. Let's learn together!`)}
-                    className="p-2 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
-                  >
-                    <span>🔊 አድምጥ (Listen)</span>
-                  </button>
-                  <span className="text-xs font-black bg-white/20 px-3 py-1.5 rounded-xl">
-                    የተጠናቀቀው: {continueLearning.lesson_progress || 0}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Giant Play Button */}
-              <Link
-                to={`/child/lessons/${continueLearning.id}`}
-                className="z-10 px-8 py-5 bg-white text-orange-600 hover:bg-amber-50 font-black rounded-3xl shadow-2xl hover:scale-105 active:scale-95 transition-all text-xl sm:text-2xl flex items-center gap-3 border-4 border-amber-200 animate-pulse flex-shrink-0"
-              >
-                <span>▶ ትምህርቱን ጀምር (START)</span>
-                <span className="text-2xl">🚀</span>
-              </Link>
-            </div>
-          ) : recommendedCourse ? (
-            <div className="bg-gradient-to-br from-emerald-600 via-teal-600 to-indigo-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 border-4 border-white">
-              <div className="space-y-3 z-10 text-center md:text-left">
-                <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider text-yellow-200">
-                  <span>✨</span> በመምህር የተዘጋጀ (Assigned Course)
-                </div>
-                <h3 className="text-2xl sm:text-4xl font-black">
-                  {recommendedCourse.title}
-                </h3>
-                <p className="text-base sm:text-lg font-bold text-emerald-100">
-                  መምህር: {recommendedCourse.instructor_name || 'የክፍሉ መምህር'}
-                </p>
-              </div>
-
-              <Link
-                to={`/child/courses/${recommendedCourse.id}`}
-                className="z-10 px-8 py-5 bg-white text-emerald-700 hover:bg-emerald-50 font-black rounded-3xl shadow-2xl hover:scale-105 active:scale-95 transition-all text-xl sm:text-2xl flex items-center gap-3 border-4 border-emerald-200 flex-shrink-0"
-              >
-                <span>▶ ጀምር (EXPLORE)</span>
-                <span className="text-2xl">🎨</span>
-              </Link>
-            </div>
-          ) : (
-            <div className="bg-white rounded-3xl p-8 text-center border-2 border-purple-100 shadow-sm space-y-3">
-              <span className="text-6xl block animate-bounce">🎈</span>
-              <h3 className="text-xl font-black text-slate-800">መምህርህ አስደሳች ትምህርቶችን በማዘጋጀት ላይ ነው!</h3>
-              <p className="text-sm font-bold text-slate-500">
-                እባክህ ትንሽ ቆይተህ ተመልከት። አዳዲስ የአማርኛና የሂሳብ ትምህርቶች እዚህ ይደርሱሃል!
-              </p>
-            </div>
-          )}
-        </section>
-
-        {/* 3. PLAYFUL ACTIVITIES SECTION (Oversized Ethiopian Game Tiles) */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-3xl">🎮</span>
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-800">የልጆች አስደሳች ጨዋታዎች (Fun Learning Games)</h2>
-                <p className="text-xs font-bold text-slate-500">ፊደላትንና ቁጥሮችን በጨዋታ እንማር</p>
-              </div>
-            </div>
-            <Link
-              to="/child/activities"
-              className="text-sm font-black text-emerald-700 hover:underline"
-            >
-              ሁሉንም እይ (See All) ➔
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {/* Writing & Drawing Fun (Fidel Tracing) */}
-            <Link
-              to="/child/activities"
-              className="bg-gradient-to-b from-emerald-50 to-teal-100 border-2 border-emerald-200 rounded-3xl p-6 text-center shadow-sm hover:shadow-xl hover:scale-105 transition transform flex flex-col items-center gap-3 group"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-4xl shadow-md group-hover:rotate-6 transition font-black">
-                ሀ
-              </div>
-              <h3 className="text-lg font-black text-emerald-950">የፊደል መጻፊያ (Writing)</h3>
-              <p className="text-xs font-bold text-emerald-700">የአማርኛ ፊደላትን (ሀ፣ ለ፣ ሐ...) በስክሪኑ ላይ ጻፍ!</p>
-              <span className="mt-2 px-4 py-1.5 bg-emerald-600 text-white text-xs font-black rounded-xl shadow">
-                ጻፍ ✏️
-              </span>
-            </Link>
-
-            {/* Matching Game (Geez Numbers & Pictures) */}
-            <Link
-              to="/child/activities"
-              className="bg-gradient-to-b from-amber-50 to-orange-100 border-2 border-amber-200 rounded-3xl p-6 text-center shadow-sm hover:shadow-xl hover:scale-105 transition transform flex flex-col items-center gap-3 group"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-4xl shadow-md group-hover:-rotate-6 transition font-black">
-                ፩
-              </div>
-              <h3 className="text-lg font-black text-amber-950">ስዕልና ቁጥር ማዛመድ</h3>
-              <p className="text-xs font-bold text-amber-700">የግዕዝ ቁጥሮችን (፩ ፪ ፫) እና ፊደላትን አዛምድ!</p>
-              <span className="mt-2 px-4 py-1.5 bg-amber-600 text-white text-xs font-black rounded-xl shadow">
-                አዛምድ 🧩
-              </span>
-            </Link>
-
-            {/* Listen & Learn (Ethiopian Folk Tales) */}
-            <Link
-              to="/child/activities"
-              className="bg-gradient-to-b from-indigo-50 to-purple-100 border-2 border-indigo-200 rounded-3xl p-6 text-center shadow-sm hover:shadow-xl hover:scale-105 transition transform flex flex-col items-center gap-3 group"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-4xl shadow-md group-hover:rotate-6 transition">
-                🎧
-              </div>
-              <h3 className="text-lg font-black text-indigo-950">ተረት ማዳመጥ (Stories)</h3>
-              <p className="text-xs font-bold text-indigo-700">የብልጡ ጥንቸልና የአንበሳውን አጭር ተረት አዳምጥ!</p>
-              <span className="mt-2 px-4 py-1.5 bg-indigo-600 text-white text-xs font-black rounded-xl shadow">
-                አዳምጥ 🎵
-              </span>
-            </Link>
-
-            {/* Quiz Star Time */}
-            <Link
-              to="/child/quizzes"
-              className="bg-gradient-to-b from-rose-50 to-pink-100 border-2 border-rose-200 rounded-3xl p-6 text-center shadow-sm hover:shadow-xl hover:scale-105 transition transform flex flex-col items-center gap-3 group"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-rose-500 text-white flex items-center justify-center text-4xl shadow-md group-hover:scale-110 transition">
-                ✨
-              </div>
-              <h3 className="text-lg font-black text-rose-950">የኮከብ ፈተና (Quiz)</h3>
-              <p className="text-xs font-bold text-rose-700">ቀላል ጥያቄዎችን በመመለስ የኮከብ ሽልማት አግኝ!</p>
-              <span className="mt-2 px-4 py-1.5 bg-rose-600 text-white text-xs font-black rounded-xl shadow">
-                ፈትን ⭐
-              </span>
-            </Link>
-          </div>
-        </section>
-
-        {/* 4. ETHIOPIAN BADGES & REWARDS */}
-        <section className="bg-gradient-to-r from-amber-100 via-emerald-50 to-teal-50 rounded-3xl p-6 sm:p-8 border-2 border-amber-300 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-3xl">🏆</span>
-              <h2 className="text-xl sm:text-2xl font-black text-amber-950">የኔ የክብር ባጆች (Star Badges)</h2>
-            </div>
-            <Link
-              to="/child/achievements"
-              className="text-xs sm:text-sm font-black text-amber-800 hover:underline"
-            >
-              ሁሉንም ባጆች እይ ➔
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white rounded-3xl p-4 text-center shadow-sm border border-amber-200 flex flex-col items-center gap-2">
-              <div className="text-5xl animate-bounce">🦁</div>
-              <div className="text-sm font-black text-slate-800">የአንበሳ ጀግና</div>
-              <div className="text-xs font-bold text-amber-600">ፊደላትን አወቀ</div>
-            </div>
-            <div className="bg-white rounded-3xl p-4 text-center shadow-sm border border-amber-200 flex flex-col items-center gap-2">
-              <div className="text-5xl">📜</div>
-              <div className="text-sm font-black text-slate-800">የብራና አዋቂ</div>
-              <div className="text-xs font-bold text-emerald-600">ተረቶችን ያዳመጠ</div>
-            </div>
-            <div className="bg-white rounded-3xl p-4 text-center shadow-sm border border-amber-200 flex flex-col items-center gap-2">
-              <div className="text-5xl">🎨</div>
-              <div className="text-sm font-black text-slate-800">የቀለም ባለሙያ</div>
-              <div className="text-xs font-bold text-pink-600">ፊደል የጻፈ</div>
-            </div>
-            <div className="bg-white rounded-3xl p-4 text-center shadow-sm border border-amber-200 flex flex-col items-center gap-2">
-              <div className="text-5xl">⭐</div>
-              <div className="text-sm font-black text-slate-800">የኮከብ ተማሪ</div>
-              <div className="text-xs font-bold text-indigo-600">{streakDays} ቀናት ጥረት</div>
-            </div>
-          </div>
-        </section>
-      </div>
-    );
-  }
-
-
-
   // =========================================================================
   // VIEW B: INDEPENDENT STUDENT DASHBOARD (AGES 10 - 12)
   // Full student dashboard with course cards, progress bars, and metrics
   // =========================================================================
+  const totalXP = data?.total_xp ?? (
+    ((stats.completed_activities || 0) * 20) +
+    ((stats.completed_quizzes || 0) * 50) +
+    ((stats.watched_videos || 0) * 15) +
+    ((streakDays || 0) * 30) +
+    (achievements.length * 75)
+  );
+
   return (
     <div className="space-y-8 pb-12 animate-fade-in">
       {/* 1. Welcoming Hero Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 rounded-3xl p-6 sm:p-8 text-white shadow-xl animate-gradient">
         {/* Floating background decorative bubbles */}
-        <div className="absolute top-2 right-4 text-7xl opacity-20 pointer-events-none select-none">⭐</div>
-        <div className="absolute -bottom-4 right-28 text-8xl opacity-15 pointer-events-none select-none">🚀</div>
-        <div className="absolute top-1/2 left-2/3 text-6xl opacity-15 pointer-events-none select-none">🌈</div>
+        <div className="absolute top-2 right-4 text-7xl opacity-20 pointer-events-none select-none animate-float">⭐</div>
+        <div className="absolute -bottom-4 right-28 text-8xl opacity-15 pointer-events-none select-none animate-float-slow">🚀</div>
+        <div className="absolute top-1/2 left-2/3 text-6xl opacity-15 pointer-events-none select-none animate-float">🌈</div>
 
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-slide-up">
               <span>🎓</span> Independent Student (Age {child.age || '10–12'})
             </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight animate-slide-up delay-100">
               Hello, {child.full_name || 'Student'}! 👋
             </h1>
-            <p className="text-base sm:text-lg text-purple-100 font-medium max-w-xl">
+            <p className="text-base sm:text-lg text-purple-100 font-medium max-w-xl animate-slide-up delay-200">
               Track your courses, complete assignments, and master your subjects at your own pace!
             </p>
           </div>
 
           {/* Learning Streak Widget */}
-          <div className="bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl p-4 sm:p-5 flex items-center gap-4 shadow-lg min-w-[220px]">
+          <div className="bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl p-4 sm:p-5 flex items-center gap-4 shadow-lg min-w-[220px] hover:scale-105 transition-transform cursor-pointer animate-slide-up delay-300">
             <div className="w-14 h-14 rounded-2xl bg-amber-400 flex items-center justify-center text-3xl shadow-inner animate-pulse">
               🔥
             </div>
@@ -432,8 +198,8 @@ export default function ChildDashboard() {
 
       {/* 3. Quick Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-2xl">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-2xl animate-pulse">
             📚
           </div>
           <div>
@@ -442,8 +208,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl animate-pulse">
             🎯
           </div>
           <div>
@@ -452,8 +218,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center text-2xl">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+          <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center text-2xl animate-pulse">
             📝
           </div>
           <div>
@@ -462,8 +228,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center text-2xl">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+          <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center text-2xl animate-pulse">
             🎬
           </div>
           <div>
@@ -472,6 +238,9 @@ export default function ChildDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Gamification Panel */}
+      <GamificationPanel currentXP={totalXP} />
 
       {/* 4. Main Section: My Courses */}
       <section className="space-y-4">
@@ -496,10 +265,12 @@ export default function ChildDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map((course) => (
+            {courses.map((course, index) => (
               <div
                 key={course.id}
-                className="bg-white rounded-3xl border border-purple-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col group transform hover:-translate-y-1"
+                className="bg-white rounded-3xl border border-purple-100 shadow-sm hover:shadow-2xl transition-all duration-300 overflow-hidden flex flex-col group transform hover:-translate-y-2 hover:scale-105 animate-slide-up"
+                style={{ animationDelay: `${index * 0.1}s` }}
+                onMouseEnter={() => playClickSound()}
               >
                 {/* Course Header Banner */}
                 <div className="h-36 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 relative flex items-center justify-center p-4 text-white overflow-hidden">
@@ -507,12 +278,12 @@ export default function ChildDashboard() {
                     <img
                       src={course.thumbnail_url}
                       alt={course.title}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     />
                   ) : (
-                    <span className="text-6xl group-hover:scale-110 transition-transform">📚</span>
+                    <span className="text-6xl group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">📚</span>
                   )}
-                  <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md text-purple-700 font-extrabold text-xs px-2.5 py-1 rounded-full shadow-sm">
+                  <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md text-purple-700 font-extrabold text-xs px-2.5 py-1 rounded-full shadow-sm animate-bounce">
                     {course.age_group_name || 'Age Appropriate'}
                   </div>
                 </div>
@@ -539,7 +310,7 @@ export default function ChildDashboard() {
                     </div>
                     <div className="h-2.5 bg-purple-100 rounded-full overflow-hidden">
                       <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-500"
+                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full progress-bar-animated"
                         style={{ width: `${course.overall_progress || 0}%` }}
                       />
                     </div>
@@ -548,10 +319,11 @@ export default function ChildDashboard() {
                   {/* Action Button */}
                   <Link
                     to={`/child/courses/${course.id}`}
-                    className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-2xl text-center text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-1.5"
+                    onClick={() => playClickSound()}
+                    className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-2xl text-center text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 hover:shadow-lg hover:shadow-purple-500/30"
                   >
                     <span>Continue Learning</span>
-                    <span>➔</span>
+                    <span className="group-hover:translate-x-1 transition-transform">➔</span>
                   </Link>
                 </div>
               </div>
@@ -584,13 +356,15 @@ export default function ChildDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {todaysActivities.map((act) => (
+            {todaysActivities.map((act, index) => (
               <div
                 key={act.id}
-                className="bg-white rounded-2xl p-4 border border-purple-100 shadow-sm hover:shadow-md transition flex items-center justify-between gap-3"
+                className="bg-white rounded-2xl p-4 border border-purple-100 shadow-sm hover:shadow-xl transition-all duration-300 flex items-center justify-between gap-3 hover:scale-105 hover:-translate-y-1 animate-slide-up"
+                style={{ animationDelay: `${index * 0.1}s` }}
+                onMouseEnter={() => playClickSound()}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-2xl flex-shrink-0">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
                     {act.activity_type === 'writing' ? '✏️' :
                      act.activity_type === 'matching' ? '🔗' :
                      act.activity_type === 'reading' ? '📖' :
@@ -603,8 +377,9 @@ export default function ChildDashboard() {
                 </div>
 
                 <Link
-                  to={`/child/activities/${act.id}/${act.activity_type === 'writing' ? 'write' : act.activity_type === 'matching' ? 'match' : act.activity_type === 'reading' ? 'read' : act.activity_type === 'listening' ? 'listen' : 'worksheet'}`}
-                  className="px-3.5 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-xl text-xs transition flex-shrink-0"
+                  to={`/child/activities/${act.id}`}
+                  onClick={() => playClickSound()}
+                  className="px-3.5 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-xl text-xs transition flex-shrink-0 hover:scale-110 active:scale-95"
                 >
                   Start ➔
                 </Link>

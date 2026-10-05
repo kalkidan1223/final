@@ -7,7 +7,7 @@ import {
   MdCampaign, MdNotifications, MdAssessment, MdSecurity,
   MdSettings, MdLogout, MdMenu, MdClose, MdSearch,
   MdCheckCircle, MdClass, MdGroups, MdLibraryBooks,
-  MdVideoLibrary, MdTrendingUp, MdMessage
+  MdVideoLibrary, MdTrendingUp, MdMessage, MdTranslate
 } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
 
@@ -34,6 +34,7 @@ const NAV_GROUPS = [
       { to: '/admin/age-groups', label: 'Age Groups', icon: MdClass },
       { to: '/admin/courses', label: 'Courses', icon: MdBook },
       { to: '/admin/lessons', label: 'Lessons', icon: MdMenuBook },
+      { to: '/admin/reference', label: 'Early Childhood Data', icon: MdTranslate },
     ],
   },
   {
@@ -48,7 +49,7 @@ const NAV_GROUPS = [
     label: 'Communication',
     items: [
       { to: '/admin/announcements', label: 'Announcements', icon: MdCampaign },
-      { to: '/admin/notifications', label: 'Notifications', icon: MdNotifications },
+      { to: '/admin/notifications', label: 'Notifications', icon: MdNotifications, badge: 'notifications' },
     ],
   },
   {
@@ -60,12 +61,16 @@ const NAV_GROUPS = [
   },
 ];
 
-function NavItem({ item, pendingCount, collapsed }) {
+function NavItem({ item, pendingCount, unreadNotifCount, collapsed }) {
   const location = useLocation();
   const active = location.pathname === item.to ||
     (item.to !== '/admin/dashboard' && location.pathname.startsWith(item.to));
   const Icon = item.icon;
-  const showBadge = item.badge === 'pending' && pendingCount > 0;
+  const isPendingBadge = item.badge === 'pending' && pendingCount > 0;
+  const isNotifBadge = item.badge === 'notifications' && unreadNotifCount > 0;
+  const showBadge = isPendingBadge || isNotifBadge;
+  const count = isPendingBadge ? pendingCount : unreadNotifCount;
+  const badgeStyle = isPendingBadge ? 'bg-amber-400 text-slate-900' : 'bg-rose-500 text-white';
 
   return (
     <Link
@@ -80,8 +85,8 @@ function NavItem({ item, pendingCount, collapsed }) {
       <Icon className={`flex-shrink-0 text-lg ${active ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
       {!collapsed && <span className="truncate">{item.label}</span>}
       {showBadge && (
-        <span className={`ml-auto rounded-full bg-amber-400 text-slate-900 text-xs font-bold px-1.5 py-0.5 min-w-[20px] text-center ${collapsed ? 'absolute -top-1 -right-1 text-[10px]' : ''}`}>
-          {pendingCount > 99 ? '99+' : pendingCount}
+        <span className={`ml-auto rounded-full ${badgeStyle} text-xs font-bold px-1.5 py-0.5 min-w-[20px] text-center ${collapsed ? 'absolute -top-1 -right-1 text-[10px]' : ''}`}>
+          {count > 99 ? '99+' : count}
         </span>
       )}
       {collapsed && !showBadge && (
@@ -99,6 +104,10 @@ export default function AdminLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [recentNotifs, setRecentNotifs] = useState([]);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const notifRef = useRef(null);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -106,17 +115,18 @@ export default function AdminLayout({ children }) {
   const searchRef = useRef(null);
   const searchDebounce = useRef(null);
 
-  // Load pending approvals count
+  // Load pending approvals and unread notifications count
   useEffect(() => {
-    async function loadPending() {
+    async function loadStats() {
       try {
         const { data } = await axiosClient.get('/admin/dashboard');
-        const total = (data.pending_parent_registrations || 0) + (data.pending_student_registrations || 0);
+        const total = data.total_pending_approvals ?? ((data.pending_parent_registrations || 0) + (data.pending_student_registrations || 0) + (data.pending_instructor_registrations || 0));
         setPendingCount(total);
+        setUnreadNotifCount(data.unread_notifications_count || 0);
       } catch { /* silent */ }
     }
-    loadPending();
-    const interval = setInterval(loadPending, 60000);
+    loadStats();
+    const interval = setInterval(loadStats, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -147,7 +157,7 @@ export default function AdminLayout({ children }) {
     return () => clearTimeout(searchDebounce.current);
   }, [search]);
 
-  // Close search on outside click
+  // Close search and notifs on outside click
   useEffect(() => {
     function handleClick(e) {
       if (searchRef.current && !searchRef.current.contains(e.target)) {
@@ -155,10 +165,40 @@ export default function AdminLayout({ children }) {
         setSearch('');
         setSearchResults([]);
       }
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setShowNotifMenu(false);
+      }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  async function toggleNotifMenu() {
+    if (!showNotifMenu) {
+      try {
+        const { data } = await axiosClient.get('/admin/notifications/unread');
+        setRecentNotifs(data.notifications || []);
+      } catch { /* silent */ }
+    }
+    setShowNotifMenu(v => !v);
+  }
+
+  async function handleQuickMarkRead(id, e) {
+    if (e) e.stopPropagation();
+    try {
+      await axiosClient.patch(`/admin/notifications/${id}/read`);
+      setRecentNotifs(prev => prev.filter(n => n.id !== id));
+      setUnreadNotifCount(c => Math.max(0, c - 1));
+    } catch { /* silent */ }
+  }
+
+  async function handleQuickMarkAllRead() {
+    try {
+      await axiosClient.patch('/admin/notifications/read-all');
+      setRecentNotifs([]);
+      setUnreadNotifCount(0);
+    } catch { /* silent */ }
+  }
 
   async function handleLogout() {
     await logout();
@@ -200,7 +240,13 @@ export default function AdminLayout({ children }) {
               <div className="border-t border-slate-700 mb-2 mx-2" />
             )}
             {group.items.map(item => (
-              <NavItem key={item.to} item={item} pendingCount={pendingCount} collapsed={collapsed && !isMobile} />
+              <NavItem
+                key={item.to}
+                item={item}
+                pendingCount={pendingCount}
+                unreadNotifCount={unreadNotifCount}
+                collapsed={collapsed && !isMobile}
+              />
             ))}
           </div>
         ))}
@@ -314,14 +360,95 @@ export default function AdminLayout({ children }) {
               </Link>
             )}
 
-            {/* Notifications */}
-            <Link
-              to="/admin/notifications"
-              className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition"
-              title="Notifications"
-            >
-              <MdNotifications className="text-xl" />
-            </Link>
+            {/* Notifications Popover */}
+            <div ref={notifRef} className="relative">
+              <button
+                type="button"
+                onClick={toggleNotifMenu}
+                className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition"
+                title="Notifications"
+                aria-label="View notifications"
+              >
+                <MdNotifications className="text-xl" />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-md animate-pulse">
+                    {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotifMenu && (
+                <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden z-50 animate-pop">
+                  <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800 text-sm">Notifications</span>
+                      {unreadNotifCount > 0 && (
+                        <span className="bg-rose-100 text-rose-700 font-extrabold text-xs px-2 py-0.5 rounded-full">
+                          {unreadNotifCount} unread
+                        </span>
+                      )}
+                    </div>
+                    {unreadNotifCount > 0 && (
+                      <button
+                        onClick={handleQuickMarkAllRead}
+                        className="text-xs font-semibold text-violet-600 hover:text-violet-800 transition hover:underline"
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {recentNotifs.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400 text-sm">
+                        <MdNotifications className="text-3xl mx-auto mb-1 text-slate-300" />
+                        No unread notifications
+                      </div>
+                    ) : (
+                      recentNotifs.map(n => (
+                        <div
+                          key={n.id}
+                          className="p-3.5 hover:bg-slate-50 transition flex items-start gap-3 text-left"
+                        >
+                          <span className="mt-1 h-2 w-2 rounded-full bg-rose-500 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate">{n.title}</p>
+                            <p className="text-xs text-slate-600 line-clamp-2 mt-0.5">{n.message}</p>
+                            <div className="mt-2 flex items-center gap-2">
+                              {n.title?.toLowerCase().includes('registration') || n.title?.toLowerCase().includes('approval') || n.message?.toLowerCase().includes('register') ? (
+                                <Link
+                                  to="/admin/approval"
+                                  onClick={() => { setShowNotifMenu(false); handleQuickMarkRead(n.id); }}
+                                  className="text-[11px] font-bold text-violet-600 hover:text-violet-800 bg-violet-50 px-2 py-0.5 rounded-md"
+                                >
+                                  Review Approvals ➔
+                                </Link>
+                              ) : null}
+                              <button
+                                onClick={(e) => handleQuickMarkRead(n.id, e)}
+                                className="text-[11px] text-slate-400 hover:text-slate-600"
+                              >
+                                Mark read
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 border-t border-slate-100 text-center">
+                    <Link
+                      to="/admin/notifications"
+                      onClick={() => setShowNotifMenu(false)}
+                      className="text-xs font-bold text-violet-600 hover:text-violet-800"
+                    >
+                      View all notifications ➔
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Admin avatar */}
             <div className="flex items-center gap-2 rounded-lg px-2 py-1 bg-slate-50 border border-slate-200">

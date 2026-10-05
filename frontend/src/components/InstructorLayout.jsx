@@ -5,12 +5,14 @@ import {
   MdDashboard, MdPeople, MdMenuBook,
   MdMessage, MdNotifications, MdPerson,
   MdLogout, MdMenu, MdClose, MdSchool, MdChevronRight,
-  MdHelp
+  MdHelp, MdChildCare, MdTranslate
 } from 'react-icons/md';
 
 const NAV_ITEMS = [
   { label: 'Dashboard',       to: '/instructor/dashboard',     icon: MdDashboard,  end: true },
   { label: 'Courses',         to: '/instructor/courses',       icon: MdMenuBook },
+  { label: 'Child Home',      to: '/instructor/child-home',    icon: MdChildCare },
+  { label: 'Vocabulary Bank', to: '/instructor/vocabulary',    icon: MdTranslate },
   { label: 'My Students',     to: '/instructor/students',      icon: MdPeople },
   { label: 'Messages',        to: '/instructor/messages',      icon: MdMessage },
   { label: 'Notifications',   to: '/instructor/notifications', icon: MdNotifications },
