@@ -1,4 +1,6 @@
 const { query } = require('../config/db');
+const { resolvePins } = require('./homePinController');
+const { getLessonAccess, getResourceAccess } = require('../utils/learningAccess');
 
 /**
  * Helper: Resolve the active student record based on whether the logged in user
@@ -259,6 +261,17 @@ async function getDashboard(req, res, next) {
     // 6. Real achievements unlocked
     const achievements = await computeAchievements(child.id);
 
+    // 6b. What the instructor has pinned to the child home for this age group.
+    //     This is the ONLY source of the home screen's content - there is no
+    //     hardcoded curriculum on the child side.
+    const [homePins, praiseRes] = await Promise.all([
+      resolvePins(child.age_group_id),
+      query(
+        `SELECT id, text, english, emoji FROM encouragement_phrases
+         WHERE is_active ORDER BY id`
+      ),
+    ]);
+
     // 7. Unread notifications count
     const notifRes = await query(
       `SELECT COUNT(*)::int as unread_count FROM notifications WHERE user_id = $1 AND is_read = FALSE`,
@@ -268,6 +281,13 @@ async function getDashboard(req, res, next) {
     const age = child.age !== undefined
       ? child.age
       : (child.date_of_birth ? Math.floor((new Date() - new Date(child.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000)) : 7);
+
+    const totalXP =
+      ((statsRes.rows[0]?.completed_activities || 0) * 20) +
+      ((statsRes.rows[0]?.completed_quizzes || 0) * 50) +
+      ((statsRes.rows[0]?.watched_videos || 0) * 15) +
+      ((streakRes.rows[0]?.streak_days || 0) * 30) +
+      (achievements.filter(a => a.earned).length * 75);
 
     res.json({
       child: {
@@ -283,12 +303,16 @@ async function getDashboard(req, res, next) {
         profile_image_url: child.profile_image_url,
       },
       stats: statsRes.rows[0] || {},
+      total_xp: totalXP,
       continue_learning: continueRes.rows[0] || null,
       courses: coursesRes.rows,
       todays_activities: todaysActivitiesRes.rows,
       learning_streak: streakRes.rows[0]?.streak_days || 0,
       achievements: achievements.filter(a => a.earned).slice(0, 4),
       unread_notifications: notifRes.rows[0]?.unread_count || 0,
+      // Instructor-published content for the age 5-9 home.
+      home_pins: homePins,
+      encouragement: praiseRes.rows,
     });
   } catch (err) {
     next(err);
@@ -449,6 +473,14 @@ async function getLesson(req, res, next) {
     const lesson = lessonRes.rows[0];
     if (lesson.age_group_id !== child.age_group_id) {
       return res.status(403).json({ error: 'Access denied to this lesson' });
+    }
+
+    const lessonAccess = await getLessonAccess(child.id, lesson.id);
+    if (lessonAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This lesson is locked. Finish the previous lesson first.',
+        code: 'LESSON_LOCKED',
+      });
     }
 
     // 1. Learning materials (PDFs, Audio, Images, Documents) with detailed real-time progress
@@ -621,6 +653,14 @@ async function getActivity(req, res, next) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    const activityAccess = await getResourceAccess(child.id, 'activity', activity.id);
+    if (activityAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This activity is locked. Complete the previous required step first.',
+        code: 'RESOURCE_LOCKED',
+      });
+    }
+
     res.json({ activity });
   } catch (err) {
     next(err);
@@ -631,7 +671,9 @@ async function getActivity(req, res, next) {
 async function submitActivity(req, res, next) {
   try {
     const { activityId } = req.params;
-    const { submitted_content, file_url } = req.body;
+    // Accept both the child-portal field names and the generic submission ones.
+    const submitted_content = req.body.submitted_content ?? req.body.submission_text ?? req.body.submission_data ?? null;
+    const file_url = req.body.file_url ?? req.body.submission_url ?? null;
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
@@ -652,6 +694,14 @@ async function submitActivity(req, res, next) {
     const activity = actRes.rows[0];
     if (activity.age_group_id !== child.age_group_id) {
       return res.status(403).json({ error: 'Access denied to this activity' });
+    }
+
+    const activityAccess = await getResourceAccess(child.id, 'activity', activity.id);
+    if (activityAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This activity is locked. Complete the previous required step first.',
+        code: 'RESOURCE_LOCKED',
+      });
     }
 
     const submittedBy = req.user.role === 'parent' ? 'parent' : 'student';
@@ -760,6 +810,14 @@ async function getQuiz(req, res, next) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    const quizAccess = await getResourceAccess(child.id, 'quiz', quizId);
+    if (quizAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This quiz is locked. Complete the previous required step first.',
+        code: 'RESOURCE_LOCKED',
+      });
+    }
+
     // Fetch quiz questions
     const questionsRes = await query(
       `SELECT id, quiz_id, question_text, question_type, options, points, order_index, question_config
@@ -826,6 +884,14 @@ async function submitQuiz(req, res, next) {
     const first = questionsRes.rows[0];
     if (first.age_group_id !== child.age_group_id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const quizAccess = await getResourceAccess(child.id, 'quiz', quizId);
+    if (quizAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This quiz is locked. Complete the previous required step first.',
+        code: 'RESOURCE_LOCKED',
+      });
     }
 
     let score = 0;
@@ -1256,6 +1322,14 @@ async function startActivity(req, res, next) {
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
+    const startAccess = await getResourceAccess(child.id, 'activity', activityId);
+    if (startAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This activity is locked. Complete the previous required step first.',
+        code: 'RESOURCE_LOCKED',
+      });
+    }
+
     await query(
       `INSERT INTO student_activity_progress (student_id, activity_id, status, progress_percentage, started_at, updated_at)
        VALUES ($1, $2, 'in_progress', 10, now(), now())
@@ -1278,6 +1352,14 @@ async function startQuiz(req, res, next) {
     const { quizId } = req.params;
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    const startAccess = await getResourceAccess(child.id, 'quiz', quizId);
+    if (startAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This quiz is locked. Complete the previous required step first.',
+        code: 'RESOURCE_LOCKED',
+      });
+    }
 
     // Check if there is already an active 'in_progress' attempt
     const existingAttempt = await query(
@@ -1691,6 +1773,7 @@ async function getAchievements(req, res, next) {
 
     res.json({
       badges,
+      achievements: badges,
       total_badges: badges.length,
       earned_badges: earnedCount,
     });
@@ -1737,6 +1820,17 @@ async function markNotificationRead(req, res, next) {
   }
 }
 
+// Adds an `is_locked` flag to each resource row so the child portal tabs
+// respect the same sequencing rules as the lesson journey.
+async function annotateLocks(studentId, rows, resourceType) {
+  const out = [];
+  for (const row of rows) {
+    const access = await getResourceAccess(studentId, resourceType, row.id);
+    out.push({ ...row, is_locked: access.isLocked });
+  }
+  return out;
+}
+
 // GET /api/child/activities - list all assigned activities across child's courses
 async function listAllActivities(req, res, next) {
   try {
@@ -1757,7 +1851,8 @@ async function listAllActivities(req, res, next) {
       [child.id, child.age_group_id]
     );
 
-    res.json({ activities: result.rows });
+    const activities = await annotateLocks(child.id, result.rows, 'activity');
+    res.json({ activities });
   } catch (err) {
     next(err);
   }
@@ -1785,7 +1880,8 @@ async function listAllQuizzes(req, res, next) {
       [child.id, child.age_group_id]
     );
 
-    res.json({ quizzes: result.rows });
+    const quizzes = await annotateLocks(child.id, result.rows, 'quiz');
+    res.json({ quizzes });
   } catch (err) {
     next(err);
   }

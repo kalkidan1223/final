@@ -17,7 +17,8 @@ export default function ChildActivityDetail() {
   const fetchActivity = async () => {
     try {
       setLoading(true);
-      const response = await axiosClient.get(`/activities/${id}`);
+      // Child-scoped endpoint (enforces lesson/resource locks for this student).
+      const response = await axiosClient.get(`/child/activities/${id}`);
       console.log('Activity data:', response.data);
       setActivity(response.data.activity);
     } catch (err) {
@@ -30,14 +31,13 @@ export default function ChildActivityDetail() {
 
   const handleComplete = async () => {
     try {
-      // Mark activity as completed
-      await axiosClient.post(`/child/progress/activity/${id}/complete`);
-      
-      // Show success message and go back
+      // The backend verifies the activity was actually submitted before it
+      // records completion on the lesson journey.
+      await axiosClient.post(`/child/learning/progress/activity/${id}/complete`);
       alert('Great job! Activity completed! 🎉');
       navigate(-1);
     } catch (err) {
-      console.error('Failed to mark activity as complete:', err);
+      alert(err.response?.data?.error || 'We could not record this activity yet.');
     }
   };
 

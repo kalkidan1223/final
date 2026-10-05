@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import LessonResourceViewer from '../../components/child/LessonResourceViewer';
@@ -10,8 +10,10 @@ export default function ChildLessonDetail() {
   const [loading, setLoading] = useState(true);
   const [lessonData, setLessonData] = useState(null);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const completionShownRef = useRef(false);
 
   useEffect(() => {
     fetchLessonJourney();
@@ -31,10 +33,15 @@ export default function ChildLessonDetail() {
       // Try new learning journey API first
       try {
         const response = await axiosClient.get(`/child/learning/lessons/${id}`);
+        completionShownRef.current = response.data.progress?.status === 'completed' ? 'done' : 'pending';
         setLessonData(response.data);
         
-        // Check if lesson just completed
-        if (response.data.progress?.status === 'completed' && !showCelebration) {
+        // Celebrate only the first time this mount sees the lesson completed
+        // (i.e. the child just finished it), never on every revisit.
+        if (response.data.progress?.status === 'completed'
+            && response.data.progress?.progress_percentage === 100
+            && completionShownRef.current === 'pending') {
+          completionShownRef.current = 'shown';
           setShowCelebration(true);
         }
         return;
@@ -124,11 +131,14 @@ export default function ChildLessonDetail() {
       });
       
     } catch (err) {
+      setErrorCode(err.response?.data?.code || '');
       setError(err.response?.data?.error || 'Failed to load lesson. Please try again!');
     } finally {
       setLoading(false);
     }
   };
+
+  const isLockedLesson = () => errorCode === 'LESSON_LOCKED';
 
   const startSession = async () => {
     try {
@@ -172,6 +182,23 @@ export default function ChildLessonDetail() {
   }
 
   if (error) {
+    if (isLockedLesson()) {
+      return (
+        <div className="max-w-lg mx-auto my-12 bg-white rounded-3xl border-4 border-amber-200 p-8 text-center space-y-4 shadow-lg">
+          <div className="text-6xl">🔒</div>
+          <h2 className="text-2xl font-black text-slate-800">This lesson is locked</h2>
+          <p className="text-slate-600 font-medium">
+            Finish the previous lesson first — then this one opens up for you!
+          </p>
+          <Link
+            to="/child/courses"
+            className="inline-block px-8 py-3 bg-purple-600 text-white font-black rounded-full shadow hover:bg-purple-700 transition"
+          >
+            ← Back to My Courses
+          </Link>
+        </div>
+      );
+    }
     return (
       <div className="space-y-4 max-w-lg mx-auto my-12">
         <Link to="/child/courses" className="inline-flex items-center text-purple-600 hover:text-purple-700 font-bold gap-2">

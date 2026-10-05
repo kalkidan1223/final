@@ -121,7 +121,11 @@ export default function AdminDashboard() {
     return r ? Number(r.count) : 0;
   }
 
-  const pendingApprovals = (stats?.pending_parent_registrations || 0) + (stats?.pending_student_registrations || 0);
+  const pendingApprovals = stats?.total_pending_approvals ?? (
+    (stats?.pending_parent_registrations || 0) +
+    (stats?.pending_student_registrations || 0) +
+    (stats?.pending_instructor_registrations || 0)
+  );
   const pop = stats?.population || {};
   const content = stats?.content || {};
 

@@ -2,17 +2,78 @@ import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axiosClient, { setActiveChildId, getActiveChildId } from '../api/axiosClient';
 import { useEffect, useState } from 'react';
+import { pickVoice, readVoicePreference, writeVoicePreference } from '../hooks/useVoiceGuide';
 
 const NAV_ITEMS = [
-  { path: '/child', label: 'Home', icon: '🏠' },
-  { path: '/child/courses', label: 'My Courses', icon: '📚' },
-  { path: '/child/activities', label: 'Activities', icon: '🎯' },
-  { path: '/child/quizzes', label: 'Quizzes', icon: '📝' },
-  { path: '/child/progress', label: 'My Progress', icon: '⭐' },
-  { path: '/child/achievements', label: 'Achievements', icon: '🏆' },
-  { path: '/child/notifications', label: 'Notifications', icon: '🔔' },
-  { path: '/child/profile', label: 'Profile', icon: '👤' },
+  { path: '/child', label: 'Home', icon: '🏠', sound: 'home' },
+  { path: '/child/courses', label: 'My Courses', icon: '📚', sound: 'books' },
+  { path: '/child/activities', label: 'Activities', icon: '🎯', sound: 'target' },
+  { path: '/child/quizzes', label: 'Quizzes', icon: '📝', sound: 'writing' },
+  { path: '/child/progress', label: 'My Progress', icon: '⭐', sound: 'star' },
+  { path: '/child/achievements', label: 'Achievements', icon: '🏆', sound: 'trophy' },
+  { path: '/child/notifications', label: 'Notifications', icon: '🔔', sound: 'bell' },
+  { path: '/child/profile', label: 'Profile', icon: '👤', sound: 'profile' },
 ];
+
+/** Short Amharic confirmation, spoken with the same Amharic-first voice. */
+function speak(text) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'am';
+  utterance.rate = 0.85;
+  const voice = pickVoice(
+    window.speechSynthesis.getVoices().filter((v) => (v.lang || '').toLowerCase().startsWith('am'))
+  );
+  if (voice) utterance.voice = voice;
+  window.speechSynthesis.speak(utterance);
+}
+
+/** Play a fun click sound for interactive elements */
+function playClickSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } catch (e) {
+    // Audio not supported, silently fail
+  }
+}
+
+/** Play a success sound */
+function playSuccessSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 523.25; // C5
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (e) {
+    // Audio not supported, silently fail
+  }
+}
 
 export default function ChildLayout() {
   const { user, logout } = useAuth();
@@ -21,7 +82,7 @@ export default function ChildLayout() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [child, setChild] = useState(null);
   const [siblingChildren, setSiblingChildren] = useState([]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(readVoicePreference);
 
   useEffect(() => {
     fetchChildInfo();
@@ -66,16 +127,17 @@ export default function ChildLayout() {
   const isEarlyLearner = child?.is_early_learner !== undefined ? child.is_early_learner : (child?.age ? child.age <= 9 : true);
   const childName = child?.full_name || (user?.role === 'parent' ? 'Your Child' : 'Student');
 
-  // Age-appropriate navigation items:
-  // For 5-9: Ethiopian bilingual simplified icons (Home, My Lessons, Fun Games, Quizzes, My Stars)
-  // For 10-12: Full academic suite (Home, Courses, Activities, Quizzes, Progress, Achievements, Notifications, Profile)
+  // Age-appropriate navigation items.
+  // For 5-9: three destinations only. A six-year-old should never have to
+  //         choose between more than a handful of icons to get moving, and the
+  //         games are not here — they are the tiles their own teacher pinned on
+  //         the home screen, so what the child can play is never hardcoded.
+  // For 10-12: the full academic suite.
   const navItems = isEarlyLearner
     ? [
-        { path: '/child', label: 'ዋና ገጽ (Home)', icon: '🏠' },
-        { path: '/child/courses', label: 'ትምህርቶቼ (Lessons)', icon: '📖' },
-        { path: '/child/activities', label: 'ጨዋታዎች (Games)', icon: '🎯' },
-        { path: '/child/quizzes', label: 'የጥያቄ ሰዓት (Quiz)', icon: '✨' },
-        { path: '/child/achievements', label: 'ኮከቦቼ (Stars)', icon: '⭐' },
+        { path: '/child', label: 'መነሻ', icon: '🏠' },
+        { path: '/child/courses', label: 'ትምህርት', icon: '📖' },
+        { path: '/child/achievements', label: 'ኮከቦቼ', icon: '⭐' },
       ]
     : [
         { path: '/child', label: 'Home', icon: '🏠' },
@@ -154,11 +216,20 @@ export default function ChildLayout() {
               </span>
             </div>
 
-            {/* Sound toggle button */}
+            {/* Sound toggle. Shares one preference with useVoiceGuide so the
+                choice made on any child screen sticks across the portal. */}
             <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              title={soundEnabled ? 'Sounds On' : 'Sounds Muted'}
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-lg transition"
+              onClick={() => {
+                const next = !soundEnabled;
+                setSoundEnabled(next);
+                writeVoicePreference(next);
+                if (next) speak('ድምፅ ተከፍቷል።');
+              }}
+              title={soundEnabled ? 'ድምፅ በርተት' : 'ድምፅ ዝግዝ'}
+              aria-pressed={soundEnabled}
+              className={`p-2 rounded-xl text-lg transition ${
+                soundEnabled ? 'bg-emerald-100' : 'bg-slate-100 hover:bg-slate-200'
+              }`}
             >
               {soundEnabled ? '🔊' : '🔇'}
             </button>
@@ -187,11 +258,12 @@ export default function ChildLayout() {
                 <NavLink
                   key={item.path}
                   to={item.path}
+                  onClick={() => soundEnabled && playClickSound()}
                   className={`
                     relative flex items-center sm:flex-col gap-1.5 sm:gap-0.5 px-3 py-2 sm:py-2.5 rounded-2xl font-bold text-xs transition-all whitespace-nowrap flex-shrink-0
                     ${active
-                      ? 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-200 scale-105'
-                      : 'text-slate-600 hover:bg-purple-50 hover:text-purple-700'
+                      ? 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-200 scale-105 animate-glow'
+                      : 'text-slate-600 hover:bg-purple-50 hover:text-purple-700 hover:scale-105'
                     }
                   `}
                   role="tab"

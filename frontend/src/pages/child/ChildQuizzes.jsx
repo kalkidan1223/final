@@ -78,12 +78,15 @@ export default function ChildQuizzes() {
               {items.map((q) => {
                 const attCount = q.attempts || q.attempt_count || 0;
                 const hasPassed = q.is_passed;
+                const isLocked = !!q.is_locked;
 
                 return (
                   <Link
                     key={q.id}
-                    to={`/child/quizzes/${q.id}`}
-                    className="group block bg-white rounded-3xl shadow-sm hover:shadow-md transition-all duration-300 p-5 border border-purple-100 hover:border-purple-300 transform hover:-translate-y-1"
+                    to={isLocked ? '#' : `/child/quizzes/${q.id}`}
+                    onClick={(e) => { if (isLocked) e.preventDefault(); }}
+                    aria-disabled={isLocked}
+                    className={`group block bg-white rounded-3xl shadow-sm transition-all duration-300 p-5 border border-purple-100 ${isLocked ? 'opacity-60 cursor-not-allowed' : 'hover:shadow-md hover:border-purple-300 transform hover:-translate-y-1'}`}
                   >
                     <div className="flex items-start gap-3.5">
                       <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-400 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 shadow-sm group-hover:scale-105 transition">
@@ -100,6 +103,9 @@ export default function ChildQuizzes() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 mt-4 text-xs font-extrabold">
+                      {isLocked && (
+                        <span className="px-2.5 py-1 bg-gray-200 text-gray-600 rounded-full">🔒 Locked</span>
+                      )}
                       {attCount > 0 ? (
                         <span className={`px-2.5 py-1 rounded-full ${hasPassed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                           {hasPassed ? '✓ አልፈሃል/ሻል' : '🔄 ተሞክሯል'} ({attCount}{q.attempt_limit ? `/${q.attempt_limit}` : ''})

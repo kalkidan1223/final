@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from '../Modal';
 import axiosClient from '../../api/axiosClient';
+import useReferenceKit, { invalidateReferenceKit } from '../../hooks/useReferenceKit';
 
 // Activity type definitions with their specific configuration needs
 const ACTIVITY_TYPE_CONFIGS = {
@@ -38,9 +39,9 @@ const ACTIVITY_TYPE_CONFIGS = {
     autoGradable: true
   },
   matching: {
-    label: 'Matching',
+    label: 'Matching (self-practice game)',
     icon: '🔗',
-    description: 'Match items from two columns',
+    description: 'Child matches each letter to its picture — pick the pairs yourself',
     fields: ['pairs'],
     requiresUpload: false,
     autoGradable: true
@@ -116,10 +117,10 @@ const ACTIVITY_TYPE_CONFIGS = {
   
   // Math & Numbers
   counting: {
-    label: 'Counting',
+    label: 'Counting (self-practice game)',
     icon: '🔢',
-    description: 'Count objects and enter the number',
-    fields: ['image', 'correctCount'],
+    description: 'Child counts the objects you choose, in Ge’ez or Arabic numerals',
+    fields: ['objects', 'min', 'max', 'rounds', 'numeral_system'],
     requiresUpload: false,
     autoGradable: true
   },
@@ -127,18 +128,18 @@ const ACTIVITY_TYPE_CONFIGS = {
     label: 'Number Tracing',
     icon: '✍️',
     description: 'Trace numbers (upload result)',
-    fields: ['numbers', 'templateImage'],
+    fields: ['items', 'templateImage'],
     requiresUpload: true,
     autoGradable: false
   },
   
   // Language
   letter_tracing: {
-    label: 'Letter Tracing',
+    label: 'Letter Tracing (self-practice game)',
     icon: '🔤',
-    description: 'Trace letters (upload result)',
-    fields: ['letters', 'templateImage'],
-    requiresUpload: true,
+    description: 'Child traces the Ge’ez letters you choose, with their seven vowel orders',
+    fields: ['letters', 'vowel_order_count'],
+    requiresUpload: false,
     autoGradable: false
   },
   vocabulary_practice: {
@@ -173,6 +174,7 @@ const DIFFICULTIES = ['beginner', 'easy', 'medium', 'hard', 'advanced'];
 
 export default function ActivityBuilder({ open, onClose, lessonId, activity, onSaved }) {
   const isEdit = Boolean(activity);
+  const { reference } = useReferenceKit();
   const [form, setForm] = useState({
     title: '',
     activity_type: 'multiple_choice',
@@ -249,6 +251,10 @@ export default function ActivityBuilder({ open, onClose, lessonId, activity, onS
         return config.sentence && config.blanks && config.blanks.length > 0;
       case 'matching':
         return config.pairs && config.pairs.length > 0;
+      case 'letter_tracing':
+        return config.letters && config.letters.length > 0;
+      case 'counting':
+        return config.objects && config.objects.length > 0;
       case 'writing':
         return config.prompt;
       case 'drawing':
@@ -451,6 +457,7 @@ export default function ActivityBuilder({ open, onClose, lessonId, activity, onS
             setConfig={setConfig}
             inputCls={inputCls}
             labelCls={labelCls}
+            reference={reference}
           />
           
           {/* Configuration Warning */}
@@ -516,7 +523,7 @@ export default function ActivityBuilder({ open, onClose, lessonId, activity, onS
 // ============================================
 // ACTIVITY-SPECIFIC CONFIGURATION FIELDS
 // ============================================
-function ActivityConfigFields({ activityType, config, setConfig, inputCls, labelCls }) {
+function ActivityConfigFields({ activityType, config, setConfig, inputCls, labelCls, reference }) {
   switch (activityType) {
     case 'drag_and_drop':
       return <DragAndDropConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
@@ -531,7 +538,15 @@ function ActivityConfigFields({ activityType, config, setConfig, inputCls, label
       return <FillInBlankConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
     
     case 'matching':
-      return <MatchingConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
+      return (
+        <MatchingGameConfig
+          config={config}
+          setConfig={setConfig}
+          inputCls={inputCls}
+          labelCls={labelCls}
+          reference={reference}
+        />
+      );
     
     case 'writing':
       return <WritingConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
@@ -552,7 +567,15 @@ function ActivityConfigFields({ activityType, config, setConfig, inputCls, label
       return <ListeningConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
     
     case 'counting':
-      return <CountingConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
+      return (
+        <CountingGameConfig
+          config={config}
+          setConfig={setConfig}
+          inputCls={inputCls}
+          labelCls={labelCls}
+          reference={reference}
+        />
+      );
     
     case 'vocabulary_practice':
       return <VocabularyConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
@@ -561,6 +584,15 @@ function ActivityConfigFields({ activityType, config, setConfig, inputCls, label
       return <WorksheetConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} />;
     
     case 'letter_tracing':
+      return (
+        <LetterTracingGameConfig
+          config={config}
+          setConfig={setConfig}
+          inputCls={inputCls}
+          labelCls={labelCls}
+          reference={reference}
+        />
+      );
     case 'number_tracing':
       return <TracingConfig config={config} setConfig={setConfig} inputCls={inputCls} labelCls={labelCls} activityType={activityType} />;
     
@@ -885,43 +917,146 @@ function FillInBlankConfig({ config, setConfig, inputCls, labelCls }) {
 }
 
 // ============================================
-// MATCHING CONFIGURATION
+// MATCHING GAME CONFIGURATION
+// The instructor chooses or authors the words and letter pairs.
+// Teachers can select from the school word bank OR add custom words directly on the fly.
 // ============================================
-function MatchingConfig({ config, setConfig, inputCls, labelCls }) {
+function MatchingGameConfig({ config, setConfig, inputCls, labelCls, reference = {} }) {
   const pairs = config.pairs || [];
-  const [newPair, setNewPair] = useState({ left: '', right: '' });
+  const words = reference.picture_words || [];
+  const letters = reference.fidel_letters || [];
 
-  const addPair = () => {
-    if (newPair.left && newPair.right) {
-      setConfig('pairs', [...pairs, { ...newPair, id: Date.now() }]);
-      setNewPair({ left: '', right: '' });
-    }
+  const [mode, setMode] = useState('library'); // 'library' | 'custom'
+  const [filterText, setFilterText] = useState('');
+
+  // Custom pair form
+  const [customWord, setCustomWord] = useState('');
+  const [customLetter, setCustomLetter] = useState('');
+  const [customEmoji, setCustomEmoji] = useState('🍎');
+  const [customEnglish, setCustomEnglish] = useState('');
+  const [saveToBank, setSaveToBank] = useState(true);
+  const [savingCustom, setSavingCustom] = useState(false);
+
+  const addPair = (word) => {
+    if (!word?.word) return;
+    setConfig('pairs', [
+      ...pairs,
+      { left: word.example_for_letter || word.word.charAt(0), right: word.word, emoji: word.emoji || '' },
+    ]);
   };
 
-  const removePair = (id) => {
-    setConfig('pairs', pairs.filter(p => p.id !== id));
+  const updatePair = (index, field, value) => {
+    const next = pairs.map((p, i) => (i === index ? { ...p, [field]: value } : p));
+    setConfig('pairs', next);
+  };
+
+  const filteredWords = words.filter((w) => {
+    if (!filterText.trim()) return true;
+    const q = filterText.toLowerCase();
+    return (
+      (w.word || '').toLowerCase().includes(q) ||
+      (w.english || '').toLowerCase().includes(q) ||
+      (w.example_for_letter || '').toLowerCase().includes(q)
+    );
+  });
+
+  const handleAddCustomPair = async (e) => {
+    e.preventDefault();
+    if (!customWord.trim()) return;
+
+    const trimmedWord = customWord.trim();
+    const resolvedLetter = customLetter.trim() || trimmedWord.charAt(0);
+    const resolvedEmoji = customEmoji.trim() || '🖼️';
+
+    // 1. Add to activity pairs immediately
+    setConfig('pairs', [
+      ...pairs,
+      { left: resolvedLetter, right: trimmedWord, emoji: resolvedEmoji },
+    ]);
+
+    // 2. Optionally save to backend vocabulary bank
+    if (saveToBank) {
+      setSavingCustom(true);
+      try {
+        await axiosClient.post('/reference/words', {
+          word: trimmedWord,
+          english: customEnglish.trim() || null,
+          emoji: resolvedEmoji,
+          example_for_letter: resolvedLetter,
+          category: 'general',
+        });
+        invalidateReferenceKit();
+      } catch (err) {
+        console.error('Failed to save custom word to bank:', err);
+      } finally {
+        setSavingCustom(false);
+      }
+    }
+
+    // Reset fields
+    setCustomWord('');
+    setCustomLetter('');
+    setCustomEnglish('');
   };
 
   return (
     <div className="space-y-4">
       <div>
-        <label className={labelCls}>Matching Pairs</label>
-        <p className="text-xs text-gray-600 mb-3">Create pairs that students should match</p>
+        <label className={labelCls}>Letter → Picture Pairs *</label>
+        <p className="text-xs text-gray-600 mb-3">
+          The child taps a letter, then taps the matching picture. You can pick words from the school library or author custom words below.
+        </p>
 
+        {/* Existing pairs list */}
         {pairs.length > 0 && (
           <div className="space-y-2 mb-4">
             {pairs.map((pair, idx) => (
-              <div key={pair.id} className="flex items-center gap-3 bg-white rounded-lg p-3 border border-gray-200">
-                <span className="font-bold text-purple-600">{idx + 1}.</span>
-                <div className="flex-1">
-                  <span className="font-medium text-gray-800">{pair.left}</span>
-                  <span className="mx-2 text-gray-400">⟷</span>
-                  <span className="text-gray-600">{pair.right}</span>
-                </div>
+              <div
+                key={`${pair.right}-${idx}`}
+                className="flex items-center gap-2 bg-white rounded-xl p-3 border border-gray-200 shadow-sm"
+              >
+                <span className="font-bold text-indigo-600 shrink-0 text-sm">{idx + 1}.</span>
+                
+                {/* Editable Emoji */}
+                <input
+                  type="text"
+                  value={pair.emoji || ''}
+                  onChange={(e) => updatePair(idx, 'emoji', e.target.value)}
+                  className="w-10 text-center text-xl rounded-lg border border-gray-200 py-1"
+                  title="Edit picture emoji"
+                />
+
+                {/* Editable Letter */}
+                <select
+                  value={pair.left}
+                  onChange={(e) => updatePair(idx, 'left', e.target.value)}
+                  className={`w-20 ${inputCls}`}
+                  aria-label="Letter"
+                >
+                  <option value="">—</option>
+                  {letters.map((l) => (
+                    <option key={l.base_char} value={l.base_char}>
+                      {l.base_char} ({l.sound})
+                    </option>
+                  ))}
+                </select>
+
+                <span className="text-gray-400 shrink-0 font-bold">⟷</span>
+
+                {/* Editable Word */}
+                <input
+                  type="text"
+                  value={pair.right}
+                  onChange={(e) => updatePair(idx, 'right', e.target.value)}
+                  className={`flex-1 min-w-0 font-bold text-gray-800 ${inputCls}`}
+                  placeholder="Word"
+                />
+
                 <button
                   type="button"
-                  onClick={() => removePair(pair.id)}
-                  className="text-red-600 hover:text-red-800 font-bold"
+                  onClick={() => setConfig('pairs', pairs.filter((_, i) => i !== idx))}
+                  className="text-red-500 hover:text-red-700 font-bold shrink-0 p-1 rounded hover:bg-red-50"
+                  title="Remove pair"
                 >
                   ✕
                 </button>
@@ -930,37 +1065,167 @@ function MatchingConfig({ config, setConfig, inputCls, labelCls }) {
           </div>
         )}
 
-        <div className="grid grid-cols-[1fr,auto,1fr,auto] gap-2 items-end">
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">Left Column</label>
-            <input
-              value={newPair.left}
-              onChange={(e) => setNewPair({ ...newPair, left: e.target.value })}
-              placeholder="e.g. Apple"
-              className={inputCls}
-            />
-          </div>
-          <span className="text-gray-400 pb-2">⟷</span>
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">Right Column</label>
-            <input
-              value={newPair.right}
-              onChange={(e) => setNewPair({ ...newPair, right: e.target.value })}
-              placeholder="e.g. Red Fruit"
-              className={inputCls}
-            />
-          </div>
+        {/* Mode Selector Tabs */}
+        <div className="flex border-b border-gray-200 mb-3">
           <button
             type="button"
-            onClick={addPair}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+            onClick={() => setMode('library')}
+            className={`py-2 px-4 text-xs font-bold transition border-b-2 ${
+              mode === 'library'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
           >
-            + Add
+            📚 Choose from Word Bank ({words.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('custom')}
+            className={`py-2 px-4 text-xs font-bold transition border-b-2 ${
+              mode === 'custom'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            ✨ + Author Custom Word
           </button>
         </div>
 
+        {/* Tab 1: Library Picker with Live Search Filter */}
+        {mode === 'library' && (
+          <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <input
+              type="text"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Search library words (e.g. አንበሳ, Lion)..."
+              className="w-full text-xs rounded-lg border border-slate-200 p-2 bg-white"
+            />
+            <select
+              value=""
+              onChange={(e) => {
+                const word = words.find((w) => w.word === e.target.value);
+                if (word) addPair(word);
+              }}
+              className={inputCls}
+            >
+              <option value="">— choose from {filteredWords.length} words —</option>
+              {filteredWords.map((w) => (
+                <option key={w.id} value={w.word}>
+                  {w.emoji} {w.word} {w.english ? `(${w.english})` : ''} {w.example_for_letter ? `[${w.example_for_letter}]` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Tab 2: Custom Word Authoring */}
+        {mode === 'custom' && (
+          <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-3">
+            <div className="text-xs font-bold text-indigo-900">Add a new word to this matching activity:</div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Amharic Word *</label>
+                <input
+                  type="text"
+                  value={customWord}
+                  onChange={(e) => {
+                    setCustomWord(e.target.value);
+                    if (!customLetter && e.target.value) {
+                      setCustomLetter(e.target.value.charAt(0));
+                    }
+                  }}
+                  placeholder="e.g. መጽሐፍ"
+                  className={`${inputCls} text-sm font-bold`}
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Matching Fidel Letter</label>
+                <select
+                  value={customLetter}
+                  onChange={(e) => setCustomLetter(e.target.value)}
+                  className={`${inputCls} text-sm`}
+                >
+                  <option value="">— Choose Letter —</option>
+                  {letters.map((l) => (
+                    <option key={l.base_char} value={l.base_char}>
+                      {l.base_char} ({l.sound})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Emoji / Icon</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={customEmoji}
+                    onChange={(e) => setCustomEmoji(e.target.value)}
+                    placeholder="🍎"
+                    className="w-12 text-center text-lg rounded-lg border border-slate-200 py-1.5"
+                  />
+                  <div className="flex gap-1 overflow-x-auto py-1">
+                    {['📚', '✏️', '🍎', '🦁', '🚗', '☀️', '🏠', '⚽'].map((em) => (
+                      <button
+                        key={em}
+                        type="button"
+                        onClick={() => setCustomEmoji(em)}
+                        className="text-base px-1.5 py-0.5 rounded hover:bg-white bg-slate-200/50"
+                      >
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">English Meaning (optional)</label>
+                <input
+                  type="text"
+                  value={customEnglish}
+                  onChange={(e) => setCustomEnglish(e.target.value)}
+                  placeholder="e.g. Book"
+                  className={`${inputCls} text-sm`}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={saveToBank}
+                  onChange={(e) => setSaveToBank(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Save to school vocabulary bank for future use</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={handleAddCustomPair}
+                disabled={!customWord.trim() || savingCustom}
+                className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition"
+              >
+                {savingCustom ? 'Saving...' : '+ Add Pair'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {pairs.length === 0 && (
-          <p className="text-xs text-amber-600 mt-2">⚠️ Add at least one matching pair</p>
+          <p className="text-xs text-amber-600 mt-2">
+            ⚠️ Add at least one pair. The child cannot start the game without it.
+          </p>
+        )}
+        {pairs.length > 0 && pairs.length < 3 && (
+          <p className="text-xs text-amber-600 mt-2">
+            ⚠️ Three or more pairs make a better game. The child plays four per round.
+          </p>
         )}
       </div>
     </div>
@@ -1183,43 +1448,331 @@ function ListeningConfig({ config, setConfig, inputCls, labelCls }) {
 }
 
 // ============================================
-// COUNTING CONFIGURATION
+// COUNTING GAME CONFIGURATION
+// The instructor picks or authors the objects to count and the number range.
+// Teachers can choose from existing objects OR create custom objects on the fly.
 // ============================================
-function CountingConfig({ config, setConfig, inputCls, labelCls }) {
+function CountingGameConfig({ config, setConfig, inputCls, labelCls, reference = {} }) {
+  const objects = config.objects || [];
+  const words = reference.picture_words || [];
+  const min = config.min ?? 1;
+  const max = config.max ?? 10;
+
+  const [mode, setMode] = useState('library'); // 'library' | 'custom'
+  const [filterText, setFilterText] = useState('');
+
+  // Custom object state
+  const [customWord, setCustomWord] = useState('');
+  const [customEmoji, setCustomEmoji] = useState('🍎');
+  const [customEnglish, setCustomEnglish] = useState('');
+  const [saveToBank, setSaveToBank] = useState(true);
+  const [savingCustom, setSavingCustom] = useState(false);
+
+  const addObject = (word) => {
+    if (!word?.emoji && !word?.image_url) return;
+    setConfig('objects', [
+      ...objects,
+      { emoji: word.emoji || '', word: word.word, image_url: word.image_url || null },
+    ]);
+  };
+
+  const updateObject = (index, field, value) => {
+    const next = objects.map((obj, i) => (i === index ? { ...obj, [field]: value } : obj));
+    setConfig('objects', next);
+  };
+
+  const availableWords = words
+    .filter((w) => w.emoji)
+    .filter((w) => {
+      if (!filterText.trim()) return true;
+      const q = filterText.toLowerCase();
+      return (
+        (w.word || '').toLowerCase().includes(q) ||
+        (w.english || '').toLowerCase().includes(q)
+      );
+    });
+
+  const handleAddCustomObject = async (e) => {
+    e.preventDefault();
+    if (!customWord.trim()) return;
+
+    const trimmedWord = customWord.trim();
+    const resolvedEmoji = customEmoji.trim() || '🍎';
+
+    setConfig('objects', [
+      ...objects,
+      { emoji: resolvedEmoji, word: trimmedWord, image_url: null },
+    ]);
+
+    if (saveToBank) {
+      setSavingCustom(true);
+      try {
+        await axiosClient.post('/reference/words', {
+          word: trimmedWord,
+          english: customEnglish.trim() || null,
+          emoji: resolvedEmoji,
+          example_for_letter: trimmedWord.charAt(0),
+          category: 'objects',
+        });
+        invalidateReferenceKit();
+      } catch (err) {
+        console.error('Failed to save counting object to bank:', err);
+      } finally {
+        setSavingCustom(false);
+      }
+    }
+
+    setCustomWord('');
+    setCustomEnglish('');
+  };
+
   return (
     <div className="space-y-4">
       <div>
-        <label className={labelCls}>Image URL (with objects to count) *</label>
-        <input
-          required
-          value={config.image_url || ''}
-          onChange={(e) => setConfig('image_url', e.target.value)}
-          placeholder="https://... or /uploads/counting.png"
-          className={inputCls}
-        />
+        <label className={labelCls}>What should the child count? *</label>
+        <p className="text-xs text-gray-600 mb-3">
+          Pick everyday objects or author custom objects. The child counts them, then taps the number.
+        </p>
+
+        {/* Existing objects list */}
+        {objects.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {objects.map((object, idx) => (
+              <div
+                key={`${object.word}-${idx}`}
+                className="flex items-center gap-3 bg-white rounded-xl p-3 border border-gray-200 shadow-sm"
+              >
+                <span className="font-bold text-indigo-600 shrink-0 text-sm">{idx + 1}.</span>
+                
+                {/* Editable Emoji */}
+                <input
+                  type="text"
+                  value={object.emoji || ''}
+                  onChange={(e) => updateObject(idx, 'emoji', e.target.value)}
+                  className="w-10 text-center text-xl rounded-lg border border-gray-200 py-1"
+                  title="Edit object emoji"
+                />
+
+                {/* Editable Word */}
+                <input
+                  type="text"
+                  value={object.word}
+                  onChange={(e) => updateObject(idx, 'word', e.target.value)}
+                  className={`flex-1 min-w-0 font-bold text-gray-800 ${inputCls}`}
+                  placeholder="Object name"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfig('objects', objects.filter((_, i) => i !== idx))
+                  }
+                  className="text-red-500 hover:text-red-700 font-bold shrink-0 p-1 rounded hover:bg-red-50"
+                  title="Remove object"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Mode Selector Tabs */}
+        <div className="flex border-b border-gray-200 mb-3">
+          <button
+            type="button"
+            onClick={() => setMode('library')}
+            className={`py-2 px-4 text-xs font-bold transition border-b-2 ${
+              mode === 'library'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            🍎 Choose from Library ({words.filter((w) => w.emoji).length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('custom')}
+            className={`py-2 px-4 text-xs font-bold transition border-b-2 ${
+              mode === 'custom'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            ✨ + Author Custom Object
+          </button>
+        </div>
+
+        {/* Tab 1: Library Object Picker */}
+        {mode === 'library' && (
+          <div className="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <input
+              type="text"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder="Search objects to count (e.g. ሎሚ, Lemon, ኳስ)..."
+              className="w-full text-xs rounded-lg border border-slate-200 p-2 bg-white"
+            />
+            <select
+              value=""
+              onChange={(e) => {
+                const word = words.find((w) => w.word === e.target.value);
+                if (word) addObject(word);
+              }}
+              className={inputCls}
+            >
+              <option value="">— choose from {availableWords.length} objects —</option>
+              {availableWords.map((w) => (
+                <option key={w.id} value={w.word}>
+                  {w.emoji} {w.word} {w.english ? `(${w.english})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Tab 2: Custom Counting Object Authoring */}
+        {mode === 'custom' && (
+          <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-3">
+            <div className="text-xs font-bold text-indigo-900">Add custom object for students to count:</div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Amharic Object Name *</label>
+                <input
+                  type="text"
+                  value={customWord}
+                  onChange={(e) => setCustomWord(e.target.value)}
+                  placeholder="e.g. ብርቱካን, እርሳስ, ኳስ"
+                  className={`${inputCls} text-sm font-bold`}
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Emoji / Icon</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={customEmoji}
+                    onChange={(e) => setCustomEmoji(e.target.value)}
+                    placeholder="🍎"
+                    className="w-12 text-center text-lg rounded-lg border border-slate-200 py-1.5"
+                  />
+                  <div className="flex gap-1 overflow-x-auto py-1">
+                    {['🍊', '🍎', '🍌', '✏️', '⚽', '🚗', '⭐', '🎈'].map((em) => (
+                      <button
+                        key={em}
+                        type="button"
+                        onClick={() => setCustomEmoji(em)}
+                        className="text-base px-1.5 py-0.5 rounded hover:bg-white bg-slate-200/50"
+                      >
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">English Translation (optional)</label>
+                <input
+                  type="text"
+                  value={customEnglish}
+                  onChange={(e) => setCustomEnglish(e.target.value)}
+                  placeholder="e.g. Orange, Pencil, Ball"
+                  className={`${inputCls} text-sm`}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={saveToBank}
+                  onChange={(e) => setSaveToBank(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>Save to school vocabulary bank for future activities</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={handleAddCustomObject}
+                disabled={!customWord.trim() || savingCustom}
+                className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition"
+              >
+                {savingCustom ? 'Saving...' : '+ Add Object'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {objects.length === 0 && (
+          <p className="text-xs text-amber-600 mt-2">
+            ⚠️ Add at least one object. The child cannot start the game without it.
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className={labelCls}>Smallest number</label>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            value={min}
+            onChange={(e) => setConfig('min', Number(e.target.value) || 1)}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Largest number</label>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            value={max}
+            onChange={(e) => setConfig('max', Number(e.target.value) || 10)}
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Questions per session</label>
+          <input
+            type="number"
+            min="3"
+            max="10"
+            value={config.rounds ?? 5}
+            onChange={(e) => setConfig('rounds', Number(e.target.value) || 5)}
+            className={inputCls}
+          />
+        </div>
       </div>
 
       <div>
-        <label className={labelCls}>Correct Count *</label>
-        <input
-          required
-          type="number"
-          min="1"
-          value={config.correct_count || ''}
-          onChange={(e) => setConfig('correct_count', e.target.value)}
-          placeholder="e.g. 5"
-          className={inputCls}
-        />
-      </div>
-
-      <div>
-        <label className={labelCls}>What to Count</label>
-        <input
-          value={config.count_object || ''}
-          onChange={(e) => setConfig('count_object', e.target.value)}
-          placeholder="e.g. apples, stars, animals"
-          className={inputCls}
-        />
+        <label className={labelCls}>Numerals to show</label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="numeral_system"
+              checked={(config.numeral_system || 'geez') === 'geez'}
+              onChange={() => setConfig('numeral_system', 'geez')}
+            />
+            <span className="font-medium">Ge’ez (፩ ፪ ፫) — as taught in Ethiopian schools</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="numeral_system"
+              checked={config.numeral_system === 'arabic'}
+              onChange={() => setConfig('numeral_system', 'arabic')}
+            />
+            <span className="font-medium">Arabic (1 2 3)</span>
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -1321,34 +1874,143 @@ function WorksheetConfig({ config, setConfig, inputCls, labelCls }) {
 }
 
 // ============================================
-// TRACING CONFIGURATION
+// LETTER TRACING GAME CONFIGURATION
+// The teacher TAPS the letters to teach; they never type them. The seven vowel
+// orders for each character come from the seeded Ge'ez syllabary, because that
+// is the writing system rather than curriculum - every Ethiopian school teaches
+// it the same way, and re-typing 26 letters x 7 orders by hand is how errors
+// get into a child's textbook.
 // ============================================
-function TracingConfig({ config, setConfig, inputCls, labelCls, activityType }) {
-  const isLetters = activityType === 'letter_tracing';
-  
+function LetterTracingGameConfig({ config, setConfig, inputCls, labelCls, reference = {} }) {
+  const letters = config.letters || [];
+  const allLetters = reference.fidel_letters || [];
+  const words = reference.picture_words || [];
+
+  const toggleLetter = (base) => {
+    if (letters.some((l) => l.base === base)) {
+      setConfig(
+        'letters',
+        letters.filter((l) => l.base !== base)
+      );
+      return;
+    }
+    // Carry the reference sound, syllable series and example word with the
+    // selection so the game is playable the moment it is published.
+    const refLetter = allLetters.find((l) => l.base_char === base);
+    const refWord = words.find((w) => w.example_for_letter === base);
+    setConfig('letters', [
+      ...letters,
+      {
+        base,
+        sound: refLetter?.sound || '',
+        syllables: refLetter?.syllables || [],
+        word: refWord?.word || '',
+        emoji: refWord?.emoji || '',
+      },
+    ]);
+  };
+
+  const updateLetter = (base, field, value) => {
+    setConfig(
+      'letters',
+      letters.map((l) => (l.base === base ? { ...l, [field]: value } : l))
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div>
-        <label className={labelCls}>{isLetters ? 'Letters to Trace' : 'Numbers to Trace'} *</label>
-        <input
-          required
-          value={config.items || ''}
-          onChange={(e) => setConfig('items', e.target.value)}
-          placeholder={isLetters ? "e.g. A, B, C" : "e.g. 1, 2, 3"}
-          className={inputCls}
-        />
+        <label className={labelCls}>Letters to practise *</label>
+        <p className="text-xs text-gray-600 mb-3">
+          Tap a letter to add or remove it. The Ethiopian primer teaches ሀ ለ ሐ መ ረ ሰ ሸ ቀ first.
+        </p>
+
+        <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-12 gap-1.5">
+          {allLetters.map((l) => {
+            const active = letters.some((x) => x.base === l.base_char);
+            return (
+              <button
+                key={l.base_char}
+                type="button"
+                onClick={() => toggleLetter(l.base_char)}
+                title={`${l.base_char} (${l.sound})`}
+                className={`aspect-square rounded-lg text-xl font-black transition active:scale-90 ${
+                  active
+                    ? 'bg-emerald-600 text-white ring-2 ring-emerald-300'
+                    : 'bg-white text-gray-700 border border-gray-200 hover:bg-emerald-50'
+                }`}
+              >
+                {l.base_char}
+              </button>
+            );
+          })}
+        </div>
+
+        {letters.length === 0 && (
+          <p className="text-xs text-amber-600 mt-2">
+            ⚠️ Choose at least one letter. The child cannot start the game without it.
+          </p>
+        )}
       </div>
 
+      {letters.length > 0 && (
+        <div>
+          <label className={labelCls}>The word that shows each letter</label>
+          <p className="text-xs text-gray-600 mb-3">
+            A Grade 1 child meets a letter inside a word they already know. Pick the
+            word for each one, or leave the reference example.
+          </p>
+          <div className="space-y-2">
+            {letters.map((l) => (
+              <div
+                key={l.base}
+                className="flex flex-wrap items-center gap-2 bg-white rounded-lg p-3 border border-gray-200"
+              >
+                <span className="text-2xl font-black text-emerald-700 shrink-0 w-10 text-center">
+                  {l.base}
+                </span>
+                {l.syllables?.length === 7 && (
+                  <span className="text-xs text-gray-400 shrink-0">
+                    {l.syllables.join(' ')}
+                  </span>
+                )}
+                <span className="flex-1 min-w-0">
+                  <input
+                    value={l.word || ''}
+                    onChange={(e) => updateLetter(l.base, 'word', e.target.value)}
+                    placeholder="Amharic word"
+                    className={`${inputCls} text-sm`}
+                  />
+                </span>
+                <input
+                  value={l.emoji || ''}
+                  onChange={(e) => updateLetter(l.base, 'emoji', e.target.value)}
+                  placeholder="🎨"
+                  className={`w-16 ${inputCls} text-center`}
+                  aria-label="Picture emoji"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
-        <label className={labelCls}>Template Image URL (optional)</label>
-        <input
-          value={config.template_url || ''}
-          onChange={(e) => setConfig('template_url', e.target.value)}
-          placeholder="https://... or /uploads/template.png"
+        <label className={labelCls}>How many vowel orders to practise?</label>
+        <select
+          value={config.vowel_order_count ?? 7}
+          onChange={(e) => setConfig('vowel_order_count', Number(e.target.value))}
           className={inputCls}
-        />
-        <p className="text-xs text-gray-600 mt-1">Students will upload their traced work</p>
+        >
+          <option value={1}>Only the first (ሀ)</option>
+          <option value={3}>First three (ሀ ሁ ሂ)</option>
+          <option value={7}>All seven (አድ ኡ ኢ አ ኤ እ ኦ)</option>
+        </select>
+        <p className="text-xs text-gray-600 mt-1">
+          Younger children usually manage three; Grade 1 works through all seven.
+        </p>
       </div>
     </div>
   );
 }
+

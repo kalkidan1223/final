@@ -1,4 +1,5 @@
 const { query, pool } = require('../config/db');
+const { resolveStudentId, getLessonAccess, getResourceAccess, ensureLessonResources } = require('../utils/learningAccess');
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -8,23 +9,10 @@ const { query, pool } = require('../config/db');
  * Get the student_id for the authenticated user
  * Handles both direct student login and parent accessing child's learning
  */
+// Delegates to the shared access helper so every controller resolves the
+// active child (student self, or a parent's selected child) identically.
 async function getStudentId(req) {
-  // If URL has studentId param and user is parent, use that
-  if (req.params.studentId && req.user.role === 'parent') {
-    const result = await query(
-      'SELECT s.id FROM students s JOIN parents p ON s.parent_id = p.id WHERE s.id = $1 AND p.user_id = $2',
-      [req.params.studentId, req.user.id]
-    );
-    return result.rows[0]?.id || null;
-  }
-  
-  // If user is student, get their student_id
-  if (req.user.role === 'student') {
-    const result = await query('SELECT id FROM students WHERE user_id = $1', [req.user.id]);
-    return result.rows[0]?.id || null;
-  }
-  
-  return null;
+  return resolveStudentId(req);
 }
 
 /**
@@ -290,15 +278,16 @@ async function getCourseOverview(req, res, next) {
  */
 function determineIfLessonIsLocked(lesson, allLessons, sequentialLearning) {
   if (!sequentialLearning) return false;
-  if (lesson.order_index === 0) return false; // First lesson is always unlocked
-  
-  // Check if previous lesson is completed
-  const previousLesson = allLessons.find(l => l.order_index === lesson.order_index - 1);
-  if (previousLesson && previousLesson.progress_status !== 'completed') {
-    return true;
-  }
-  
-  return false;
+
+  // Rank lessons by their real order, then lock a lesson unless the one right
+  // before it has been completed. This is the ONLY lock applied in the course.
+  const sorted = [...allLessons].sort(
+    (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0) || a.id - b.id
+  );
+  const position = sorted.findIndex((l) => l.id === lesson.id);
+  if (position <= 0) return false; // first lesson (or unknown) stays open
+
+  return sorted[position - 1].progress_status !== 'completed';
 }
 
 /**
@@ -327,6 +316,9 @@ async function getLessonJourney(req, res, next) {
     }
     
     const { lessonId } = req.params;
+
+    // Guarantee this lesson's content has a database-backed order to display.
+    await ensureLessonResources(lessonId);
     
     // Get lesson info
     const lessonResult = await query(
@@ -342,6 +334,16 @@ async function getLessonJourney(req, res, next) {
     }
     
     const lesson = lessonResult.rows[0];
+
+    // Sequential learning: block a lesson until the previous one is completed,
+    // even if the child reaches it directly by URL or API call.
+    const lessonAccess = await getLessonAccess(studentId, lessonId);
+    if (lessonAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This lesson is locked. Finish the previous lesson first.',
+        code: 'LESSON_LOCKED',
+      });
+    }
     
     // Get lesson progress
     const progressResult = await query(
@@ -371,7 +373,7 @@ async function getLessonJourney(req, res, next) {
     
     const resources = resourcesResult.rows.map((resource, index) => {
       const status = resource.progress_status || 'not_started';
-      const isLocked = determineIfResourceIsLocked(resource, resourcesResult.rows, index, lesson.sequential_learning);
+      const isLocked = false; // a resource inside an open lesson is never locked
       
       return {
         id: resource.id,
@@ -410,24 +412,6 @@ async function getLessonJourney(req, res, next) {
   }
 }
 
-/**
- * Determine if a resource should be locked
- */
-function determineIfResourceIsLocked(resource, allResources, currentIndex, sequentialLearning) {
-  if (!sequentialLearning) return false;
-  if (currentIndex === 0) return false; // First resource always unlocked
-  if (!resource.is_required) return false; // Optional resources not locked
-  
-  // Check if previous required resource is completed
-  for (let i = currentIndex - 1; i >= 0; i--) {
-    const prevResource = allResources[i];
-    if (prevResource.is_required && prevResource.progress_status !== 'completed') {
-      return true;
-    }
-  }
-  
-  return false;
-}
 
 /**
  * Find the current step (next incomplete required resource)
@@ -456,6 +440,18 @@ async function getResourceDetail(req, res, next) {
     }
     
     const { resourceType, resourceId } = req.params;
+
+    // Never hand a child a locked resource, even via a direct API call.
+    const resourceAccess = await getResourceAccess(studentId, resourceType, resourceId);
+    if (!resourceAccess.exists) {
+      return res.status(404).json({ error: 'Resource not found' });
+    }
+    if (resourceAccess.isLocked) {
+      return res.status(403).json({
+        error: 'This step is locked. Complete the previous required step first.',
+        code: 'RESOURCE_LOCKED',
+      });
+    }
     
     let resource = null;
     let progress = null;
@@ -520,6 +516,27 @@ async function getResourceDetail(req, res, next) {
 }
 
 // ============================================================================
+// Merge overlapping/consecutive watched intervals into true unique watched seconds.
+function mergeWatchIntervals(intervals) {
+  if (!intervals || intervals.length === 0) return 0;
+  const sorted = [...intervals].sort((a, b) => Number(a.start_seconds) - Number(b.start_seconds));
+  const merged = [];
+  let current = { start: Number(sorted[0].start_seconds), end: Number(sorted[0].end_seconds) };
+  for (let i = 1; i < sorted.length; i++) {
+    const nextStart = Number(sorted[i].start_seconds);
+    const nextEnd = Number(sorted[i].end_seconds);
+    if (nextStart <= current.end) {
+      current.end = Math.max(current.end, nextEnd);
+    } else {
+      merged.push(current);
+      current = { start: nextStart, end: nextEnd };
+    }
+  }
+  merged.push(current);
+  const totalSeconds = merged.reduce((acc, intv) => acc + Math.max(0, intv.end - intv.start), 0);
+  return Math.round(totalSeconds);
+}
+
 // POST /api/child/progress/video/:videoId
 // Update video watching progress
 // ============================================================================
@@ -531,50 +548,99 @@ async function updateVideoProgress(req, res, next) {
     }
     
     const { videoId } = req.params;
-    const { watch_percentage, current_position_seconds, duration_seconds } = req.body;
-    
-    if (watch_percentage == null || current_position_seconds == null) {
-      return res.status(400).json({ error: 'watch_percentage and current_position_seconds required' });
+    const { current_position_seconds, duration_seconds, interval, position } = req.body;
+
+    // The child must be allowed to reach this video at all.
+    const access = await getResourceAccess(studentId, 'video', videoId);
+    if (!access.exists) {
+      return res.status(404).json({ error: 'Video not found' });
     }
-    
+    if (access.isLocked) {
+      return res.status(403).json({ error: 'This step is locked.', code: 'RESOURCE_LOCKED' });
+    }
+
+    const videoRes = await query('SELECT duration_seconds FROM videos WHERE id = $1', [videoId]);
+    const clientDuration = Math.max(1, Number(duration_seconds) || 0);
+    const storedDuration = Math.max(0, Number(videoRes.rows[0]?.duration_seconds) || 0);
+    const effectiveDuration = Math.max(1, clientDuration, storedDuration);
+
+    // Record only a GENUINE watched interval: the delta between consecutive
+    // playback positions while the video was actually playing. Seeking forward
+    // produces a delta larger than the threshold and is rejected, so skipped
+    // content is never counted as watched (prompt section 10).
+    const from = Number(position?.from ?? interval?.start);
+    const to = Number(position?.to ?? interval?.end ?? current_position_seconds);
+    if (Number.isFinite(from) && Number.isFinite(to)) {
+      const startSec = Math.max(0, Math.min(from, to));
+      const endSec = Math.min(effectiveDuration, Math.max(from, to));
+      const delta = endSec - startSec;
+      if (delta > 0 && delta <= 15) {
+        await query(
+          `INSERT INTO student_video_watch_intervals (student_id, video_id, start_seconds, end_seconds)
+           VALUES ($1, $2, $3, $4)`,
+          [studentId, videoId, startSec, endSec]
+        );
+      }
+    }
+
+    const intervalsRes = await query(
+      `SELECT start_seconds, end_seconds FROM student_video_watch_intervals
+       WHERE student_id = $1 AND video_id = $2`,
+      [studentId, videoId]
+    );
+    const uniqueWatched = mergeWatchIntervals(intervalsRes.rows);
+    const watchPct = Math.min(100, Math.round((uniqueWatched / effectiveDuration) * 100));
+    const isCompleted = watchPct >= 90;
+    const status = isCompleted ? 'completed' : uniqueWatched > 0 ? 'in_progress' : 'not_started';
+    const lastPosition = Math.round(Number(current_position_seconds ?? to) || 0);
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
-      // Update video progress
-      const result = await client.query(
+
+      await client.query(
         `INSERT INTO student_video_progress (
-          student_id, video_id, watch_percentage, current_position_seconds, 
+          student_id, video_id, duration_seconds, watched_seconds, last_position_seconds,
+          progress_percentage, status, watch_percentage, current_position_seconds,
           completed, last_watched_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $3 >= required_percentage, now(), now())
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now())
         ON CONFLICT (student_id, video_id)
         DO UPDATE SET
-          watch_percentage = GREATEST(student_video_progress.watch_percentage, $3),
-          current_position_seconds = $4,
-          completed = GREATEST(student_video_progress.watch_percentage, $3) >= student_video_progress.required_percentage,
+          duration_seconds = GREATEST(student_video_progress.duration_seconds, EXCLUDED.duration_seconds),
+          watched_seconds = GREATEST(student_video_progress.watched_seconds, EXCLUDED.watched_seconds),
+          last_position_seconds = EXCLUDED.last_position_seconds,
+          progress_percentage = GREATEST(student_video_progress.progress_percentage, EXCLUDED.progress_percentage),
+          watch_percentage = GREATEST(student_video_progress.watch_percentage, EXCLUDED.watch_percentage),
+          current_position_seconds = EXCLUDED.current_position_seconds,
+          status = CASE WHEN student_video_progress.status = 'completed' THEN 'completed' ELSE EXCLUDED.status END,
+          completed = student_video_progress.completed OR EXCLUDED.completed,
           last_watched_at = now(),
-          updated_at = now()
-        RETURNING *`,
-        [studentId, videoId, watch_percentage, current_position_seconds]
+          updated_at = now()`,
+        [studentId, videoId, effectiveDuration, uniqueWatched, lastPosition, watchPct, status, watchPct, lastPosition, isCompleted]
       );
-      
-      const videoProgress = result.rows[0];
-      
-      // Update resource progress
-      await updateResourceProgressFromVideo(client, studentId, videoId, videoProgress.completed);
-      
-      // Update streak
+
+      await updateResourceProgressFromVideo(client, studentId, videoId, isCompleted);
       await updateLearningStreak(client, studentId);
-      
+
       await client.query('COMMIT');
-      
-      res.json({ success: true, progress: videoProgress });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
+
+    res.json({
+      success: true,
+      progress: {
+        watched_seconds: uniqueWatched,
+        duration_seconds: effectiveDuration,
+        watch_percentage: watchPct,
+        current_position_seconds: lastPosition,
+        required_percentage: 90,
+        completed: isCompleted,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -628,42 +694,82 @@ async function updateMaterialProgress(req, res, next) {
     
     const { materialId } = req.params;
     const { pages_viewed, total_pages, view_percentage } = req.body;
-    
+
+    const access = await getResourceAccess(studentId, 'material', materialId);
+    if (!access.exists) {
+      return res.status(404).json({ error: 'Material not found' });
+    }
+    if (access.isLocked) {
+      return res.status(403).json({ error: 'This step is locked.', code: 'RESOURCE_LOCKED' });
+    }
+
+    // Completion is derived from real reading/viewing rather than a
+    // client-supplied flag: PDFs need 80% of pages, audio needs 90% listened.
+    const pages = Math.max(0, Number(pages_viewed) || 0);
+    const total = Math.max(0, Number(total_pages) || 0);
+    let viewPct = 0;
+    let isCompleted = false;
+    let requiredPct = 100;
+    if (total > 1) {
+      viewPct = Math.min(100, Math.round((Math.max(1, pages) / total) * 100));
+      isCompleted = viewPct >= 80;
+      requiredPct = 80;
+    } else if (view_percentage != null) {
+      viewPct = Math.min(100, Math.max(0, Number(view_percentage) || 0));
+      isCompleted = viewPct >= 90;
+      requiredPct = 90;
+    } else {
+      // images / documents / other: opening the viewer is sufficient
+      viewPct = 100;
+      isCompleted = true;
+    }
+    const status = isCompleted ? 'completed' : viewPct > 0 ? 'in_progress' : 'not_started';
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       const result = await client.query(
         `INSERT INTO student_material_progress (
           student_id, material_id, pages_viewed, total_pages, view_percentage,
-          completed, last_viewed_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $5 >= required_percentage, now(), now())
+          progress_percentage, completed, status, last_viewed_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
         ON CONFLICT (student_id, material_id)
         DO UPDATE SET
-          pages_viewed = GREATEST(student_material_progress.pages_viewed, $3),
-          total_pages = $4,
-          view_percentage = GREATEST(student_material_progress.view_percentage, $5),
-          completed = GREATEST(student_material_progress.view_percentage, $5) >= student_material_progress.required_percentage,
+          pages_viewed = GREATEST(student_material_progress.pages_viewed, EXCLUDED.pages_viewed),
+          total_pages = EXCLUDED.total_pages,
+          view_percentage = GREATEST(student_material_progress.view_percentage, EXCLUDED.view_percentage),
+          progress_percentage = GREATEST(student_material_progress.progress_percentage, EXCLUDED.progress_percentage),
+          completed = student_material_progress.completed OR EXCLUDED.completed,
+          status = CASE WHEN student_material_progress.status = 'completed' THEN 'completed' ELSE EXCLUDED.status END,
           last_viewed_at = now(),
           updated_at = now()
         RETURNING *`,
-        [studentId, materialId, pages_viewed, total_pages, view_percentage]
+        [studentId, materialId, pages, total || 1, viewPct, viewPct, isCompleted, status]
       );
-      
+
       const materialProgress = result.rows[0];
-      
-      await updateResourceProgressFromMaterial(client, studentId, materialId, materialProgress.completed);
+
+      await updateResourceProgressFromMaterial(client, studentId, materialId, isCompleted);
       await updateLearningStreak(client, studentId);
-      
+
       await client.query('COMMIT');
-      
-      res.json({ success: true, progress: materialProgress });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
+
+    res.json({
+      success: true,
+      progress: {
+        ...materialProgress,
+        view_percentage: viewPct,
+        completed: isCompleted,
+        required_percentage: requiredPct,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -714,54 +820,73 @@ async function completeActivity(req, res, next) {
     }
     
     const { activityId } = req.params;
-    
+
+    // The activity must be reachable, and the child must have actually
+    // submitted it before we record completion. Opening it never counts
+    // (prompt section 9 / 12).
+    const access = await getResourceAccess(studentId, 'activity', activityId);
+    if (!access.exists) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
+    if (access.isLocked) {
+      return res.status(403).json({ error: 'This step is locked.', code: 'RESOURCE_LOCKED' });
+    }
+
+    const submission = await query(
+      `SELECT id FROM activity_submissions
+       WHERE activity_id = $1 AND student_id = $2
+       ORDER BY submitted_at DESC NULLS LAST LIMIT 1`,
+      [activityId, studentId]
+    );
+    const progressRow = await query(
+      'SELECT status FROM student_activity_progress WHERE activity_id = $1 AND student_id = $2',
+      [activityId, studentId]
+    );
+    const verified = submission.rows.length > 0 || progressRow.rows[0]?.status === 'completed';
+    if (!verified) {
+      return res.status(400).json({
+        error: 'Submit the activity before marking it complete.',
+        code: 'ACTIVITY_NOT_SUBMITTED',
+      });
+    }
+
+    const lessonResourceId = access.lessonResourceId;
+    if (!lessonResourceId) {
+      return res.status(404).json({ error: 'Activity is not part of a lesson journey' });
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
-      // Find the lesson_resource entry
-      const resourceResult = await client.query(
-        'SELECT id, lesson_id FROM lesson_resources WHERE resource_type = $1 AND resource_id = $2',
-        ['activity', activityId]
-      );
-      
-      if (resourceResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Activity not found in lesson' });
-      }
-      
-      const lessonResource = resourceResult.rows[0];
-      
-      // Mark as completed
+
       await client.query(
         `INSERT INTO student_resource_progress (
           student_id, lesson_resource_id, status, progress_percentage,
           started_at, completed_at, last_accessed_at, updated_at
-        ) VALUES ($1, $2, 'completed', 100, 
-          COALESCE((SELECT started_at FROM student_resource_progress WHERE student_id = $1 AND lesson_resource_id = $2), now()),
-          now(), now(), now())
+        ) VALUES ($1, $2, 'completed', 100, now(), now(), now(), now())
         ON CONFLICT (student_id, lesson_resource_id)
         DO UPDATE SET
           status = 'completed',
           progress_percentage = 100,
-          completed_at = now(),
+          started_at = COALESCE(student_resource_progress.started_at, now()),
+          completed_at = COALESCE(student_resource_progress.completed_at, now()),
           last_accessed_at = now(),
           updated_at = now()`,
-        [studentId, lessonResource.id]
+        [studentId, lessonResourceId]
       );
-      
-      await updateLessonProgress(client, studentId, lessonResource.lesson_id);
+
+      await updateLessonProgress(client, studentId, access.lessonId);
       await updateLearningStreak(client, studentId);
-      
+
       await client.query('COMMIT');
-      
-      res.json({ success: true });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
+
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -779,52 +904,67 @@ async function completeQuiz(req, res, next) {
     }
     
     const { quizId } = req.params;
-    
+
+    const access = await getResourceAccess(studentId, 'quiz', quizId);
+    if (!access.exists) {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
+    if (access.isLocked) {
+      return res.status(403).json({ error: 'This step is locked.', code: 'RESOURCE_LOCKED' });
+    }
+
+    // Only a passing attempt recorded by the server-side grader unlocks this
+    // step; a client cannot simply POST "completed" (prompt section 13 / 22).
+    const attempt = await query(
+      `SELECT passed FROM student_quiz_attempts
+       WHERE quiz_id = $1 AND student_id = $2
+       ORDER BY submitted_at DESC NULLS LAST LIMIT 1`,
+      [quizId, studentId]
+    );
+    if (attempt.rows[0]?.passed !== true) {
+      return res.status(400).json({
+        error: 'Pass the quiz before marking it complete.',
+        code: 'QUIZ_NOT_PASSED',
+      });
+    }
+
+    const lessonResourceId = access.lessonResourceId;
+    if (!lessonResourceId) {
+      return res.status(404).json({ error: 'Quiz is not part of a lesson journey' });
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
-      const resourceResult = await client.query(
-        'SELECT id, lesson_id FROM lesson_resources WHERE resource_type = $1 AND resource_id = $2',
-        ['quiz', quizId]
-      );
-      
-      if (resourceResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Quiz not found in lesson' });
-      }
-      
-      const lessonResource = resourceResult.rows[0];
-      
+
       await client.query(
         `INSERT INTO student_resource_progress (
           student_id, lesson_resource_id, status, progress_percentage,
           started_at, completed_at, last_accessed_at, updated_at
-        ) VALUES ($1, $2, 'completed', 100,
-          COALESCE((SELECT started_at FROM student_resource_progress WHERE student_id = $1 AND lesson_resource_id = $2), now()),
-          now(), now(), now())
+        ) VALUES ($1, $2, 'completed', 100, now(), now(), now(), now())
         ON CONFLICT (student_id, lesson_resource_id)
         DO UPDATE SET
           status = 'completed',
           progress_percentage = 100,
-          completed_at = now(),
+          started_at = COALESCE(student_resource_progress.started_at, now()),
+          completed_at = COALESCE(student_resource_progress.completed_at, now()),
           last_accessed_at = now(),
           updated_at = now()`,
-        [studentId, lessonResource.id]
+        [studentId, lessonResourceId]
       );
-      
-      await updateLessonProgress(client, studentId, lessonResource.lesson_id);
+
+      await updateLessonProgress(client, studentId, access.lessonId);
       await updateLearningStreak(client, studentId);
-      
+
       await client.query('COMMIT');
-      
-      res.json({ success: true });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
+
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

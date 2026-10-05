@@ -11,8 +11,10 @@ export default function ActivityPlayer({ activity, onComplete }) {
 
   const fetchSubmission = async () => {
     try {
-      const response = await axiosClient.get(`/activities/${activity.id}/my-submission`);
-      setSubmission(response.data.submission);
+      // Child-scoped endpoint returns this student's own submission state.
+      const response = await axiosClient.get(`/child/activities/${activity.id}`);
+      const a = response.data.activity;
+      setSubmission(a && a.submission_id ? a : null);
     } catch (err) {
       // No submission yet
       setSubmission(null);
@@ -158,7 +160,7 @@ function DragAndDropPlayer({ activity, config, onSubmit }) {
     const score = items.length > 0 ? (correct / items.length) * activity.max_score : 0;
     
     try {
-      await axiosClient.post(`/activities/${activity.id}/submit`, {
+      await axiosClient.post(`/child/activities/${activity.id}/submit`, {
         submission_text: JSON.stringify(answers),
         score: score,
         auto_graded: true
@@ -259,6 +261,24 @@ function MultipleChoicePlayer({ activity, config, onSubmit }) {
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState(null);
 
+  // Check if activity is properly configured
+  const question = config?.question;
+  const options = config?.options || [];
+  const correctAnswer = config?.correct_answer;
+
+  if (!question || options.length === 0) {
+    return (
+      <div className="text-center py-12 space-y-4 bg-amber-50 rounded-3xl border-2 border-amber-200 p-8">
+        <div className="text-6xl">⚠️</div>
+        <h3 className="text-2xl font-black text-amber-700">No Content Yet</h3>
+        <p className="text-amber-600 font-medium max-w-md mx-auto">
+          Your teacher hasn't added the question and options for this activity yet. 
+          Please check back later!
+        </p>
+      </div>
+    );
+  }
+
   const handleSubmit = async () => {
     setSubmitted(true);
     
@@ -266,7 +286,7 @@ function MultipleChoicePlayer({ activity, config, onSubmit }) {
     const score = isCorrect ? activity.max_score : 0;
     
     try {
-      await axiosClient.post(`/activities/${activity.id}/submit`, {
+      await axiosClient.post(`/child/activities/${activity.id}/submit`, {
         submission_text: selected,
         score: score,
         auto_graded: true
@@ -354,7 +374,7 @@ function TrueFalsePlayer({ activity, config, onSubmit }) {
     const score = isCorrect ? activity.max_score : 0;
     
     try {
-      await axiosClient.post(`/activities/${activity.id}/submit`, {
+      await axiosClient.post(`/child/activities/${activity.id}/submit`, {
         submission_text: selected,
         score: score,
         auto_graded: true
@@ -452,7 +472,7 @@ function FillInBlankPlayer({ activity, config, onSubmit }) {
     const score = blanks.length > 0 ? (correct / blanks.length) * activity.max_score : 0;
     
     try {
-      await axiosClient.post(`/activities/${activity.id}/submit`, {
+      await axiosClient.post(`/child/activities/${activity.id}/submit`, {
         submission_text: JSON.stringify(answers),
         score: score,
         auto_graded: true
@@ -522,10 +542,29 @@ function FillInBlankPlayer({ activity, config, onSubmit }) {
 // MATCHING PLAYER
 // ============================================
 function MatchingPlayer({ activity, config, onSubmit }) {
+  console.log('MatchingPlayer - Activity:', activity);
+  console.log('MatchingPlayer - Config:', config);
+  console.log('MatchingPlayer - Pairs:', config?.pairs);
+  
   const pairs = config?.pairs || [];
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState(null);
+
+  // If no pairs configured, show helpful message
+  if (pairs.length === 0) {
+    console.log('No pairs found in config!');
+    return (
+      <div className="text-center py-12 space-y-4 bg-amber-50 rounded-3xl border-2 border-amber-200 p-8">
+        <div className="text-6xl">⚠️</div>
+        <h3 className="text-2xl font-black text-amber-700">No Content Yet</h3>
+        <p className="text-amber-600 font-medium max-w-md mx-auto">
+          Your teacher hasn't added the matching pairs for this activity yet. 
+          Please check back later or let your teacher know!
+        </p>
+      </div>
+    );
+  }
 
   const leftItems = pairs.map(p => p.left);
   const rightItems = [...pairs.map(p => p.right)].sort(() => Math.random() - 0.5); // Shuffle
@@ -547,7 +586,7 @@ function MatchingPlayer({ activity, config, onSubmit }) {
     const score = pairs.length > 0 ? (correct / pairs.length) * activity.max_score : 0;
     
     try {
-      await axiosClient.post(`/activities/${activity.id}/submit`, {
+      await axiosClient.post(`/child/activities/${activity.id}/submit`, {
         submission_text: JSON.stringify(answers),
         score: score,
         auto_graded: true
@@ -642,7 +681,7 @@ function WritingPlayer({ activity, config, onSubmit }) {
     setSubmitted(true);
     
     try {
-      await axiosClient.post(`/activities/${activity.id}/submit`, {
+      await axiosClient.post(`/child/activities/${activity.id}/submit`, {
         submission_text: text,
         score: null, // Manual grading
         auto_graded: false
@@ -727,7 +766,7 @@ function GenericPlayer({ activity, onSubmit }) {
       }
       formData.append('submission_text', text);
       
-      await axiosClient.post(`/activities/${activity.id}/submit`, formData, {
+      await axiosClient.post(`/child/activities/${activity.id}/submit`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       

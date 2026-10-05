@@ -2,6 +2,29 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 
+/** Play interactive sound effects */
+function playClickSound() {
+  if (typeof window === 'undefined') return;
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.1);
+  } catch (e) {
+    // Audio not supported
+  }
+}
+
 export default function ChildCourses() {
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState([]);
@@ -75,8 +98,8 @@ export default function ChildCourses() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" role="list" aria-label="Available courses">
-          {courses.map((course) => (
-            <CourseCard key={course.id} course={course} />
+          {courses.map((course, index) => (
+            <CourseCard key={course.id} course={course} index={index} />
           ))}
         </div>
       )}
@@ -84,11 +107,13 @@ export default function ChildCourses() {
   );
 }
 
-function CourseCard({ course }) {
+function CourseCard({ course, index }) {
   const progress = course.overall_progress || 0;
 
   return (
-    <div className="group bg-white rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-purple-100 flex flex-col justify-between transform hover:-translate-y-1">
+    <div className="group bg-white rounded-3xl shadow-sm hover:shadow-2xl transition-all duration-300 overflow-hidden border border-purple-100 flex flex-col justify-between transform hover:-translate-y-2 hover:scale-105 animate-slide-up"
+         style={{ animationDelay: `${index * 0.1}s` }}
+         onMouseEnter={() => playClickSound()}>
       <div>
         {/* Course Banner */}
         <div className="relative h-44 bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 overflow-hidden">
@@ -96,15 +121,15 @@ function CourseCard({ course }) {
             <img
               src={course.thumbnail_url}
               alt={course.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <span className="text-6xl group-hover:scale-110 transition-transform">📖</span>
+              <span className="text-6xl group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">📖</span>
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-          <div className="absolute top-3 right-3 bg-white/95 text-purple-800 text-xs font-black px-3 py-1 rounded-full shadow-sm">
+          <div className="absolute top-3 right-3 bg-white/95 text-purple-800 text-xs font-black px-3 py-1 rounded-full shadow-sm animate-bounce">
             {course.age_group_name || 'All Learners'}
           </div>
           <div className="absolute bottom-3 left-4 right-4 text-white">
@@ -139,7 +164,7 @@ function CourseCard({ course }) {
           </div>
           <div className="h-2.5 bg-purple-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-500"
+              className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full progress-bar-animated"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -147,10 +172,11 @@ function CourseCard({ course }) {
 
         <Link
           to={`/child/courses/${course.id}`}
-          className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-2xl text-center text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-2"
+          onClick={() => playClickSound()}
+          className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-2xl text-center text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/30"
         >
           <span>Continue Learning</span>
-          <span>➔</span>
+          <span className="group-hover:translate-x-1 transition-transform">➔</span>
         </Link>
       </div>
     </div>

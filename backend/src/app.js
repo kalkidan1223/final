@@ -26,6 +26,8 @@ const instructorRoutes = require('./routes/instructorRoutes');
 const uploadsRoutes = require('./routes/uploadsRoutes');
 const childLearningRoutes = require('./routes/childLearningRoutes');
 const lessonResourceRoutes = require('./routes/lessonResourceRoutes');
+const referenceRoutes = require('./routes/referenceRoutes');
+const homePinRoutes = require('./routes/homePinRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -86,6 +88,8 @@ app.use('/api/instructor', instructorRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/child/learning', childLearningRoutes);
 app.use('/api/instructor', lessonResourceRoutes);
+app.use('/api/reference', referenceRoutes);
+app.use('/api/home', homePinRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

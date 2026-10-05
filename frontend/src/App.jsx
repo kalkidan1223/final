@@ -26,6 +26,7 @@ import AdminProgress from './pages/admin/AdminProgress';
 import AdminAIRecommendations from './pages/admin/AdminAIRecommendations';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import AdminInstructorAssignments from './pages/admin/AdminInstructorAssignments';
+import AdminReferenceData from './pages/admin/AdminReferenceData';
 import InstructorCourses from './pages/instructor/InstructorCourses';
 import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
@@ -38,6 +39,8 @@ import InstructorStudents from './pages/instructor/InstructorStudents';
 import InstructorMessages from './pages/instructor/InstructorMessages';
 import InstructorNotifications from './pages/instructor/InstructorNotifications';
 import InstructorProfile from './pages/instructor/InstructorProfile';
+import InstructorChildHome from './pages/instructor/InstructorChildHome';
+import InstructorVocabulary from './pages/instructor/InstructorVocabulary';
 import ParentDashboard from './pages/parent/ParentDashboard';
 import ParentChildren from './pages/parent/ParentChildren';
 import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
@@ -66,10 +69,10 @@ import ChildNotifications from './pages/child/ChildNotifications';
 import ChildProfile from './pages/child/ChildProfile';
 import ChildQuizTake from './pages/child/ChildQuizTake';
 import WritingActivity from './pages/child/WritingActivity';
-import MatchingActivity from './pages/child/MatchingActivity';
 import ListeningActivity from './pages/child/ListeningActivity';
 import ReadingActivity from './pages/child/ReadingActivity';
 import WorksheetActivity from './pages/child/WorksheetActivity';
+import PracticePlay from './pages/child/PracticePlay';
 import MaterialViewer from './components/child/MaterialViewer';
 import VideoPlayer from './components/child/VideoPlayer';
 import AudioPlayer from './components/child/AudioPlayer';
@@ -244,8 +247,33 @@ export default function App() {
       />
 
       <Route
+        path="/admin/reference"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminReferenceData />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/instructor/dashboard"
         element={<ProtectedRoute roles={['instructor']}><InstructorDashboard /></ProtectedRoute>}
+      />
+      <Route
+        path="/instructor/child-home"
+        element={
+          <ProtectedRoute roles={['instructor', 'admin']}>
+            <InstructorChildHome />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/instructor/vocabulary"
+        element={
+          <ProtectedRoute roles={['instructor', 'admin']}>
+            <InstructorVocabulary />
+          </ProtectedRoute>
+        }
       />
       <Route
         path="/instructor/courses"
@@ -392,13 +420,18 @@ export default function App() {
         <Route path="profile" element={<ChildProfile />} />
         <Route path="quizzes/:id" element={<ChildQuizTake />} />
         <Route path="activities/:id/write" element={<WritingActivity />} />
-        <Route path="activities/:id/match" element={<MatchingActivity />} />
         <Route path="activities/:id/listen" element={<ListeningActivity />} />
         <Route path="activities/:id/read" element={<ReadingActivity />} />
         <Route path="activities/:id/worksheet" element={<WorksheetActivity />} />
         <Route path="materials/:id" element={<MaterialViewer />} />
         <Route path="videos/:id" element={<VideoPlayer />} />
         <Route path="audio/:id" element={<AudioPlayer />} />
+
+        {/* Self-practice games. One route for all three: the game is chosen by
+            the activity the teacher pinned, and its content comes from that
+            activity's config. Once loaded it runs in the browser, so it keeps
+            working on a school laptop with no connection. */}
+        <Route path="practice/:activityId" element={<PracticePlay />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

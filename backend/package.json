@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed:admin": "node scripts/seed-admin.js",
-    "migrate:resources": "node scripts/migrate-lesson-resources.js"
+    "migrate:resources": "node scripts/migrate-lesson-resources.js",
+    "check:activities": "node scripts/check-empty-activities.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
