@@ -131,14 +131,21 @@ export default function ChildLessonDetail() {
       });
       
     } catch (err) {
-      setErrorCode(err.response?.data?.code || '');
-      setError(err.response?.data?.error || 'Failed to load lesson. Please try again!');
+      // Check for authentication errors (401)
+      if (err.response?.status === 401 || err.response?.data?.code === 'TOKEN_EXPIRED') {
+        setError('Please log in to continue');
+        setErrorCode('AUTH_REQUIRED');
+      } else {
+        setErrorCode(err.response?.data?.code || '');
+        setError(err.response?.data?.error || 'Failed to load lesson. Please try again!');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const isLockedLesson = () => errorCode === 'LESSON_LOCKED';
+  const isAuthRequired = () => errorCode === 'AUTH_REQUIRED';
 
   const startSession = async () => {
     try {
@@ -176,7 +183,7 @@ export default function ChildLessonDetail() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="text-7xl animate-bounce">📖</div>
-        <p className="text-xl font-black text-purple-700 animate-pulse">Loading your lesson...</p>
+        <p className="text-xl font-black text-green-700 animate-pulse">Loading your lesson...</p>
       </div>
     );
   }
@@ -192,16 +199,35 @@ export default function ChildLessonDetail() {
           </p>
           <Link
             to="/child/courses"
-            className="inline-block px-8 py-3 bg-purple-600 text-white font-black rounded-full shadow hover:bg-purple-700 transition"
+            className="inline-block px-8 py-3 bg-green-600 text-white font-black rounded-full shadow hover:bg-green-700 transition"
           >
             ← Back to My Courses
           </Link>
         </div>
       );
     }
+
+    if (isAuthRequired()) {
+      return (
+        <div className="max-w-lg mx-auto my-12 bg-white rounded-3xl border-4 border-amber-200 p-8 text-center space-y-4 shadow-lg">
+          <div className="text-6xl">🔐</div>
+          <h2 className="text-2xl font-black text-slate-800">Please Log In</h2>
+          <p className="text-slate-600 font-medium">
+            You need to log in to access your lessons.
+          </p>
+          <Link
+            to="/login"
+            className="inline-block px-8 py-3 bg-green-600 text-white font-black rounded-full shadow hover:bg-green-700 transition"
+          >
+            Go to Login →
+          </Link>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4 max-w-lg mx-auto my-12">
-        <Link to="/child/courses" className="inline-flex items-center text-purple-600 hover:text-purple-700 font-bold gap-2">
+        <Link to="/child/courses" className="inline-flex items-center text-green-600 hover:text-green-700 font-bold gap-2">
           <span className="text-2xl">←</span> <span>Back to Courses</span>
         </Link>
         <div className="bg-rose-50 border-4 border-rose-200 p-8 rounded-3xl text-center">
@@ -209,7 +235,7 @@ export default function ChildLessonDetail() {
           <p className="text-rose-700 font-bold text-lg mb-6">{error}</p>
           <button
             onClick={fetchLessonJourney}
-            className="px-8 py-3 bg-purple-600 text-white font-black text-lg rounded-full shadow-lg hover:bg-purple-700 transition transform hover:scale-105"
+            className="px-8 py-3 bg-green-600 text-white font-black text-lg rounded-full shadow-lg hover:bg-green-700 transition transform hover:scale-105"
           >
             Try Again 🔄
           </button>
@@ -238,7 +264,7 @@ export default function ChildLessonDetail() {
       <div>
         <Link
           to={`/child/courses/${lesson.course_id}`}
-          className="inline-flex items-center gap-2 text-purple-700 hover:text-purple-800 font-black text-sm bg-white px-4 py-2 rounded-full shadow-md border-2 border-purple-100 transition hover:scale-105"
+          className="inline-flex items-center gap-2 text-green-700 hover:text-green-800 font-black text-sm bg-white px-4 py-2 rounded-full shadow-md border-2 border-green-100 transition hover:scale-105"
         >
           <span className="text-xl">←</span> <span>Back to {lesson.course_title || 'Course'}</span>
         </Link>
@@ -247,7 +273,7 @@ export default function ChildLessonDetail() {
       {/* ============================================ */}
       {/* LESSON HEADER */}
       {/* ============================================ */}
-      <div className="bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-blue-500 via-green-500 to-pink-500 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
@@ -386,7 +412,7 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
     if (isCompleted) return 'border-green-400';
     if (isCurrent || isInProgress) return 'border-blue-500';
     if (isLocked) return 'border-gray-300';
-    return 'border-purple-300';
+    return 'border-green-300';
   };
 
   const getBgColor = () => {
@@ -424,9 +450,9 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
             <div
               className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl flex-shrink-0 shadow-lg ${
                 isCompleted ? 'bg-gradient-to-br from-green-400 to-emerald-500' :
-                isCurrent || isInProgress ? 'bg-gradient-to-br from-blue-500 to-purple-600 animate-pulse' :
+                isCurrent || isInProgress ? 'bg-gradient-to-br from-blue-500 to-green-600 animate-pulse' :
                 isLocked ? 'bg-gradient-to-br from-gray-300 to-gray-400' :
-                'bg-gradient-to-br from-purple-400 to-pink-500'
+                'bg-gradient-to-br from-green-400 to-pink-500'
               }`}
             >
               {getStatusIcon()}
@@ -438,7 +464,7 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
                 <span className="text-xs font-black text-gray-500 uppercase">
                   Step {index + 1}
                 </span>
-                <span className="text-sm font-black text-purple-600 uppercase bg-purple-100 px-3 py-1 rounded-full">
+                <span className="text-sm font-black text-green-600 uppercase bg-green-100 px-3 py-1 rounded-full">
                   {getStepLabel()}
                 </span>
                 {resource.is_required && (
@@ -486,7 +512,7 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
               {isInProgress && resource.progress_percentage > 0 && (
                 <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden mt-3">
                   <div
-                    className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-500"
+                    className="bg-gradient-to-r from-blue-500 to-green-600 h-full rounded-full transition-all duration-500"
                     style={{ width: `${resource.progress_percentage}%` }}
                   />
                 </div>
@@ -517,8 +543,8 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
                     isCompleted
                       ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white hover:from-green-500 hover:to-emerald-600'
                       : isCurrent || isInProgress
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
-                      : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'
+                      ? 'bg-gradient-to-r from-blue-500 to-green-600 text-white hover:from-blue-600 hover:to-green-700'
+                      : 'bg-gradient-to-r from-green-500 to-pink-500 text-white hover:from-green-600 hover:to-pink-600'
                   }`}
                 >
                   {isCompleted ? '👀 Review This Step' : isCurrent ? '🚀 Start This Step' : isInProgress ? '▶️ Continue' : '👀 Open This Step'}

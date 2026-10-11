@@ -91,20 +91,30 @@ export default function EthiopianChildHome({ data, loading, error, onRetry }) {
   }
 
   if (error) {
+    const isAuthError = error === 'Please log in to continue';
     return (
       <div className="bg-rose-50 border-4 border-rose-200 rounded-[2rem] p-8 text-center max-w-lg mx-auto my-12 space-y-4">
-        <span className="text-6xl block">😔</span>
-        <h3 className="text-xl font-black text-rose-900">ለምንስ ትንሽ አልቻልንም</h3>
+        <span className="text-6xl block">{isAuthError ? '�' : '�😔'}</span>
+        <h3 className="text-xl font-black text-rose-900">{isAuthError ? 'እባና ተግባር / Please Log In' : 'ለምንስ ትንሽ አልቻልንም'}</h3>
         <p className="text-sm font-bold text-rose-700">{error}</p>
-        <button
-          onClick={() => {
-            voice.speak('ለምንስ ትንሽ አልቻልንም። እንደገና ሞክር።');
-            onRetry();
-          }}
-          className="px-8 py-3.5 bg-rose-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition text-base"
-        >
-          🔄 እንደገና ሞክር
-        </button>
+        {isAuthError ? (
+          <Link
+            to="/login"
+            className="px-8 py-3.5 bg-green-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition text-base inline-block"
+          >
+            ወደ መግቢያ / Go to Login →
+          </Link>
+        ) : (
+          <button
+            onClick={() => {
+              voice.speak('ለምንስ ትንሽ አልቻልንም። እንደገና ሞክር።');
+              onRetry();
+            }}
+            className="px-8 py-3.5 bg-rose-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition text-base"
+          >
+            🔄 እንደገና ሞክር
+          </button>
+        )}
       </div>
     );
   }

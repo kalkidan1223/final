@@ -65,7 +65,11 @@ export default function ChildDashboard() {
       const res = await axiosClient.get('/child/dashboard');
       setData(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Oops! We could not load your learning space. Please try again!');
+      if (err.response?.status === 401) {
+        setError('Please log in to continue');
+      } else {
+        setError(err.response?.data?.error || 'Oops! We could not load your learning space. Please try again!');
+      }
     } finally {
       setLoading(false);
     }
@@ -104,17 +108,27 @@ export default function ChildDashboard() {
   }
 
   if (error) {
+    const isAuthError = error === 'Please log in to continue';
     return (
       <div className="bg-rose-50 border-2 border-rose-200 rounded-3xl p-6 text-center max-w-lg mx-auto my-12 shadow-sm">
-        <span className="text-4xl block mb-2">🎈</span>
-        <h3 className="text-lg font-black text-rose-800 mb-2">Oops! Something went wrong</h3>
+        <span className="text-4xl block mb-2">{isAuthError ? '🔐' : '🎈'}</span>
+        <h3 className="text-lg font-black text-rose-800 mb-2">{isAuthError ? 'Please Log In' : 'Oops! Something went wrong'}</h3>
         <p className="text-sm text-rose-600 mb-4">{error}</p>
-        <button
-          onClick={fetchDashboard}
-          className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-2xl shadow-md hover:scale-105 transition active:scale-95"
-        >
-          Try Again 🔄
-        </button>
+        {isAuthError ? (
+          <Link
+            to="/login"
+            className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-2xl shadow-md hover:scale-105 transition active:scale-95 inline-block"
+          >
+            Go to Login →
+          </Link>
+        ) : (
+          <button
+            onClick={fetchDashboard}
+            className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-2xl shadow-md hover:scale-105 transition active:scale-95"
+          >
+            Try Again 🔄
+          </button>
+        )}
       </div>
     );
   }
@@ -134,7 +148,7 @@ export default function ChildDashboard() {
   return (
     <div className="space-y-8 pb-12 animate-fade-in">
       {/* 1. Welcoming Hero Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 rounded-3xl p-6 sm:p-8 text-white shadow-xl animate-gradient">
+      <div className="relative overflow-hidden bg-gradient-to-r from-green-500 via-emerald-600 to-teal-500 rounded-3xl p-6 sm:p-8 text-white shadow-xl animate-gradient">
         {/* Floating background decorative bubbles */}
         <div className="absolute top-2 right-4 text-7xl opacity-20 pointer-events-none select-none animate-float">⭐</div>
         <div className="absolute -bottom-4 right-28 text-8xl opacity-15 pointer-events-none select-none animate-float-slow">🚀</div>
@@ -148,7 +162,7 @@ export default function ChildDashboard() {
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight animate-slide-up delay-100">
               Hello, {child.full_name || 'Student'}! 👋
             </h1>
-            <p className="text-base sm:text-lg text-purple-100 font-medium max-w-xl animate-slide-up delay-200">
+            <p className="text-base sm:text-lg text-green-100 font-medium max-w-xl animate-slide-up delay-200">
               Track your courses, complete assignments, and master your subjects at your own pace!
             </p>
           </div>
@@ -161,7 +175,7 @@ export default function ChildDashboard() {
             <div>
               <div className="text-xs font-black uppercase tracking-wider text-amber-200">Learning Streak</div>
               <div className="text-2xl sm:text-3xl font-black text-white">{streakDays} Days</div>
-              <div className="text-xs text-purple-100 font-medium">Keep learning daily!</div>
+              <div className="text-xs text-green-100 font-medium">Keep learning daily!</div>
             </div>
           </div>
         </div>
@@ -169,13 +183,13 @@ export default function ChildDashboard() {
 
       {/* 2. Continue Learning Hero Card (If exists) */}
       {continueLearning && (
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+        <div className="bg-gradient-to-r from-lime-500 via-green-500 to-emerald-500 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
           <div className="space-y-1.5 z-10">
             <div className="inline-flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
               <span>▶</span> Continue Learning
             </div>
             <h2 className="text-xl sm:text-2xl font-black">{continueLearning.course_title}</h2>
-            <p className="text-sm font-semibold text-orange-100">
+            <p className="text-sm font-semibold text-green-100">
               Lesson {continueLearning.order_index}: {continueLearning.title}
             </p>
             <div className="w-48 sm:w-64 bg-black/20 h-3 rounded-full overflow-hidden mt-2">
@@ -188,7 +202,7 @@ export default function ChildDashboard() {
 
           <Link
             to={`/child/lessons/${continueLearning.id}`}
-            className="z-10 px-6 py-3 bg-white text-orange-600 font-black rounded-2xl shadow-md hover:bg-orange-50 hover:scale-105 active:scale-95 transition flex items-center gap-2 text-sm sm:text-base flex-shrink-0"
+            className="z-10 px-6 py-3 bg-white text-green-600 font-black rounded-2xl shadow-md hover:bg-green-50 hover:scale-105 active:scale-95 transition flex items-center gap-2 text-sm sm:text-base flex-shrink-0"
           >
             <span>Continue Lesson</span>
             <span className="text-lg">➔</span>
@@ -198,8 +212,8 @@ export default function ChildDashboard() {
 
       {/* 3. Quick Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
-          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-2xl animate-pulse">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+          <div className="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center text-2xl animate-pulse">
             📚
           </div>
           <div>
@@ -208,7 +222,7 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
           <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl animate-pulse">
             🎯
           </div>
@@ -218,8 +232,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
-          <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center text-2xl animate-pulse">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+          <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-600 flex items-center justify-center text-2xl animate-pulse">
             📝
           </div>
           <div>
@@ -228,8 +242,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-purple-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center text-2xl animate-pulse">
+        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
+          <div className="w-12 h-12 rounded-2xl bg-lime-100 text-lime-600 flex items-center justify-center text-2xl animate-pulse">
             🎬
           </div>
           <div>

@@ -25,6 +25,7 @@ const videosRoutes = require('./routes/videosRoutes');
 const instructorRoutes = require('./routes/instructorRoutes');
 const uploadsRoutes = require('./routes/uploadsRoutes');
 const childLearningRoutes = require('./routes/childLearningRoutes');
+const childResultsRoutes = require('./routes/childResultsRoutes');
 const lessonResourceRoutes = require('./routes/lessonResourceRoutes');
 const referenceRoutes = require('./routes/referenceRoutes');
 const homePinRoutes = require('./routes/homePinRoutes');
@@ -68,6 +69,7 @@ app.use('/uploads', express.static(UPLOAD_ROOT));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/child', childRoutes);
+app.use('/api/child/results', childResultsRoutes);
 app.use('/api/students', studentsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/approval', adminApprovalRoutes);

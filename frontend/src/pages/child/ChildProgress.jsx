@@ -40,7 +40,11 @@ export default function ChildProgress() {
       const response = await axiosClient.get('/child/progress');
       setProgress(response.data.course_progress || []);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load progress');
+      if (err.response?.status === 401) {
+        setError('Please log in to continue');
+      } else {
+        setError(err.response?.data?.error || 'Failed to load progress');
+      }
     } finally {
       setLoading(false);
     }
@@ -49,7 +53,7 @@ export default function ChildProgress() {
   const getProgressColor = (percent) => {
     if (percent >= 80) return 'from-green-400 to-green-600';
     if (percent >= 50) return 'from-yellow-400 to-orange-500';
-    if (percent >= 20) return 'from-blue-400 to-purple-500';
+    if (percent >= 20) return 'from-blue-400 to-green-500';
     return 'from-gray-400 to-gray-500';
   };
 
@@ -65,7 +69,7 @@ export default function ChildProgress() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mx-auto"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent mx-auto"></div>
           <p className="mt-4 text-gray-600 font-medium text-lg">Loading your progress... 📊</p>
         </div>
       </div>
@@ -73,12 +77,21 @@ export default function ChildProgress() {
   }
 
   if (error) {
+    const isAuthError = error === 'Please log in to continue';
     return (
-      <div className="space-y-4">
-        <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-xl">
-          <p className="text-red-700 font-medium flex items-center gap-2">
-            <span>⚠️</span> {error}
+      <div className="space-y-4 max-w-lg mx-auto my-12">
+        <div className={`bg-${isAuthError ? 'amber' : 'red'}-50 border-l-4 border-${isAuthError ? 'amber' : 'red'}-500 p-6 rounded-xl`}>
+          <p className={`text-${isAuthError ? 'amber' : 'red'}-700 font-medium flex items-center gap-2`}>
+            <span>{isAuthError ? '🔐' : '⚠️'}</span> {error}
           </p>
+          {isAuthError && (
+            <Link
+              to="/login"
+              className="mt-4 inline-block px-6 py-2 bg-green-600 text-white font-bold rounded-2xl shadow hover:bg-green-700 transition"
+            >
+              Go to Login →
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -87,7 +100,7 @@ export default function ChildProgress() {
   if (progress.length === 0) {
     return (
       <div className="space-y-8 animate-fade-in max-w-3xl mx-auto">
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-3xl p-8 text-white text-center">
+        <div className="bg-gradient-to-r from-blue-500 to-green-600 rounded-3xl p-8 text-white text-center">
           <h1 className="text-4xl font-bold mb-2">Your Learning Progress 📊</h1>
           <p className="text-xl opacity-90">Start learning to see your progress here!</p>
         </div>
@@ -95,7 +108,7 @@ export default function ChildProgress() {
           <span className="text-6xl block mb-4">📚</span>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">No Progress Yet</h2>
           <p className="text-gray-600 text-lg mb-6">You haven't started any courses yet.</p>
-          <Link to="/child/courses" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-bold hover:from-blue-600 hover:to-purple-700 transition">
+          <Link to="/child/courses" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-green-600 text-white rounded-xl font-bold hover:from-blue-600 hover:to-green-700 transition">
             <span>📚</span> Explore Courses
           </Link>
         </div>
@@ -113,7 +126,7 @@ export default function ChildProgress() {
   return (
     <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-500 via-purple-600 to-pink-500 rounded-3xl p-8 shadow-xl">
+      <div className="bg-gradient-to-r from-blue-500 via-green-600 to-pink-500 rounded-3xl p-8 shadow-xl">
         <h1 className="text-4xl font-bold text-white mb-2">Your Learning Progress 📊</h1>
         <p className="text-xl text-white/90">See how far you've come!</p>
       </div>
@@ -139,7 +152,7 @@ export default function ChildProgress() {
           label="Quizzes Done"
           value={completedQuizzes}
           icon="📝"
-          gradient="from-purple-400 to-purple-600"
+          gradient="from-green-400 to-green-600"
           subLabel={`of ${totalQuizzes}`}
           index={2}
         />
@@ -182,12 +195,12 @@ export default function ChildProgress() {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 flex items-center justify-center">
+                      <div className="w-full h-full bg-gradient-to-br from-blue-400 via-green-500 to-pink-500 flex items-center justify-center">
                         <span className="text-5xl opacity-50">📚</span>
                       </div>
                     )}
                     <div className="absolute bottom-3 left-3 right-3">
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${color.replace('from-', 'bg-').replace(' to-', ' text-').replace('green-400 to-green-600', 'green-100 text-green-700').replace('yellow-400 to-orange-500', 'yellow-100 text-yellow-700').replace('blue-400 to-purple-500', 'blue-100 text-blue-700').replace('gray-400 to-gray-500', 'gray-100 text-gray-700')}`}>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${color.replace('from-', 'bg-').replace(' to-', ' text-').replace('green-400 to-green-600', 'green-100 text-green-700').replace('yellow-400 to-orange-500', 'yellow-100 text-yellow-700').replace('blue-400 to-green-500', 'blue-100 text-blue-700').replace('gray-400 to-gray-500', 'gray-100 text-gray-700')}`}>
                         {percent}% {emoji}
                       </span>
                     </div>
@@ -235,7 +248,7 @@ export default function ChildProgress() {
                     </div>
 
                     <div className="mt-4 pt-4 border-t border-gray-100">
-                      <span className="w-full block text-center px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-bold hover:from-blue-600 hover:to-purple-700 transition group-hover:scale-105">
+                      <span className="w-full block text-center px-4 py-3 bg-gradient-to-r from-blue-500 to-green-600 text-white rounded-xl font-bold hover:from-blue-600 hover:to-green-700 transition group-hover:scale-105">
                         Continue Learning →
                       </span>
                     </div>
@@ -262,8 +275,8 @@ export default function ChildProgress() {
               <div className="text-4xl font-bold text-green-600 mb-2">{completedActivities + completedQuizzes}</div>
               <div className="text-gray-600">Total Completed</div>
             </div>
-            <div className="text-center p-4 bg-purple-50 rounded-xl">
-              <div className="text-4xl font-bold text-purple-600 mb-2">
+            <div className="text-center p-4 bg-green-50 rounded-xl">
+              <div className="text-4xl font-bold text-green-600 mb-2">
                 {totalActivities + totalQuizzes > 0 ? Math.round(((completedActivities + completedQuizzes) / (totalActivities + totalQuizzes)) * 100) : 0}%
               </div>
               <div className="text-gray-600">Completion Rate</div>
