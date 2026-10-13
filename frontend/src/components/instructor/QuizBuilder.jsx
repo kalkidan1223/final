@@ -36,13 +36,12 @@ const EMPTY_QUESTION = {
   points: '1',
   explanation: '',
   media_url: '',
-  selectedOptionIndex: 0, // Track which option is selected as correct
-  matchingPairs: [
-    { question: '', answer: '' },
-    { question: '', answer: '' },
-    { question: '', answer: '' },
-    { question: '', answer: '' },
-  ],
+  selectedOptionIndex: 0,
+  parseMatchingPairs: [
+    { id: 1, question: '', answer: '' },
+    { id: 2, question: '', answer: '' },
+    { id: 3, question: '', answer: '' }
+  ]
 };
 
 function optionsList(q) {
@@ -57,36 +56,88 @@ function optionsList(q) {
 
 function parseMatchingPairs(q) {
   if (q.question_type === 'matching' && q.options) {
-    return q.options.map(opt => {
-      const parts = opt.split(' | ');
-      return parts.length >= 2 ? { question: parts[0], answer: parts[1] } : { question: opt, answer: '' };
-    });
+    // New format: { pairs: [{question, answer}] }
+    if (typeof q.options === 'object' && q.options.pairs) {
+      return q.options.pairs;
+    }
+    // Old format: { questions: [], answers: [], matches: [] }
+    if (typeof q.options === 'object' && q.options.questions && q.options.answers) {
+      const questions = q.options.questions || [];
+      const answers = q.options.answers || [];
+      return questions.map((question, idx) => ({
+        question: question,
+        answer: answers[idx] || ''
+      }));
+    }
+    // Very old format: array of "question | answer"
+    if (Array.isArray(q.options)) {
+      return q.options.map(opt => {
+        const parts = opt.split(' | ');
+        return parts.length >= 2 ? { question: parts[0], answer: parts[1] } : { question: opt, answer: '' };
+      });
+    }
   }
   return [];
 }
 
-// Normalise a question (either from the server or the local draft list)
-// into the shape the backend expects.
-function toApiQuestion(q) {
-  let options = undefined;
-  let correctAnswer = q.correct_answer;
+// Collects the matching pairs from any shape a matching question can be in:
+// the editor form (`parseMatchingPairs`), the saved API shape (`options.pairs`),
+// the legacy shape (`options.questions` + `options.answers`) or the oldest
+// array-of-"question | answer" shape. Returns [{ question, answer }].
+function extractMatchingPairs(q) {
+  let pairs = [];
 
-  // Handle matching type - convert pairs to format
-  if (q.question_type === 'matching' && q.matchingPairs) {
-    const validPairs = q.matchingPairs.filter(p => p.question && p.answer);
-    options = validPairs.map(p => `${p.question} | ${p.answer}`);
-    correctAnswer = JSON.stringify(validPairs.map(p => ({ q: p.question, a: p.answer })));
-  } else if (OPTION_TYPES.includes(q.question_type)) {
-    options = optionsList(q);
+  if (Array.isArray(q.parseMatchingPairs)) {
+    pairs = q.parseMatchingPairs;
+  } else if (q.options && typeof q.options === 'object' && Array.isArray(q.options.pairs)) {
+    pairs = q.options.pairs;
+  } else if (q.options && typeof q.options === 'object' && Array.isArray(q.options.questions)) {
+    const answers = Array.isArray(q.options.answers) ? q.options.answers : [];
+    pairs = q.options.questions.map((question, idx) => ({ question, answer: answers[idx] || '' }));
+  } else if (Array.isArray(q.options)) {
+    pairs = q.options.map((opt) => {
+      const parts = String(opt).split(' | ');
+      return { question: parts[0] || '', answer: parts[1] || '' };
+    });
   }
+
+  return pairs
+    .filter((p) => p && String(p.question || '').trim() && String(p.answer || '').trim())
+    .map((p) => ({ question: String(p.question).trim(), answer: String(p.answer).trim() }));
+}
+
+// Normalise a question (either from the server or the local draft list)
+// into the shape the backend expects. This is idempotent: it is called once
+// when a question is added to the draft and again when the whole draft is
+// saved, so it must accept both the editor shape and the already-saved shape.
+function toApiQuestion(q) {
+  if (q.question_type === 'matching') {
+    const validPairs = extractMatchingPairs(q);
+    return {
+      question_text: String(q.question_text || '').trim() || 'Match the following items correctly',
+      question_type: 'matching',
+      // The stored mapping is informational; the child-side grader compares the
+      // learner's selections against options.pairs, so the pairs are the source
+      // of truth. We keep the identity mapping for backwards compatibility.
+      correct_answer: JSON.stringify(validPairs.map((_, idx) => idx)),
+      points: Number(q.points) || 1,
+      explanation: q.explanation || null,
+      options: { pairs: validPairs },
+      question_config: (q.media_url || (q.question_config?.media_url))
+        ? { media_url: q.media_url || q.question_config?.media_url }
+        : (q.question_config && Object.keys(q.question_config).length ? q.question_config : null),
+    };
+  }
+
+  const options = OPTION_TYPES.includes(q.question_type) ? optionsList(q) : undefined;
 
   return {
     question_text: q.question_text,
     question_type: q.question_type,
-    correct_answer: correctAnswer,
+    correct_answer: q.correct_answer,
     points: Number(q.points) || 1,
     explanation: q.explanation || null,
-    options: options,
+    options, // Backend will JSON.stringify this
     question_config: (q.media_url || (q.question_config?.media_url))
       ? { media_url: q.media_url || q.question_config?.media_url }
       : (q.question_config && Object.keys(q.question_config).length ? q.question_config : null),
@@ -120,29 +171,24 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
   async function fetchQuestions(quizId) {
     setLoadingQuestions(true);
     try {
-      console.log('Fetching questions for quiz:', quizId);
       const { data } = await axiosClient.get(`/quizzes/${quizId}`);
-      console.log('Fetched questions:', data.questions);
-      // Ensure options are properly formatted for the UI
+      // Normalise the options for the editor. Matching questions keep their
+      // `{ pairs: [...] }` object untouched; only MCQ options are padded to
+      // four blanks so the editor has four input rows.
       const formattedQuestions = (data.questions || []).map(q => {
-        let options = [];
-        if (Array.isArray(q.options)) {
-          options = q.options;
-        } else if (q.options && typeof q.options === 'string') {
-          options = q.options.split('\n').filter(Boolean);
-        }
-        // Ensure we have exactly 4 options for MCQ in the UI
-        if (q.question_type === 'mcq' && options.length < 4) {
-          while (options.length < 4) {
-            options.push('');
+        let options = q.options;
+        if (q.question_type === 'mcq') {
+          let list = [];
+          if (Array.isArray(q.options)) {
+            list = q.options;
+          } else if (q.options && typeof q.options === 'string') {
+            list = q.options.split('\n').filter(Boolean);
           }
+          while (list.length < 4) list.push('');
+          options = list;
         }
-        return {
-          ...q,
-          options: options
-        };
+        return { ...q, options };
       });
-      console.log('Formatted questions:', formattedQuestions);
       setQuestions(formattedQuestions);
     } catch (err) {
       console.error('Error fetching questions:', err);
@@ -159,7 +205,16 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
     setNotice('');
     setBusy(false);
     setUploading(false);
-    setQuestionForm({ ...EMPTY_QUESTION, options: ['', '', '', ''], selectedOptionIndex: 0 });
+    setQuestionForm({ 
+      ...EMPTY_QUESTION, 
+      options: ['', '', '', ''], 
+      selectedOptionIndex: 0,
+      parseMatchingPairs: [
+        { id: Date.now() + 0, question: '', answer: '' },
+        { id: Date.now() + 1, question: '', answer: '' },
+        { id: Date.now() + 2, question: '', answer: '' }
+      ]
+    });
     contentRef.current?.scrollTo({ top: 0 });
     if (quiz) {
       console.log('Opening quiz in edit mode:', quiz);
@@ -265,9 +320,16 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
 
     // Validation
     if (payload.question_type === 'matching') {
-      const validPairs = questionForm.matchingPairs?.filter(p => p.question && p.answer) || [];
+      const validPairs = questionForm.parseMatchingPairs?.filter(p => 
+        p.question && p.question.trim() && p.answer && p.answer.trim()
+      ) || [];
+      
       if (validPairs.length < 2) {
-        setError('A matching question needs at least 2 question-answer pairs.');
+        setError('A matching question needs at least 2 complete question-answer pairs.');
+        return;
+      }
+      if (validPairs.length > 10) {
+        setError('Maximum 10 question-answer pairs allowed.');
         return;
       }
     } else if (OPTION_TYPES.includes(payload.question_type)) {
@@ -297,12 +359,16 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
       seqRef.current += 1;
       setQuestions((qs) => [...qs, { id: `local-${seqRef.current}`, ...payload }]);
     }
-    setQuestionForm({ ...EMPTY_QUESTION, options: ['', '', '', ''], selectedOptionIndex: 0, matchingPairs: [
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-    ] });
+    setQuestionForm({ 
+      ...EMPTY_QUESTION, 
+      options: ['', '', '', ''], 
+      selectedOptionIndex: 0,
+      parseMatchingPairs: [
+        { id: Date.now() + 0, question: '', answer: '' },
+        { id: Date.now() + 1, question: '', answer: '' },
+        { id: Date.now() + 2, question: '', answer: '' }
+      ]
+    });
   }
 
   function handleQuestionDelete(q) {
@@ -331,29 +397,47 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
   }
 
   function handleQuestionEdit(q) {
-    console.log('Editing question:', q);
     setError('');
     setEditingQuestionId(q.id);
 
     // Populate the form with the question data
     let options = ['', '', '', ''];
-    let matchingPairs = [
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-      { question: '', answer: '' },
+    let parseMatchingPairs = [
+      { id: 1, question: '', answer: '' },
+      { id: 2, question: '', answer: '' },
+      { id: 3, question: '', answer: '' }
     ];
 
     if (q.question_type === 'matching' && q.options) {
-      // Parse matching pairs from options
-      const pairs = q.options.map(opt => {
-        const parts = opt.split(' | ');
-        return parts.length >= 2 ? { question: parts[0], answer: parts[1] } : { question: opt, answer: '' };
-      });
-      while (pairs.length < 4) {
-        pairs.push({ question: '', answer: '' });
+      // Parse matching data from options - new format with pairs
+      if (typeof q.options === 'object' && q.options.pairs) {
+        parseMatchingPairs = q.options.pairs.map((p, idx) => ({
+          id: Date.now() + idx,
+          question: p.question || '',
+          answer: p.answer || ''
+        }));
+      } 
+      // Old format with questions + answers arrays
+      else if (typeof q.options === 'object' && q.options.questions && q.options.answers) {
+        const questions = q.options.questions || [];
+        const answers = q.options.answers || [];
+        parseMatchingPairs = questions.map((question, idx) => ({
+          id: Date.now() + idx,
+          question: question || '',
+          answer: answers[idx] || ''
+        }));
+      } 
+      // Very old format - array of strings
+      else if (Array.isArray(q.options)) {
+        parseMatchingPairs = q.options.map((opt, idx) => {
+          const parts = opt.split(' | ');
+          return {
+            id: Date.now() + idx,
+            question: parts[0] || '',
+            answer: parts[1] || ''
+          };
+        });
       }
-      matchingPairs = pairs;
     } else if (Array.isArray(q.options)) {
       options = [...q.options];
       while (options.length < 4) {
@@ -375,7 +459,7 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
       explanation: q.explanation || '',
       media_url: q.question_config?.media_url || '',
       selectedOptionIndex: 0,
-      matchingPairs: matchingPairs,
+      parseMatchingPairs: parseMatchingPairs
     });
 
     // Scroll to the question form
@@ -389,9 +473,16 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
 
     // Validation
     if (payload.question_type === 'matching') {
-      const validPairs = questionForm.matchingPairs?.filter(p => p.question && p.answer) || [];
+      const validPairs = questionForm.parseMatchingPairs?.filter(p => 
+        p.question && p.question.trim() && p.answer && p.answer.trim()
+      ) || [];
+      
       if (validPairs.length < 2) {
-        setError('A matching question needs at least 2 question-answer pairs.');
+        setError('A matching question needs at least 2 complete question-answer pairs.');
+        return;
+      }
+      if (validPairs.length > 10) {
+        setError('Maximum 10 question-answer pairs allowed.');
         return;
       }
     } else if (OPTION_TYPES.includes(payload.question_type)) {
@@ -421,12 +512,16 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
         await fetchQuestions(activeId);
         setNotice('Question updated successfully!');
         setEditingQuestionId(null);
-        setQuestionForm({ ...EMPTY_QUESTION, options: ['', '', '', ''], selectedOptionIndex: 0, matchingPairs: [
-          { question: '', answer: '' },
-          { question: '', answer: '' },
-          { question: '', answer: '' },
-          { question: '', answer: '' },
-        ] });
+        setQuestionForm({ 
+      ...EMPTY_QUESTION, 
+      options: ['', '', '', ''], 
+      selectedOptionIndex: 0,
+      parseMatchingPairs: [
+        { id: Date.now() + 0, question: '', answer: '' },
+        { id: Date.now() + 1, question: '', answer: '' },
+        { id: Date.now() + 2, question: '', answer: '' }
+      ]
+    });
         setTimeout(() => setNotice(''), 3000);
       } catch (err) {
         console.error('Update error:', err);
@@ -443,24 +538,32 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
       );
       setNotice('Question updated in draft!');
       setEditingQuestionId(null);
-      setQuestionForm({ ...EMPTY_QUESTION, options: ['', '', '', ''], selectedOptionIndex: 0, matchingPairs: [
-        { question: '', answer: '' },
-        { question: '', answer: '' },
-        { question: '', answer: '' },
-        { question: '', answer: '' },
-      ] });
+      setQuestionForm({ 
+      ...EMPTY_QUESTION, 
+      options: ['', '', '', ''], 
+      selectedOptionIndex: 0,
+      parseMatchingPairs: [
+        { id: Date.now() + 0, question: '', answer: '' },
+        { id: Date.now() + 1, question: '', answer: '' },
+        { id: Date.now() + 2, question: '', answer: '' }
+      ]
+    });
       setTimeout(() => setNotice(''), 3000);
     }
   }
 
   function cancelQuestionEdit() {
     setEditingQuestionId(null);
-    setQuestionForm({ ...EMPTY_QUESTION, options: ['', '', '', ''], selectedOptionIndex: 0, matchingPairs: [
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-      { question: '', answer: '' },
-    ] });
+    setQuestionForm({ 
+      ...EMPTY_QUESTION, 
+      options: ['', '', '', ''], 
+      selectedOptionIndex: 0,
+      parseMatchingPairs: [
+        { id: Date.now() + 0, question: '', answer: '' },
+        { id: Date.now() + 1, question: '', answer: '' },
+        { id: Date.now() + 2, question: '', answer: '' }
+      ]
+    });
     setError('');
   }
 
@@ -525,24 +628,54 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
                 <p className="text-lg font-bold text-gray-800 mb-4">{q.question_text}</p>
 
                 {q.question_type === 'matching' && parseMatchingPairs(q).length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="space-y-2">
-                      <p className="text-sm font-bold text-gray-600 mb-2">❓ Questions</p>
-                      {parseMatchingPairs(q).map((pair, idx) => (
-                        <div key={idx} className="px-4 py-2 bg-blue-50 rounded-xl border-2 border-blue-200">
-                          {idx + 1}. {pair.question}
+                  (() => {
+                    const matchingData = parseMatchingPairs(q);
+                    if (matchingData.questions && matchingData.answers) {
+                      // New format
+                      return (
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div className="space-y-2">
+                            <p className="text-sm font-bold text-gray-600 mb-2">❓ Questions (Left)</p>
+                            {matchingData.questions.map((question, idx) => (
+                              <div key={idx} className="px-4 py-2 bg-blue-50 rounded-xl border-2 border-blue-200">
+                                {idx + 1}. {question}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-sm font-bold text-gray-600 mb-2">🎯 Answers (Right - Pool)</p>
+                            {matchingData.answers.map((answer, idx) => (
+                              <div key={idx} className="px-4 py-2 bg-green-50 rounded-xl border-2 border-green-200">
+                                {String.fromCharCode(65 + idx)}. {answer}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm font-bold text-gray-600 mb-2">🎯 Answers</p>
-                      {parseMatchingPairs(q).map((pair, idx) => (
-                        <div key={idx} className="px-4 py-2 bg-green-50 rounded-xl border-2 border-green-200">
-                          {idx + 1}. {pair.answer}
+                      );
+                    } else {
+                      // Old format - pairs
+                      return (
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <div className="space-y-2">
+                            <p className="text-sm font-bold text-gray-600 mb-2">❓ Questions</p>
+                            {matchingData.map((pair, idx) => (
+                              <div key={idx} className="px-4 py-2 bg-blue-50 rounded-xl border-2 border-blue-200">
+                                {idx + 1}. {pair.question}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-sm font-bold text-gray-600 mb-2">🎯 Answers</p>
+                            {matchingData.map((pair, idx) => (
+                              <div key={idx} className="px-4 py-2 bg-green-50 rounded-xl border-2 border-green-200">
+                                {idx + 1}. {pair.answer}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                      );
+                    }
+                  })()
                 ) : optionsList(q).length > 0 ? (
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     {optionsList(q).map((opt, idx) => (
@@ -578,46 +711,115 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
   function questionOptionsField() {
     if (!OPTION_TYPES.includes(questionForm.question_type)) return null;
 
-    // Matching type special UI
+    // Matching type special UI - questions on left, answer pool on right
     if (questionForm.question_type === 'matching') {
+      // Initialize matching pairs if not exists
+      if (!questionForm.parseMatchingPairs || questionForm.parseMatchingPairs.length === 0) {
+        questionForm.parseMatchingPairs = [
+          { id: Date.now() + 0, question: '', answer: '' },
+          { id: Date.now() + 1, question: '', answer: '' },
+          { id: Date.now() + 2, question: '', answer: '' }
+        ];
+      }
+
+      const addPair = () => {
+        const newPairs = [...(questionForm.parseMatchingPairs || [])];
+        newPairs.push({ id: Date.now(), question: '', answer: '' });
+        setQuestionForm({ ...questionForm, parseMatchingPairs: newPairs });
+      };
+
+      const removePair = (id) => {
+        const newPairs = questionForm.parseMatchingPairs.filter(p => p.id !== id);
+        setQuestionForm({ ...questionForm, parseMatchingPairs: newPairs });
+      };
+
+      const updatePair = (id, field, value) => {
+        const newPairs = questionForm.parseMatchingPairs.map(p => 
+          p.id === id ? { ...p, [field]: value } : p
+        );
+        setQuestionForm({ ...questionForm, parseMatchingPairs: newPairs });
+      };
+
       return (
         <div className="sm:col-span-2">
           <label className="block text-sm font-bold text-gray-700 mb-3">
-            🔗 Matching Pairs (Questions on left, Answers on right)
+            🔗 Matching Pairs (Students will match questions with answers)
           </label>
+          <p className="text-sm text-gray-600 mb-4">
+            Create question-answer pairs. Students will see questions on the left and must match them with the correct answers from a shuffled pool on the right.
+          </p>
+
           <div className="space-y-3">
-            {questionForm.matchingPairs?.map((pair, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold flex items-center justify-center text-sm">
+            {questionForm.parseMatchingPairs?.map((pair, index) => (
+              <div key={pair.id} className="grid grid-cols-[auto,1fr,auto,1fr,auto] gap-3 items-center bg-white rounded-xl border-2 border-gray-200 p-4">
+                {/* Pair number */}
+                <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 font-bold flex items-center justify-center text-sm">
                   {index + 1}
-                </span>
-                <input
-                  type="text"
-                  placeholder="Question"
-                  value={pair.question}
-                  onChange={(e) => {
-                    const newPairs = [...(questionForm.matchingPairs || [])];
-                    newPairs[index] = { ...newPairs[index], question: e.target.value };
-                    setQuestionForm({ ...questionForm, matchingPairs: newPairs });
-                  }}
-                  className="flex-1 rounded-xl border-2 border-gray-200 px-4 py-2.5 focus:border-blue-500 focus:outline-none transition"
-                />
-                <span className="text-gray-400">→</span>
-                <input
-                  type="text"
-                  placeholder="Answer"
-                  value={pair.answer}
-                  onChange={(e) => {
-                    const newPairs = [...(questionForm.matchingPairs || [])];
-                    newPairs[index] = { ...newPairs[index], answer: e.target.value };
-                    setQuestionForm({ ...questionForm, matchingPairs: newPairs });
-                  }}
-                  className="flex-1 rounded-xl border-2 border-gray-200 px-4 py-2.5 focus:border-blue-500 focus:outline-none transition"
-                />
+                </div>
+
+                {/* Question input */}
+                <div>
+                  <label className="text-xs font-bold text-blue-600 mb-1 block">Question</label>
+                  <input
+                    type="text"
+                    placeholder={`Question ${index + 1} (e.g., What is 2+2?)`}
+                    value={pair.question}
+                    onChange={(e) => updatePair(pair.id, 'question', e.target.value)}
+                    className="w-full rounded-lg border-2 border-blue-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none transition"
+                    required
+                  />
+                </div>
+
+                {/* Arrow */}
+                <div className="text-2xl text-gray-400">→</div>
+
+                {/* Answer input */}
+                <div>
+                  <label className="text-xs font-bold text-green-600 mb-1 block">Correct Answer</label>
+                  <input
+                    type="text"
+                    placeholder={`Answer ${index + 1} (e.g., 4)`}
+                    value={pair.answer}
+                    onChange={(e) => updatePair(pair.id, 'answer', e.target.value)}
+                    className="w-full rounded-lg border-2 border-green-200 px-3 py-2 text-sm focus:border-green-500 focus:outline-none transition"
+                    required
+                  />
+                </div>
+
+                {/* Remove button */}
+                {questionForm.parseMatchingPairs.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removePair(pair.id)}
+                    className="w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 font-bold flex items-center justify-center transition"
+                    title="Remove this pair"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 mt-2">Students will drag answers to match with questions</p>
+
+          {/* Add pair button */}
+          <button
+            type="button"
+            onClick={addPair}
+            className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium text-sm transition flex items-center gap-2"
+          >
+            <span>➕</span> Add Another Pair
+          </button>
+
+          {/* Info box */}
+          <div className="mt-4 p-4 bg-blue-50 rounded-xl border-2 border-blue-200">
+            <p className="text-sm font-bold text-blue-800 mb-2">ℹ️ How it works:</p>
+            <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+              <li>Students will see all questions on the left side</li>
+              <li>Answer options will be shuffled and shown on the right</li>
+              <li>Students must match each question with its correct answer</li>
+              <li>Add at least 2 pairs, up to 10 pairs maximum</li>
+            </ul>
+          </div>
         </div>
       );
     }
@@ -894,8 +1096,7 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
               <div className="space-y-3">
                 {questions.map((q, index) => {
                   const opts = optionsList(q);
-                  const matchingPairs = parseMatchingPairs(q);
-                  console.log(`Question ${index + 1}:`, q, 'Options:', opts, 'Matching pairs:', matchingPairs);
+                  const parseMatchingPairs = parseMatchingPairs(q);
                   return (
                     <div key={q.id} className="bg-white rounded-2xl p-5 shadow-md border-2 border-gray-100 hover:border-blue-200 transition">
                       <div className="flex items-start justify-between gap-4">
@@ -913,25 +1114,55 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
                           </div>
                           <p className="text-lg font-bold text-gray-800 mb-3">{q.question_text}</p>
 
-                          {q.question_type === 'matching' && matchingPairs.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-3 mb-3">
-                              <div className="space-y-2">
-                                <p className="text-sm font-bold text-gray-600 mb-2">❓ Questions</p>
-                                {matchingPairs.map((pair, idx) => (
-                                  <div key={idx} className="px-4 py-2 bg-blue-50 rounded-xl border-2 border-blue-200">
-                                    {idx + 1}. {pair.question}
+                          {q.question_type === 'matching' && parseMatchingPairs(q).length > 0 ? (
+                            (() => {
+                              const matchingData = parseMatchingPairs(q);
+                              if (matchingData.questions && matchingData.answers) {
+                                // New format
+                                return (
+                                  <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-bold text-gray-600 mb-2">❓ Questions</p>
+                                      {matchingData.questions.map((question, idx) => (
+                                        <div key={idx} className="px-4 py-2 bg-blue-50 rounded-xl border-2 border-blue-200">
+                                          {idx + 1}. {question}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-bold text-gray-600 mb-2">🎯 Answers</p>
+                                      {matchingData.answers.map((answer, idx) => (
+                                        <div key={idx} className="px-4 py-2 bg-green-50 rounded-xl border-2 border-green-200">
+                                          {String.fromCharCode(65 + idx)}. {answer}
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
-                                ))}
-                              </div>
-                              <div className="space-y-2">
-                                <p className="text-sm font-bold text-gray-600 mb-2">🎯 Answers</p>
-                                {matchingPairs.map((pair, idx) => (
-                                  <div key={idx} className="px-4 py-2 bg-green-50 rounded-xl border-2 border-green-200">
-                                    {idx + 1}. {pair.answer}
+                                );
+                              } else {
+                                // Old format - pairs
+                                return (
+                                  <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-bold text-gray-600 mb-2">❓ Questions</p>
+                                      {matchingData.map((pair, idx) => (
+                                        <div key={idx} className="px-4 py-2 bg-blue-50 rounded-xl border-2 border-blue-200">
+                                          {idx + 1}. {pair.question}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-bold text-gray-600 mb-2">🎯 Answers</p>
+                                      {matchingData.map((pair, idx) => (
+                                        <div key={idx} className="px-4 py-2 bg-green-50 rounded-xl border-2 border-green-200">
+                                          {idx + 1}. {pair.answer}
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
+                                );
+                              }
+                            })()
                           ) : opts.length > 0 ? (
                             <div className="grid grid-cols-2 gap-2 mb-3">
                               {opts.map((opt, idx) => (
@@ -1025,17 +1256,20 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Question Text *</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={questionForm.question_text}
-                  onChange={(e) => setQuestionForm((f) => ({ ...f, question_text: e.target.value }))}
-                  placeholder="e.g. Which letter makes the /a/ sound?"
-                  className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 focus:border-blue-500 focus:outline-none transition"
-                />
-              </div>
+              {/* Question Text - Hide for matching type */}
+              {questionForm.question_type !== 'matching' && (
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Question Text *</label>
+                  <textarea
+                    required={questionForm.question_type !== 'matching'}
+                    rows={3}
+                    value={questionForm.question_text}
+                    onChange={(e) => setQuestionForm((f) => ({ ...f, question_text: e.target.value }))}
+                    placeholder="e.g. Which letter makes the /a/ sound?"
+                    className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 focus:border-blue-500 focus:outline-none transition"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Points *</label>
                 <input
@@ -1049,33 +1283,32 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
               </div>
               {questionOptionsField()}
               {questionMediaField()}
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Correct Answer *</label>
-                {questionForm.question_type === 'mcq' ? (
-                  <div className="bg-blue-50 rounded-xl p-3 text-sm text-blue-700">
-                    <span className="font-bold">Selected:</span> {questionForm.correct_answer || 'None selected'} <span className="text-blue-500">(Select the radio button next to an option above)</span>
-                  </div>
-                ) : questionForm.question_type === 'true_false' ? (
-                  <select
-                    required
-                    value={questionForm.correct_answer}
-                    onChange={(e) => setQuestionForm((f) => ({ ...f, correct_answer: e.target.value }))}
-                    className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 focus:border-blue-500 focus:outline-none transition"
-                  >
-                    <option value="">Select…</option>
-                    <option value="true">✓ True</option>
-                    <option value="false">✗ False</option>
-                  </select>
-                ) : (
-                  <input
-                    required
-                    value={questionForm.correct_answer}
-                    onChange={(e) => setQuestionForm((f) => ({ ...f, correct_answer: e.target.value }))}
-                    placeholder="The answer students must give"
-                    className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 focus:border-blue-500 focus:outline-none transition"
-                  />
-                )}
-              </div>
+              {/* Correct Answer - Hide for matching type */}
+              {questionForm.question_type !== 'matching' && (
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Correct Answer *</label>
+                  {questionForm.question_type === 'true_false' ? (
+                    <select
+                      required
+                      value={questionForm.correct_answer}
+                      onChange={(e) => setQuestionForm((f) => ({ ...f, correct_answer: e.target.value }))}
+                      className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 focus:border-blue-500 focus:outline-none transition"
+                    >
+                      <option value="">Select…</option>
+                      <option value="true">✓ True</option>
+                      <option value="false">✗ False</option>
+                    </select>
+                  ) : (
+                    <input
+                      required
+                      value={questionForm.correct_answer}
+                      onChange={(e) => setQuestionForm((f) => ({ ...f, correct_answer: e.target.value }))}
+                      placeholder="The answer students must give"
+                      className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 focus:border-blue-500 focus:outline-none transition"
+                    />
+                  )}
+                </div>
+              )}
               <div className="sm:col-span-2">
                 <label className="block text-sm font-bold text-gray-700 mb-2">Explanation / Hint (optional)</label>
                 <input
@@ -1089,7 +1322,13 @@ export default function QuizBuilder({ open, onClose, lessonId, quiz, onSaved }) 
 
             <div className="flex items-center justify-end">
               <button
-                disabled={busy || !questionForm.question_text || !questionForm.correct_answer}
+                disabled={
+                  busy || 
+                  (questionForm.question_type === 'matching' 
+                    ? !questionForm.parseMatchingPairs || questionForm.parseMatchingPairs.filter(p => p.question && p.answer).length < 2
+                    : !questionForm.question_text || !questionForm.correct_answer
+                  )
+                }
                 className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-lg rounded-2xl shadow-lg hover:shadow-xl transition transform hover:scale-[1.02] disabled:opacity-50"
               >
                 {editingQuestionId ? '💾 Update Question' : <><MdAdd /> Add Question</>}

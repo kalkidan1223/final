@@ -41,7 +41,7 @@ async function listLessons(req, res, next) {
          c.status AS course_status,
          u.full_name AS instructor_name,
          ag.name  AS age_group_name,
-         COALESCE(l.is_published, c.status = 'published') AS is_published
+         (c.status = 'published') AS is_published
        FROM lessons l
        JOIN courses c  ON c.id = l.course_id
        JOIN instructors i ON i.id = c.instructor_id
@@ -72,32 +72,20 @@ async function updateLessonStatus(req, res, next) {
       return res.status(400).json({ error: 'action must be publish or unpublish' });
     }
 
-    const lessonResult = await query('SELECT id FROM lessons WHERE id = $1', [id]);
+    const lessonResult = await query('SELECT id, course_id FROM lessons WHERE id = $1', [id]);
     if (lessonResult.rows.length === 0) {
       return res.status(404).json({ error: 'Lesson not found' });
     }
 
-    // Lessons table may not have is_published — add it gracefully
-    // We attempt an update; if the column doesn't exist we handle it
-    try {
-      const result = await query(
-        `UPDATE lessons SET is_published = $1, updated_at = now() WHERE id = $2 RETURNING id, title, is_published`,
-        [action === 'publish', id]
-      );
-      res.json({ lesson: result.rows[0] });
-    } catch (colErr) {
-      // Column might not exist yet — add it then retry
-      if (colErr.code === '42703') {
-        await query(`ALTER TABLE lessons ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT FALSE`);
-        const result = await query(
-          `UPDATE lessons SET is_published = $1, updated_at = now() WHERE id = $2 RETURNING id, title, is_published`,
-          [action === 'publish', id]
-        );
-        res.json({ lesson: result.rows[0] });
-      } else {
-        throw colErr;
-      }
-    }
+    const courseId = lessonResult.rows[0].course_id;
+    const newStatus = action === 'publish' ? 'published' : 'draft';
+
+    // Update the course status instead of lesson status
+    const result = await query(
+      `UPDATE courses SET status = $1, updated_at = now() WHERE id = $2 RETURNING id, title, status`,
+      [newStatus, courseId]
+    );
+    res.json({ lesson: { id, ...result.rows[0] } });
   } catch (err) {
     next(err);
   }

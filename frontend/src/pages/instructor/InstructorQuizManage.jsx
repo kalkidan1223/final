@@ -7,7 +7,8 @@ const QUESTION_TYPES = [
   { value: 'mcq', label: 'Multiple Choice', icon: '📝' },
   { value: 'true_false', label: 'True / False', icon: '✓' },
   { value: 'fill_in_the_blank', label: 'Fill in the Blank', icon: '✏️' },
-  { value: 'matching', label: 'Matching', icon: '🔗' },
+  // Matching questions need a pairs editor; author those from the lesson's
+  // quiz builder (QuizBuilder), which owns the matching UI.
 ];
 
 export default function InstructorQuizManage() {
@@ -210,9 +211,22 @@ export default function InstructorQuizManage() {
                         </div>
                       )}
 
-                      <div className="mt-3 text-sm text-gray-500">
-                        <span className="font-medium">Correct Answer:</span> {q.correct_answer}
-                      </div>
+                      {q.question_type === 'matching' && q.options && Array.isArray(q.options.pairs) && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {q.options.pairs.map((pair, idx) => (
+                            <div key={idx} className="px-4 py-2 rounded-xl border-2 bg-gray-50 border-gray-200 text-gray-700">
+                              <span className="font-bold mr-2">{idx + 1}.</span>
+                              {pair.question} <span className="text-gray-400">→</span> {pair.answer}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {q.question_type !== 'matching' && (
+                        <div className="mt-3 text-sm text-gray-500">
+                          <span className="font-medium">Correct Answer:</span> {q.correct_answer}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => handleDelete(q.id)}

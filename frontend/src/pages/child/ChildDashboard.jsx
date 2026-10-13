@@ -82,6 +82,7 @@ export default function ChildDashboard() {
   const todaysActivities = data?.todays_activities || [];
   const streakDays = data?.learning_streak || 0;
   const achievements = data?.achievements || [];
+  const homePins = data?.home_pins || [];
 
   // Age group check: 5-9 = Early Learner, 10-12 = Independent Student
   const isEarlyLearner = child.is_early_learner !== undefined

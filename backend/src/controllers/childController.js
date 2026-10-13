@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const { resolvePins } = require('./homePinController');
 const { getLessonAccess, getResourceAccess } = require('../utils/learningAccess');
+const { gradeAnswer, correctAnswerText, formatMatchingAnswer } = require('../utils/quizGrading');
 
 /**
  * Helper: Resolve the active student record based on whether the logged in user
@@ -902,8 +903,7 @@ async function submitQuiz(req, res, next) {
       const qPoints = Number(q.points) || 1;
       totalPoints += qPoints;
       const given = answers ? answers[q.id] : undefined;
-      const isCorrect = given !== undefined && given !== null &&
-        given.toString().trim().toLowerCase() === q.correct_answer.toString().trim().toLowerCase();
+      const isCorrect = gradeAnswer(q, given);
 
       if (isCorrect) score += qPoints;
 
@@ -912,8 +912,8 @@ async function submitQuiz(req, res, next) {
         question_text: q.question_text,
         question_type: q.question_type,
         options: q.options,
-        student_answer: given,
-        correct_answer: first.show_result_immediately !== false ? q.correct_answer : null,
+        student_answer: q.question_type === 'matching' ? formatMatchingAnswer(q, given) : given,
+        correct_answer: first.show_result_immediately !== false ? correctAnswerText(q) : null,
         is_correct: isCorrect,
         points: qPoints,
         explanation: first.show_result_immediately !== false ? q.explanation : null,

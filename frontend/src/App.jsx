@@ -41,6 +41,7 @@ import InstructorNotifications from './pages/instructor/InstructorNotifications'
 import InstructorProfile from './pages/instructor/InstructorProfile';
 import InstructorChildHome from './pages/instructor/InstructorChildHome';
 import InstructorVocabulary from './pages/instructor/InstructorVocabulary';
+import InstructorResults from './pages/instructor/Results';
 import ParentDashboard from './pages/parent/ParentDashboard';
 import ParentChildren from './pages/parent/ParentChildren';
 import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
@@ -275,6 +276,14 @@ export default function App() {
         element={
           <ProtectedRoute roles={['instructor', 'admin']}>
             <InstructorVocabulary />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/instructor/results"
+        element={
+          <ProtectedRoute roles={['instructor', 'admin']}>
+            <InstructorResults />
           </ProtectedRoute>
         }
       />

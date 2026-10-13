@@ -1,7 +1,37 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import { resolveFileUrl } from '../../utils/fileUrl';
+
+// Deterministic shuffle so the answer pool is mixed but stable across renders.
+function seededShuffle(list, seed) {
+  const a = [...list];
+  let s = Number(seed) || 1;
+  const rand = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Reads the pairs stored on a matching question: options = { pairs: [...] }.
+function matchingPairs(q) {
+  return q?.options && Array.isArray(q.options.pairs) ? q.options.pairs : [];
+}
+
+function parseMatchingSelections(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
 
 export default function ChildQuizTake() {
   const { id } = useParams();
@@ -33,6 +63,17 @@ export default function ChildQuizTake() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [id]);
+
+  // Shuffled answer pools for matching questions, keyed by question id.
+  const matchingPools = useMemo(() => {
+    const pools = {};
+    questions.forEach((q) => {
+      if (q.question_type === 'matching') {
+        pools[q.id] = seededShuffle(matchingPairs(q).map((p) => p.answer), q.id);
+      }
+    });
+    return pools;
+  }, [questions]);
 
   const fetchQuiz = async () => {
     try {
@@ -102,8 +143,27 @@ export default function ChildQuizTake() {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  const handleMatchingAnswer = (questionId, index, value) => {
+    setAnswers((prev) => {
+      const current = parseMatchingSelections(prev[questionId]);
+      if (value) {
+        current[index] = value;
+      } else {
+        delete current[index];
+      }
+      return { ...prev, [questionId]: JSON.stringify(current) };
+    });
+  };
+
   const submitQuiz = () => {
-    const unanswered = questions.filter((q) => answers[q.id] === undefined || answers[q.id] === '');
+    const unanswered = questions.filter((q) => {
+      if (q.question_type === 'matching') {
+        const pairs = matchingPairs(q);
+        const picked = parseMatchingSelections(answers[q.id]);
+        return pairs.some((_, idx) => !picked[idx]);
+      }
+      return answers[q.id] === undefined || answers[q.id] === '';
+    });
     if (unanswered.length > 0) {
       setError(`እባክዎን ሁሉንም ጥያቄዎች ይመልሱ! ${unanswered.length} ያልተመለሰ ጥያቄ አለ / Please answer all questions! (${unanswered.length} remaining)`);
       return;
@@ -458,7 +518,15 @@ export default function ChildQuizTake() {
   // 3. QUIZ TAKING SCREEN
   // ─────────────────────────────────────────────────────────────
   const currentQ = questions[currentQuestion];
-  const answeredCount = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== '').length;
+  const isQuestionAnswered = (q) => {
+    if (q.question_type === 'matching') {
+      const pairs = matchingPairs(q);
+      const picked = parseMatchingSelections(answers[q.id]);
+      return pairs.length > 0 && pairs.every((_, idx) => picked[idx]);
+    }
+    return answers[q.id] !== undefined && answers[q.id] !== '';
+  };
+  const answeredCount = questions.filter(isQuestionAnswered).length;
   const progressPercent = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
 
   return (
@@ -597,6 +665,44 @@ export default function ChildQuizTake() {
               </div>
             )}
 
+            {/* Matching: each prompt gets a dropdown of the shuffled answers */}
+            {currentQ.question_type === 'matching' && matchingPairs(currentQ).length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-500">
+                  🔗 ከቀኝ ያለውን መልስ ለእያንዳንዱ ጥያቄ ይምረጡ / Match each item with its answer
+                </p>
+                {matchingPairs(currentQ).map((pair, idx) => {
+                  const picked = parseMatchingSelections(answers[currentQ.id]);
+                  return (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-1 sm:grid-cols-[1fr,auto,1fr] gap-2 sm:gap-3 items-center bg-slate-50/70 border-2 border-slate-200 rounded-2xl p-3"
+                    >
+                      <div className="px-4 py-3 bg-blue-50 rounded-xl border-2 border-blue-200 font-bold text-slate-800">
+                        <span className="text-xs text-blue-500 mr-2">{idx + 1}.</span>
+                        {pair.question}
+                      </div>
+                      <div className="hidden sm:block text-2xl text-slate-400 text-center">→</div>
+                      <select
+                        value={picked[idx] || ''}
+                        onChange={(e) => handleMatchingAnswer(currentQ.id, idx, e.target.value)}
+                        className={`w-full px-4 py-3 rounded-xl border-2 font-bold outline-none transition ${
+                          picked[idx]
+                            ? 'border-green-400 bg-green-50 text-green-900'
+                            : 'border-slate-200 bg-white text-slate-600'
+                        }`}
+                      >
+                        <option value="">— ይምረጡ / Choose —</option>
+                        {(matchingPools[currentQ.id] || []).map((answer, i) => (
+                          <option key={i} value={answer}>{answer}</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Short Answer / Fill in Blank */}
             {(currentQ.question_type === 'short_answer' || currentQ.question_type === 'fill_in_the_blank') && (
               <div className="space-y-2">
@@ -626,7 +732,7 @@ export default function ChildQuizTake() {
             {/* Quick question pill buttons */}
             <div className="hidden sm:flex items-center gap-1.5">
               {questions.map((q, idx) => {
-                const isAns = answers[q.id] !== undefined && answers[q.id] !== '';
+                const isAns = isQuestionAnswered(q);
                 const isCurr = idx === currentQuestion;
 
                 return (

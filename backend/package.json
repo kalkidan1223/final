@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed:admin": "node scripts/seed-admin.js",
+    "seed:basic": "node seeds/seed_basic_curriculum.js",
     "migrate:resources": "node scripts/migrate-lesson-resources.js",
     "check:activities": "node scripts/check-empty-activities.js"
   },
