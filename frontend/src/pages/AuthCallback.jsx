@@ -13,26 +13,41 @@ export default function AuthCallback() {
       const token = searchParams.get('token');
       const refreshToken = searchParams.get('refreshToken');
       const error = searchParams.get('error');
+      const redirectParam = searchParams.get('redirect');
 
       if (error) {
         navigate(`/login?error=${encodeURIComponent(error)}`);
         return;
       }
 
-      if (token && refreshToken) {
+      if (token) {
         try {
           // Store tokens
           localStorage.setItem('token', token);
-          localStorage.setItem('refreshToken', refreshToken);
+          if (refreshToken) {
+            localStorage.setItem('refreshToken', refreshToken);
+          }
           
-          // Set auth token in axios
+          // Set auth token in axios client
           setAuthToken(token);
           
           // Fetch user data
           const user = await fetchUser();
+
+          // If redirect param is provided (e.g. /auth/role-selection)
+          if (redirectParam) {
+            navigate(redirectParam, { replace: true });
+            return;
+          }
+
+          // If user role is pending, redirect to role selection
+          if (user?.role === 'pending') {
+            navigate('/auth/role-selection', { replace: true });
+            return;
+          }
           
           // Redirect to appropriate dashboard
-          navigate(ROLE_HOME[user.role] || '/');
+          navigate(user ? (ROLE_HOME[user.role] || '/') : '/', { replace: true });
         } catch (err) {
           console.error('Auth callback error:', err);
           navigate('/login?error=authentication_failed');

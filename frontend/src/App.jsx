@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import RegisterParent from './pages/RegisterParent';
 import Signup from './pages/Signup';
 import SignupInstructor from './pages/SignupInstructor';
+import GoogleRoleSelection from './pages/GoogleRoleSelection';
 import Unauthorized from './pages/Unauthorized';
 import Home from './pages/Home';
 import AuthCallback from './pages/AuthCallback';
@@ -103,6 +104,7 @@ export default function App() {
       {/* Legacy /register → redirect to /signup/parent */}
       <Route path="/register" element={<Navigate to="/signup/parent" replace />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/auth/role-selection" element={<GoogleRoleSelection />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 
       <Route

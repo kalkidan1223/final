@@ -147,74 +147,63 @@ export default function ChildDashboard() {
   );
 
   return (
-    <div className="space-y-8 pb-12 animate-fade-in">
-      {/* 1. Welcoming Hero Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-green-500 via-emerald-600 to-teal-500 rounded-3xl p-6 sm:p-8 text-white shadow-xl animate-gradient">
-        {/* Floating background decorative bubbles */}
-        <div className="absolute top-2 right-4 text-7xl opacity-20 pointer-events-none select-none animate-float">⭐</div>
-        <div className="absolute -bottom-4 right-28 text-8xl opacity-15 pointer-events-none select-none animate-float-slow">🚀</div>
-        <div className="absolute top-1/2 left-2/3 text-6xl opacity-15 pointer-events-none select-none animate-float">🌈</div>
-
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-slide-up">
-              <span>🎓</span> Independent Student (Age {child.age || '10–12'})
-            </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight animate-slide-up delay-100">
-              Hello, {child.full_name || 'Student'}! 👋
+    <div className="space-y-6 pb-12 animate-fade-in">
+      {/* 1. Welcome Section with Learning Streak - Like Reference */}
+      <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 rounded-2xl p-6 text-white shadow-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black">
+              {child.full_name || 'Student'}! 👋
             </h1>
-            <p className="text-base sm:text-lg text-green-100 font-medium max-w-xl animate-slide-up delay-200">
-              Track your courses, complete assignments, and master your subjects at your own pace!
+            <p className="text-sm sm:text-base font-semibold text-white/90 mt-1">
+              Welcome back to your learning adventure!
             </p>
           </div>
-
-          {/* Learning Streak Widget */}
-          <div className="bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl p-4 sm:p-5 flex items-center gap-4 shadow-lg min-w-[220px] hover:scale-105 transition-transform cursor-pointer animate-slide-up delay-300">
-            <div className="w-14 h-14 rounded-2xl bg-amber-400 flex items-center justify-center text-3xl shadow-inner animate-pulse">
-              🔥
-            </div>
+          <div className="flex items-center gap-3 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full">
+            <span className="text-2xl animate-pulse">🔥</span>
             <div>
-              <div className="text-xs font-black uppercase tracking-wider text-amber-200">Learning Streak</div>
-              <div className="text-2xl sm:text-3xl font-black text-white">{streakDays} Days</div>
-              <div className="text-xs text-green-100 font-medium">Keep learning daily!</div>
+              <div className="text-xs font-bold uppercase">Learning Streak</div>
+              <div className="text-xl font-black">{streakDays} Days</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Continue Learning Hero Card (If exists) */}
+      {/* 2. Continue Learning - Simpler Card Like Reference */}
       {continueLearning && (
-        <div className="bg-gradient-to-r from-lime-500 via-green-500 to-emerald-500 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-          <div className="space-y-1.5 z-10">
-            <div className="inline-flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider">
-              <span>▶</span> Continue Learning
+        <div className="bg-white rounded-2xl shadow-lg border-2 border-purple-100 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-800">{continueLearning.course_title}</h2>
+              <p className="text-sm font-bold text-slate-500">
+                Lesson {continueLearning.order_index}: {continueLearning.title}
+              </p>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black">{continueLearning.course_title}</h2>
-            <p className="text-sm font-semibold text-green-100">
-              Lesson {continueLearning.order_index}: {continueLearning.title}
-            </p>
-            <div className="w-48 sm:w-64 bg-black/20 h-3 rounded-full overflow-hidden mt-2">
-              <div
-                className="bg-white h-full rounded-full transition-all duration-500"
-                style={{ width: `${Math.max(continueLearning.lesson_progress || 10, 15)}%` }}
-              />
+            <div className="text-right">
+              <div className="text-2xl font-black text-purple-600">{Math.round(continueLearning.lesson_progress || 0)}%</div>
+              <div className="text-xs font-bold text-slate-500">Complete</div>
             </div>
           </div>
-
+          <div className="w-full bg-purple-100 h-3 rounded-full overflow-hidden mb-4">
+            <div
+              className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.max(continueLearning.lesson_progress || 10, 15)}%` }}
+            />
+          </div>
           <Link
             to={`/child/lessons/${continueLearning.id}`}
-            className="z-10 px-6 py-3 bg-white text-green-600 font-black rounded-2xl shadow-md hover:bg-green-50 hover:scale-105 active:scale-95 transition flex items-center gap-2 text-sm sm:text-base flex-shrink-0"
+            className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black rounded-xl text-center shadow-md hover:shadow-lg transition flex items-center justify-center gap-2"
           >
-            <span>Continue Lesson</span>
-            <span className="text-lg">➔</span>
+            <span>Continue Learning</span>
+            <span>→</span>
           </Link>
         </div>
       )}
 
-      {/* 3. Quick Stats Grid */}
+      {/* 3. Quick Stats Grid - Like Reference */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
-          <div className="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center text-2xl animate-pulse">
+        <div className="bg-white p-4 rounded-xl shadow-md border-2 border-purple-100 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-2xl">
             📚
           </div>
           <div>
@@ -223,8 +212,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl animate-pulse">
+        <div className="bg-white p-4 rounded-xl shadow-md border-2 border-pink-100 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center text-2xl">
             🎯
           </div>
           <div>
@@ -233,8 +222,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
-          <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-600 flex items-center justify-center text-2xl animate-pulse">
+        <div className="bg-white p-4 rounded-xl shadow-md border-2 border-cyan-100 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center text-2xl">
             📝
           </div>
           <div>
@@ -243,8 +232,8 @@ export default function ChildDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-green-100 flex items-center gap-3.5 hover:scale-105 transition-transform cursor-pointer">
-          <div className="w-12 h-12 rounded-2xl bg-lime-100 text-lime-600 flex items-center justify-center text-2xl animate-pulse">
+        <div className="bg-white p-4 rounded-xl shadow-md border-2 border-amber-100 flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-2xl">
             🎬
           </div>
           <div>
@@ -254,91 +243,114 @@ export default function ChildDashboard() {
         </div>
       </div>
 
-      {/* Gamification Panel */}
-      <GamificationPanel currentXP={totalXP} />
+      {/* Gamification Panel - Like Reference with Level & XP */}
+      <div className="bg-white rounded-2xl shadow-lg border-2 border-purple-100 p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-3xl shadow-lg">
+              ⭐
+            </div>
+            <div>
+              <div className="text-2xl font-black text-slate-800">LEVEL 2 Learner</div>
+              <div className="text-sm font-bold text-purple-600">{totalXP} XP Total Points</div>
+            </div>
+          </div>
+          <div className="flex-1 max-w-md">
+            <div className="flex justify-between text-xs font-bold text-slate-600 mb-1">
+              <span>Progress to Level 3</span>
+              <span>75%</span>
+            </div>
+            <div className="w-full bg-purple-100 h-3 rounded-full overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full" style={{ width: '75%' }} />
+            </div>
+          </div>
+        </div>
 
-      {/* 4. Main Section: My Courses */}
+        <div className="border-t-2 border-purple-100 pt-4">
+          <h3 className="text-lg font-black text-slate-800 mb-3">WAYS TO EARN XP</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-purple-50 rounded-xl p-3 text-center border-2 border-purple-200">
+              <div className="text-2xl mb-1">📚</div>
+              <div className="text-sm font-bold text-slate-800">Complete Lesson</div>
+              <div className="text-xs font-black text-purple-600">+50 XP</div>
+            </div>
+            <div className="bg-pink-50 rounded-xl p-3 text-center border-2 border-pink-200">
+              <div className="text-2xl mb-1">🎯</div>
+              <div className="text-sm font-bold text-slate-800">Finish Activity</div>
+              <div className="text-xs font-black text-pink-600">+20 XP</div>
+            </div>
+            <div className="bg-cyan-50 rounded-xl p-3 text-center border-2 border-cyan-200">
+              <div className="text-2xl mb-1">📝</div>
+              <div className="text-sm font-bold text-slate-800">Pass Quiz</div>
+              <div className="text-xs font-black text-cyan-600">+30 XP</div>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-3 text-center border-2 border-amber-200">
+              <div className="text-2xl mb-1">🎬</div>
+              <div className="text-sm font-bold text-slate-800">Watch Video</div>
+              <div className="text-xs font-black text-amber-600">+15 XP</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. My Courses - Simpler Cards Like Reference */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">📚</span>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-800">My Courses</h2>
-          </div>
+          <h2 className="text-xl font-black text-slate-800">My Courses</h2>
           <Link
             to="/child/courses"
-            className="text-xs sm:text-sm font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 hover:underline"
+            className="text-sm font-bold text-purple-600 hover:underline"
           >
-            See All Courses ➔
+            See All →
           </Link>
         </div>
 
         {courses.length === 0 ? (
-          <div className="bg-white rounded-3xl p-8 text-center border border-purple-100 shadow-sm">
+          <div className="bg-white rounded-2xl p-8 text-center border-2 border-purple-100 shadow-md">
             <span className="text-5xl block mb-2">📚</span>
             <h3 className="text-lg font-black text-slate-800 mb-1">No courses assigned yet</h3>
-            <p className="text-sm text-slate-500">Your teachers will assign your courses soon. Check back shortly!</p>
+            <p className="text-sm text-slate-500">Your teachers will assign your courses soon!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map((course, index) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {courses.map((course) => (
               <div
                 key={course.id}
-                className="bg-white rounded-3xl border border-purple-100 shadow-sm hover:shadow-2xl transition-all duration-300 overflow-hidden flex flex-col group transform hover:-translate-y-2 hover:scale-105 animate-slide-up"
-                style={{ animationDelay: `${index * 0.1}s` }}
-                onMouseEnter={() => playClickSound()}
+                className="bg-white rounded-xl shadow-md border-2 border-purple-100 overflow-hidden hover:shadow-lg transition-shadow"
               >
-                {/* Course Header Banner */}
-                <div className="h-36 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 relative flex items-center justify-center p-4 text-white overflow-hidden">
+                <div className="h-32 bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white">
                   {course.thumbnail_url ? (
                     <img
                       src={course.thumbnail_url}
                       alt={course.title}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      className="w-full h-full object-cover"
                     />
                   ) : (
-                    <span className="text-6xl group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300">📚</span>
+                    <span className="text-5xl">📚</span>
                   )}
-                  <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-md text-purple-700 font-extrabold text-xs px-2.5 py-1 rounded-full shadow-sm animate-bounce">
-                    {course.age_group_name || 'Age Appropriate'}
-                  </div>
                 </div>
-
-                {/* Course Details */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div>
-                    <h3 className="text-lg font-black text-slate-800 group-hover:text-purple-600 transition-colors line-clamp-1">
-                      {course.title}
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium mt-1">
-                      Instructor: <strong className="text-slate-700">{course.instructor_name || 'Teacher'}</strong>
-                    </p>
-                    <p className="text-xs text-slate-600 line-clamp-2 mt-2">
-                      {course.description || 'Interactive learning journey with lessons, videos, and fun activities!'}
-                    </p>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-1.5 pt-2 border-t border-purple-50">
-                    <div className="flex justify-between text-xs font-bold text-slate-600">
+                <div className="p-4">
+                  <h3 className="text-lg font-black text-slate-800 line-clamp-1">{course.title}</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {course.instructor_name || 'Teacher'}
+                  </p>
+                  <div className="mt-3">
+                    <div className="flex justify-between text-xs font-bold text-slate-600 mb-1">
                       <span>Progress</span>
-                      <span className="text-purple-600 font-black">{course.overall_progress || 0}%</span>
+                      <span>{course.overall_progress || 0}%</span>
                     </div>
-                    <div className="h-2.5 bg-purple-100 rounded-full overflow-hidden">
+                    <div className="h-2 bg-purple-100 rounded-full overflow-hidden">
                       <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full progress-bar-animated"
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full"
                         style={{ width: `${course.overall_progress || 0}%` }}
                       />
                     </div>
                   </div>
-
-                  {/* Action Button */}
                   <Link
                     to={`/child/courses/${course.id}`}
-                    onClick={() => playClickSound()}
-                    className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-2xl text-center text-xs sm:text-sm shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 hover:shadow-lg hover:shadow-purple-500/30"
+                    className="w-full mt-4 py-2 bg-purple-600 text-white font-black rounded-lg text-center text-sm hover:bg-purple-700 transition cursor-pointer block"
                   >
-                    <span>Continue Learning</span>
-                    <span className="group-hover:translate-x-1 transition-transform">➔</span>
+                    {course.overall_progress > 0 ? 'Continue Learning' : 'Start Course'}
                   </Link>
                 </div>
               </div>
@@ -347,39 +359,34 @@ export default function ChildDashboard() {
         )}
       </section>
 
-      {/* 5. Today's Learning & Activities */}
+      {/* 5. Today's Activities - Simpler Like Reference */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🎯</span>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-800">Today's Activities</h2>
-          </div>
+          <h2 className="text-xl font-black text-slate-800">Today's Activities</h2>
           <Link
             to="/child/activities"
-            className="text-xs sm:text-sm font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 hover:underline"
+            className="text-sm font-bold text-purple-600 hover:underline"
           >
-            View All Activities ➔
+            View All →
           </Link>
         </div>
 
         {todaysActivities.length === 0 ? (
-          <div className="bg-white rounded-3xl p-6 text-center border border-purple-100 shadow-sm flex items-center justify-center gap-3">
-            <span className="text-3xl">🎉</span>
-            <p className="text-sm font-bold text-slate-700">
-              Awesome work! You have finished your scheduled activities for now.
+          <div className="bg-white rounded-xl p-6 text-center border-2 border-purple-100 shadow-md">
+            <span className="text-4xl">🎉</span>
+            <p className="text-sm font-bold text-slate-700 mt-2">
+              Awesome work! You've finished your activities for now.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {todaysActivities.map((act, index) => (
+            {todaysActivities.map((act) => (
               <div
                 key={act.id}
-                className="bg-white rounded-2xl p-4 border border-purple-100 shadow-sm hover:shadow-xl transition-all duration-300 flex items-center justify-between gap-3 hover:scale-105 hover:-translate-y-1 animate-slide-up"
-                style={{ animationDelay: `${index * 0.1}s` }}
-                onMouseEnter={() => playClickSound()}
+                className="bg-white rounded-xl p-4 border-2 border-purple-100 shadow-md flex items-center justify-between gap-3 hover:shadow-lg transition-shadow"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-xl">
                     {act.activity_type === 'writing' ? '✏️' :
                      act.activity_type === 'matching' ? '🔗' :
                      act.activity_type === 'reading' ? '📖' :
@@ -390,13 +397,11 @@ export default function ChildDashboard() {
                     <p className="text-xs text-purple-600 font-semibold truncate">{act.course_title}</p>
                   </div>
                 </div>
-
                 <Link
                   to={`/child/activities/${act.id}`}
-                  onClick={() => playClickSound()}
-                  className="px-3.5 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-xl text-xs transition flex-shrink-0 hover:scale-110 active:scale-95"
+                  className="px-3 py-2 bg-purple-600 text-white font-black rounded-lg text-xs hover:bg-purple-700 transition"
                 >
-                  Start ➔
+                  Start →
                 </Link>
               </div>
             ))}
@@ -404,31 +409,26 @@ export default function ChildDashboard() {
         )}
       </section>
 
-      {/* 6. Achievements Badge Showcase */}
+      {/* 6. Achievements - Simple Badge Row Like Reference */}
       {achievements.length > 0 && (
-        <section className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-3xl p-6 border border-amber-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🏆</span>
-              <h2 className="text-xl font-black text-amber-900">Your Badges & Achievements</h2>
-            </div>
+        <section className="bg-white rounded-xl shadow-md border-2 border-purple-100 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-black text-slate-800">Recent Achievements</h2>
             <Link
               to="/child/achievements"
-              className="text-xs sm:text-sm font-bold text-amber-800 hover:underline"
+              className="text-sm font-bold text-purple-600 hover:underline"
             >
-              See All Badges ➔
+              See All →
             </Link>
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {achievements.map((ach) => (
+          <div className="flex gap-3 overflow-x-auto no-scrollbar">
+            {achievements.slice(0, 4).map((ach) => (
               <div
                 key={ach.id}
-                className="bg-white rounded-2xl p-4 text-center shadow-sm border border-amber-100 flex flex-col items-center gap-1.5 transform hover:scale-105 transition"
+                className="flex-shrink-0 bg-purple-50 rounded-xl p-3 text-center border-2 border-purple-200 min-w-[100px]"
               >
-                <div className="text-4xl animate-bounce">{ach.icon}</div>
-                <div className="text-xs font-black text-slate-800 mt-1">{ach.name}</div>
-                <div className="text-[11px] text-slate-500 line-clamp-2">{ach.description}</div>
+                <div className="text-3xl mb-1">{ach.icon}</div>
+                <div className="text-xs font-black text-slate-800">{ach.name}</div>
               </div>
             ))}
           </div>

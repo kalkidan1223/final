@@ -15,7 +15,7 @@ function isValidPassword(password) {
   );
 }
 
-function validateRegisterParent(body) {
+function validateRegisterParent(body, isGoogle = false) {
   const errors = [];
   if (!body.full_name || body.full_name.trim().length < 2) {
     errors.push('full_name is required');
@@ -23,7 +23,8 @@ function validateRegisterParent(body) {
   if (!isValidEmail(body.email)) {
     errors.push('a valid email is required');
   }
-  if (!isValidPassword(body.password)) {
+  const skipPassword = isGoogle || body.is_google || Boolean(body.google_id);
+  if (!skipPassword && !isValidPassword(body.password)) {
     errors.push('password must be at least 8 characters and include a letter and a number');
   }
   if (!body.date_of_birth || Number.isNaN(Date.parse(body.date_of_birth))) {

@@ -44,6 +44,26 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  const fetchUser = useCallback(async () => {
+    try {
+      const { data } = await axiosClient.get('/auth/me');
+      setUser(data.user);
+      return data.user;
+    } catch (e) {
+      setUser(null);
+      throw e;
+    }
+  }, []);
+
+  const setAuthToken = useCallback((token) => {
+    setAccessToken(token);
+  }, []);
+
+  const setSession = useCallback((token, userData) => {
+    setAccessToken(token);
+    setUser(userData);
+  }, []);
+
   const logout = useCallback(async () => {
     await axiosClient.post('/auth/logout');
     setAccessToken(null);
@@ -52,7 +72,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, registerParent, registerInstructor, logout }}
+      value={{ user, loading, login, registerParent, registerInstructor, logout, fetchUser, setAuthToken, setSession }}
     >
       {children}
     </AuthContext.Provider>

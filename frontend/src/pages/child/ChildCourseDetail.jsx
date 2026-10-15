@@ -139,36 +139,38 @@ export default function ChildCourseDetail() {
       </div>
 
       {/* ============================================ */}
-      {/* COURSE HEADER - Visual & Inviting */}
+      {/* COURSE HEADER - Colorful & Playful */}
       {/* ============================================ */}
-      <div className="bg-gradient-to-br from-green-500 via-emerald-500 to-teal-400 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 rounded-[2.5rem] p-8 sm:p-10 text-white shadow-2xl relative overflow-hidden border-4 border-white/20">
         {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-        
+        <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 animate-float"></div>
+        <div className="absolute bottom-0 left-0 w-56 h-56 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 animate-float-slow"></div>
+        <div className="absolute top-1/3 left-10 text-6xl opacity-20 animate-float">⭐</div>
+        <div className="absolute bottom-10 right-1/4 text-5xl opacity-15 animate-float-slow">✨</div>
+
         <div className="relative z-10 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-5xl">{getCourseIcon(course?.title)}</span>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+          <div className="flex items-center gap-3">
+            <span className="text-6xl animate-bounce">{getCourseIcon(course?.title)}</span>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight drop-shadow-lg">
               {course?.title?.toUpperCase() || 'LEARNING ADVENTURE'}
             </h1>
           </div>
-          
+
           {course?.description && (
-            <p className="text-lg font-medium text-white/90 max-w-2xl">
+            <p className="text-lg sm:text-xl font-semibold text-white/90 max-w-2xl leading-relaxed">
               {course.description}
             </p>
           )}
-          
-          <div className="flex flex-wrap items-center gap-4 text-sm font-bold">
-            <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full backdrop-blur-sm">
-              <span className="text-xl">👩‍🏫</span>
+
+          <div className="flex flex-wrap items-center gap-4 text-sm sm:text-base font-bold">
+            <div className="flex items-center gap-2 bg-white/25 backdrop-blur-md px-5 py-2.5 rounded-full shadow-lg border-2 border-white/30">
+              <span className="text-2xl">👩‍🏫</span>
               <span>Teacher: {course?.instructor_name || 'Your Teacher'}</span>
             </div>
-            
+
             {progress?.current_streak > 0 && (
-              <div className="flex items-center gap-2 bg-orange-500/30 px-4 py-2 rounded-full backdrop-blur-sm border-2 border-orange-300">
-                <span className="text-xl">🔥</span>
+              <div className="flex items-center gap-2 bg-yellow-400/40 backdrop-blur-md px-5 py-2.5 rounded-full shadow-lg border-2 border-yellow-300">
+                <span className="text-2xl animate-pulse">🔥</span>
                 <span>{progress.current_streak} Day Streak!</span>
               </div>
             )}
@@ -177,26 +179,26 @@ export default function ChildCourseDetail() {
       </div>
 
       {/* ============================================ */}
-      {/* PROGRESS & CONTINUE LEARNING */}
+      {/* PROGRESS & CONTINUE LEARNING - More Colorful */}
       {/* ============================================ */}
-      <div className="bg-white rounded-3xl p-8 shadow-xl border-4 border-green-100">
+      <div className="bg-white rounded-[2.5rem] p-8 sm:p-10 shadow-2xl border-4 border-purple-200">
         {/* Progress Bar */}
-        <div className="space-y-3 mb-6">
+        <div className="space-y-4 mb-8">
           <div className="flex items-center justify-between">
-            <span className="text-lg font-black text-gray-700">Your Progress</span>
-            <span className="text-2xl font-black text-green-600">{progress?.percentage || 0}%</span>
+            <span className="text-xl sm:text-2xl font-black text-gray-700">Your Progress</span>
+            <span className="text-3xl sm:text-4xl font-black text-purple-600 drop-shadow-md">{progress?.percentage || 0}%</span>
           </div>
-          <div className="w-full bg-gray-200 h-6 rounded-full overflow-hidden relative">
+          <div className="w-full bg-purple-100 h-8 rounded-full overflow-hidden relative border-4 border-purple-200">
             <div
-              className="bg-gradient-to-r from-green-400 via-blue-500 to-green-600 h-full rounded-full transition-all duration-700 ease-out flex items-center justify-end pr-2"
+              className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 h-full rounded-full transition-all duration-700 ease-out flex items-center justify-end pr-3 shadow-inner"
               style={{ width: `${progress?.percentage || 0}%` }}
             >
               {(progress?.percentage || 0) > 10 && (
-                <span className="text-white text-xs font-black">⭐</span>
+                <span className="text-white text-lg font-black animate-bounce">⭐</span>
               )}
             </div>
           </div>
-          <div className="text-center text-sm font-bold text-gray-600">
+          <div className="text-center text-base sm:text-lg font-bold text-gray-600">
             {progress?.completed_lessons || 0} of {progress?.total_lessons || 0} lessons completed
           </div>
         </div>
@@ -206,20 +208,21 @@ export default function ChildCourseDetail() {
           <button
             onClick={handleContinueLearning}
             disabled={!next_lesson && lessons?.every(l => l.is_locked)}
-            className="w-full py-6 bg-gradient-to-r from-green-600 to-pink-600 hover:from-green-700 hover:to-pink-700 text-white font-black text-2xl rounded-2xl shadow-2xl transition transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+            className="w-full py-7 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 hover:from-purple-700 hover:via-pink-700 hover:to-orange-600 text-white font-black text-2xl sm:text-3xl rounded-[2rem] shadow-2xl transition transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-4 border-4 border-purple-300"
           >
+            <span className="text-3xl">🚀</span>
             <span>{getButtonText()}</span>
-            <span className="text-3xl animate-bounce">→</span>
+            <span className="text-4xl animate-bounce">→</span>
           </button>
         )}
 
         {isComplete && (
-          <div className="text-center space-y-4">
-            <div className="text-6xl animate-bounce">🏆</div>
-            <h2 className="text-3xl font-black text-green-600">Amazing Work!</h2>
-            <p className="text-lg font-bold text-gray-600">You completed this entire course!</p>
+          <div className="text-center space-y-6">
+            <div className="text-7xl animate-bounce">🏆</div>
+            <h2 className="text-3xl sm:text-4xl font-black text-purple-600 drop-shadow-lg">Amazing Work!</h2>
+            <p className="text-lg sm:text-xl font-bold text-gray-600">You completed this entire course!</p>
             {course?.certificate_enabled && (
-              <button className="px-8 py-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-black text-lg rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105">
+              <button className="px-10 py-5 bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-black text-xl rounded-[2rem] shadow-xl hover:shadow-2xl transition transform hover:scale-105 border-4 border-yellow-300">
                 🎓 View Certificate
               </button>
             )}
@@ -276,36 +279,37 @@ function LessonCard({ lesson, index, isNext }) {
   };
 
   const getStatusColor = () => {
-    if (isCompleted) return 'from-green-400 to-emerald-500';
-    if (isInProgress || isNext) return 'from-blue-500 to-green-600';
-    if (isLocked) return 'from-gray-300 to-gray-400';
-    return 'from-green-400 to-pink-500';
+    if (isCompleted) return 'from-green-500 to-emerald-600';
+    if (isInProgress || isNext) return 'from-purple-500 to-pink-600';
+    if (isLocked) return 'from-gray-400 to-gray-500';
+    return 'from-blue-500 to-cyan-600';
   };
 
   const getBorderColor = () => {
-    if (isCompleted) return 'border-green-300';
-    if (isInProgress || isNext) return 'border-blue-400';
+    if (isCompleted) return 'border-green-400';
+    if (isInProgress || isNext) return 'border-purple-400';
     if (isLocked) return 'border-gray-300';
-    return 'border-green-300';
+    return 'border-blue-400';
   };
 
   return (
     <div
-      className={`relative bg-white rounded-2xl border-4 ${getBorderColor()} shadow-lg transition-all duration-300 overflow-hidden ${
-        isLocked ? 'opacity-60' : 'hover:shadow-2xl hover:scale-[1.02]'
-      } ${isNext ? 'ring-4 ring-yellow-400 ring-offset-2' : ''}`}
+      className={`relative bg-white rounded-[2rem] border-4 ${getBorderColor()} shadow-xl transition-all duration-300 overflow-hidden ${
+        isLocked ? 'opacity-60' : 'hover:shadow-2xl hover:scale-[1.03] hover:-translate-y-1'
+      } ${isNext ? 'ring-4 ring-yellow-400 ring-offset-4 animate-pulse' : ''}`}
     >
-      {/* Next Lesson Badge */}
+      {/* Next Lesson Badge - More Colorful */}
       {isNext && !isCompleted && (
-        <div className="absolute top-0 right-0 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-4 py-1 rounded-bl-2xl font-black text-xs shadow-lg flex items-center gap-1">
-          <span>⭐</span> YOUR NEXT STEP
+        <div className="absolute top-0 right-0 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-5 py-2 rounded-bl-3xl font-black text-sm shadow-lg flex items-center gap-2 border-b-4 border-l-4 border-yellow-300">
+          <span className="text-xl animate-bounce">⭐</span> 
+          <span>YOUR NEXT STEP</span>
         </div>
       )}
 
-      <div className="flex items-center gap-4 p-6">
-        {/* Lesson Number/Status Circle */}
+      <div className="flex items-center gap-5 p-6 sm:p-7">
+        {/* Lesson Number/Status Circle - Larger & More Colorful */}
         <div
-          className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br ${getStatusColor()} flex items-center justify-center text-white font-black text-2xl sm:text-3xl flex-shrink-0 shadow-lg ${
+          className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br ${getStatusColor()} flex items-center justify-center text-white font-black text-3xl sm:text-4xl flex-shrink-0 shadow-2xl border-4 border-white/30 ${
             isInProgress ? 'animate-pulse' : ''
           }`}
         >
@@ -313,42 +317,42 @@ function LessonCard({ lesson, index, isNext }) {
         </div>
 
         {/* Lesson Info */}
-        <div className="flex-1 min-w-0 space-y-2">
+        <div className="flex-1 min-w-0 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-black text-gray-500 uppercase">
+            <span className="text-sm font-black text-gray-500 uppercase tracking-wider">
               Lesson {lesson.order_index !== undefined ? lesson.order_index + 1 : index + 1}
             </span>
-            
+
             {isCompleted && (
-              <span className="bg-green-100 text-green-800 text-xs font-black px-3 py-1 rounded-full">
+              <span className="bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-md border-2 border-green-300">
                 ✓ COMPLETE
               </span>
             )}
             {isInProgress && (
-              <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full animate-pulse">
+              <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-black px-4 py-1.5 rounded-full shadow-md animate-pulse border-2 border-purple-300">
                 {lesson.progress_percentage || 0}% DONE
               </span>
             )}
             {isLocked && (
-              <span className="bg-gray-200 text-gray-600 text-xs font-black px-3 py-1 rounded-full">
+              <span className="bg-gray-300 text-gray-600 text-xs font-black px-4 py-1.5 rounded-full shadow-md border-2 border-gray-400">
                 🔒 LOCKED
               </span>
             )}
           </div>
 
-          <h3 className="text-lg sm:text-xl font-black text-gray-800 leading-tight">
+          <h3 className="text-xl sm:text-2xl font-black text-gray-800 leading-tight">
             {lesson.title}
           </h3>
 
           {lesson.description && (
-            <p className="text-sm text-gray-600 line-clamp-2">{lesson.description}</p>
+            <p className="text-sm sm:text-base text-gray-600 line-clamp-2 font-medium">{lesson.description}</p>
           )}
 
-          {/* Progress indicator for in-progress lessons */}
+          {/* Progress indicator for in-progress lessons - More Colorful */}
           {isInProgress && lesson.progress_percentage > 0 && (
-            <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-purple-100 h-3 rounded-full overflow-hidden border-2 border-purple-200">
               <div
-                className="bg-gradient-to-r from-blue-500 to-green-600 h-full rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-500 shadow-inner"
                 style={{ width: `${lesson.progress_percentage}%` }}
               />
             </div>
@@ -356,32 +360,33 @@ function LessonCard({ lesson, index, isNext }) {
 
           {/* Resource summary */}
           {(lesson.required_resources_completed !== undefined && lesson.total_required_resources > 0) && (
-            <div className="text-xs font-bold text-gray-500">
+            <div className="text-sm font-bold text-gray-500">
               {lesson.required_resources_completed} of {lesson.total_required_resources} steps completed
             </div>
           )}
         </div>
 
-        {/* Action Button */}
+        {/* Action Button - More Prominent */}
         <div className="flex-shrink-0">
           {isLocked ? (
-            <div className="px-6 py-3 bg-gray-200 text-gray-500 font-black text-sm rounded-full flex items-center gap-2">
-              <span>🔒</span>
+            <div className="px-6 py-3 bg-gray-200 text-gray-500 font-black text-sm rounded-full flex items-center gap-2 border-2 border-gray-300">
+              <span className="text-xl">🔒</span>
               <span className="hidden sm:inline">Locked</span>
             </div>
           ) : (
             <Link
               to={`/child/lessons/${lesson.id}`}
-              className={`px-6 py-3 font-black text-sm rounded-full shadow-lg transition transform hover:scale-110 active:scale-95 flex items-center gap-2 ${
+              className={`px-7 py-4 font-black text-base sm:text-lg rounded-full shadow-xl transition transform hover:scale-110 active:scale-95 flex items-center gap-2 border-4 ${
                 isCompleted
-                  ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white hover:from-green-500 hover:to-emerald-600'
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 border-green-300'
                   : isInProgress || isNext
-                  ? 'bg-gradient-to-r from-blue-500 to-green-600 text-white hover:from-blue-600 hover:to-green-700'
-                  : 'bg-gradient-to-r from-green-500 to-pink-500 text-white hover:from-green-600 hover:to-pink-600'
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 border-purple-300'
+                  : 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white hover:from-blue-600 hover:to-cyan-700 border-blue-300'
               }`}
             >
+              <span className="text-xl">{isCompleted ? '📖' : isInProgress ? '▶️' : '🚀'}</span>
               <span>{isCompleted ? 'Review' : isInProgress ? 'Continue' : 'Start'}</span>
-              <span>→</span>
+              <span className="text-xl">→</span>
             </Link>
           )}
         </div>

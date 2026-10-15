@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_HOME } from '../utils/roles';
 
@@ -34,18 +34,34 @@ function EyeIcon({ off }) {
 export default function Login() {
   const { user, loading: authLoading, login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     if (!authLoading && user) {
       navigate(ROLE_HOME[user.role] || '/', { replace: true });
     }
   }, [user, authLoading, navigate]);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    const messageParam = searchParams.get('message');
+    if (errorParam) {
+      if (errorParam === 'google_auth_failed') {
+        setError('Google authentication failed. Please try again.');
+      } else {
+        setError(errorParam);
+      }
+    } else if (messageParam) {
+      setError(messageParam);
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -229,11 +245,13 @@ export default function Login() {
                 </button>
               </form>
 
-              {/* Google Sign-In Button - Disabled until OAuth is configured */}
-              {/* 
+              {/* Google Sign-In Button */}
               <button
                 type="button"
-                onClick={() => window.location.href = `http://localhost:5000/api/auth/google`}
+                onClick={() => {
+                  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+                  window.location.href = `${apiBase}/auth/google`;
+                }}
                 className="mt-6 w-full flex items-center justify-center gap-3 rounded-2xl border-2 border-slate-200 bg-white py-4 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-slate-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-sm hover:shadow-lg"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -244,7 +262,6 @@ export default function Login() {
                 </svg>
                 Continue with Google
               </button>
-              */}
 
               <div className="my-8 flex items-center">
                 <div className="flex-1 border-t border-slate-200" />

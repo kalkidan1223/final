@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import axiosClient from '../api/axiosClient';
 
 function PasswordStrength({ password }) {
   let score = 0;
@@ -75,6 +76,31 @@ export default function SignupInstructor() {
   const [errors, setErrors] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isGoogleUser, setIsGoogleUser] = useState(false);
+
+  useEffect(() => {
+    // Check if user is authenticated via Google
+    const checkGoogleAuth = async () => {
+      try {
+        const res = await axiosClient.get('/auth/me');
+        const user = res.data.user;
+        if (user && user.google_id && user.role === 'pending') {
+          setIsGoogleUser(true);
+          // Pre-fill form with Google user data
+          const nameParts = user.full_name ? user.full_name.split(' ') : ['', ''];
+          setForm(prev => ({
+            ...prev,
+            first_name: nameParts[0] || '',
+            last_name: nameParts.slice(1).join(' ') || '',
+            email: user.email || '',
+          }));
+        }
+      } catch (err) {
+        // Not authenticated or error, proceed with normal registration
+      }
+    };
+    checkGoogleAuth();
+  }, []);
 
   function update(field) {
     return (e) => {
@@ -89,10 +115,10 @@ export default function SignupInstructor() {
     if (!form.last_name || form.last_name.length < 2) errs.push('Last name is required (minimum 2 characters)');
     if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.push('A valid email address is required');
     if (!form.phone || !/^\d{10,15}$/.test(form.phone)) errs.push('Phone number must be 10–15 digits');
-    if (!form.password) errs.push('Password is required');
-    if (form.password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.password))
+    if (!isGoogleUser && !form.password) errs.push('Password is required');
+    if (!isGoogleUser && form.password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.password))
       errs.push('Password must be 8+ characters with uppercase, lowercase, number, and special character');
-    if (form.password !== form.confirm_password) errs.push('Passwords do not match');
+    if (!isGoogleUser && form.password !== form.confirm_password) errs.push('Passwords do not match');
     if (!form.specialization) errs.push('Please select a specialization');
     if (!form.education_level) errs.push('Education level is required');
     if (!form.terms_agreed) errs.push('You must agree to the Terms and Conditions');
@@ -244,30 +270,43 @@ export default function SignupInstructor() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Password *</label>
-                    <input
-                      required
-                      type="password"
-                      placeholder="Create a strong password"
-                      value={form.password}
-                      onChange={update('password')}
-                      className="input-field"
-                    />
-                    {form.password && <PasswordStrength password={form.password} />}
-                  </div>
+                  {!isGoogleUser && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Password *</label>
+                        <input
+                          required
+                          type="password"
+                          placeholder="Create a strong password"
+                          value={form.password}
+                          onChange={update('password')}
+                          className="input-field"
+                        />
+                        {form.password && <PasswordStrength password={form.password} />}
+                      </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Confirm Password *</label>
-                    <input
-                      required
-                      type="password"
-                      placeholder="Repeat your password"
-                      value={form.confirm_password}
-                      onChange={update('confirm_password')}
-                      className="input-field"
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Confirm Password *</label>
+                        <input
+                          required
+                          type="password"
+                          placeholder="Repeat your password"
+                          value={form.confirm_password}
+                          onChange={update('confirm_password')}
+                          className="input-field"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {isGoogleUser && (
+                    <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4">
+                      <p className="text-sm text-blue-700 flex items-center gap-2">
+                        <span className="text-xl">🔐</span>
+                        You're signing in with Google. No password needed.
+                      </p>
+                    </div>
+                  )}
 
                   <h2 className="text-lg font-bold text-slate-700 flex items-center gap-2 pt-2 pb-2 border-b border-slate-100">
                     🏫 Professional Information
@@ -347,20 +386,21 @@ export default function SignupInstructor() {
                   </label>
 
                   {/* Submit */}
-                  <div className="flex justify-between pt-2">
-                    <Link
-                      to="/signup"
-                      className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition"
-                    >
-                      ← Back
-                    </Link>
+                  <div className="space-y-4 pt-2">
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-3 font-bold text-white shadow-lg hover:scale-105 transition-transform disabled:opacity-60 disabled:hover:scale-100"
+                      className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-3 font-bold text-white shadow-lg hover:scale-105 transition-transform disabled:opacity-60 disabled:hover:scale-100"
                     >
                       {submitting ? 'Submitting…' : '✨ Create Instructor Account'}
                     </button>
+
+                    <Link
+                      to="/signup"
+                      className="block text-center text-slate-600 hover:text-slate-800 font-semibold"
+                    >
+                      ← Back to account types
+                    </Link>
                   </div>
                 </div>
               )}

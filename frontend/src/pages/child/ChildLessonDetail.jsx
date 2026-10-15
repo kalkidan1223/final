@@ -271,43 +271,45 @@ export default function ChildLessonDetail() {
       </div>
 
       {/* ============================================ */}
-      {/* LESSON HEADER */}
+      {/* LESSON HEADER - More Colorful & Child-Friendly */}
       {/* ============================================ */}
-      <div className="bg-gradient-to-br from-blue-500 via-green-500 to-pink-500 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 rounded-[2.5rem] p-8 sm:p-10 text-white shadow-2xl relative overflow-hidden border-4 border-white/20">
         {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-        
+        <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 animate-float"></div>
+        <div className="absolute bottom-0 left-0 w-56 h-56 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 animate-float-slow"></div>
+        <div className="absolute top-1/3 left-10 text-6xl opacity-20 animate-float">⭐</div>
+        <div className="absolute bottom-10 right-1/4 text-5xl opacity-15 animate-float-slow">✨</div>
+
         <div className="relative z-10 space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="bg-white/20 px-4 py-1 rounded-full text-sm font-black backdrop-blur-sm">
-              Lesson {lesson.order_index !== undefined ? lesson.order_index + 1 : ''}
+          <div className="flex items-center gap-3">
+            <span className="bg-white/30 backdrop-blur-md px-5 py-2 rounded-full text-sm font-black border-2 border-white/50 shadow-lg">
+              📚 Lesson {lesson.order_index !== undefined ? lesson.order_index + 1 : ''}
             </span>
           </div>
-          
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight drop-shadow-lg">
             {lesson.title}
           </h1>
-          
+
           {lesson.description && (
-            <p className="text-lg font-medium text-white/90 max-w-2xl">
+            <p className="text-lg sm:text-xl font-semibold text-white/90 max-w-2xl leading-relaxed">
               {lesson.description}
             </p>
           )}
-          
-          {/* Progress Bar */}
-          <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold">Your Progress</span>
-              <span className="text-xl font-black">{progress?.progress_percentage || 0}%</span>
+
+          {/* Progress Bar - More Colorful */}
+          <div className="bg-white/30 backdrop-blur-md rounded-2xl p-5 border-2 border-white/30 shadow-lg">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-base font-bold">Your Progress</span>
+              <span className="text-2xl sm:text-3xl font-black drop-shadow-md">{progress?.progress_percentage || 0}%</span>
             </div>
-            <div className="w-full bg-white/30 h-4 rounded-full overflow-hidden">
+            <div className="w-full bg-white/30 h-5 rounded-full overflow-hidden border-2 border-white/30">
               <div
-                className="bg-gradient-to-r from-green-400 to-emerald-500 h-full rounded-full transition-all duration-700"
+                className="bg-gradient-to-r from-yellow-400 to-orange-400 h-full rounded-full transition-all duration-700 shadow-inner"
                 style={{ width: `${progress?.progress_percentage || 0}%` }}
               />
             </div>
-            <div className="text-sm font-bold mt-2">
+            <div className="text-sm sm:text-base font-bold mt-3">
               {progress?.required_resources_completed || 0} of {progress?.total_required_resources || 0} steps completed
             </div>
           </div>
@@ -315,12 +317,12 @@ export default function ChildLessonDetail() {
       </div>
 
       {/* ============================================ */}
-      {/* LEARNING PATH - Sequential Resources */}
+      {/* LEARNING PATH - More Child-Friendly */}
       {/* ============================================ */}
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <span className="text-4xl">🗺️</span>
-          <h2 className="text-2xl sm:text-3xl font-black text-gray-800">Your Learning Steps</h2>
+          <span className="text-4xl animate-bounce">🗺️</span>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Your Learning Steps</h2>
         </div>
 
         {resources && resources.length > 0 ? (
@@ -338,10 +340,10 @@ export default function ChildLessonDetail() {
             ))}
           </div>
         ) : (
-          <div className="bg-gray-50 rounded-3xl p-12 text-center border-2 border-dashed border-gray-300">
-            <span className="text-6xl block mb-4">📚</span>
-            <h3 className="text-xl font-black text-gray-700 mb-2">No Learning Steps Yet</h3>
-            <p className="text-gray-600 font-medium">Your teacher is preparing the lesson content!</p>
+          <div className="bg-gradient-to-br from-purple-100 to-pink-100 rounded-[2.5rem] p-12 text-center border-4 border-purple-200 shadow-xl">
+            <span className="text-7xl block mb-4 animate-bounce">📚</span>
+            <h3 className="text-xl sm:text-2xl font-black text-purple-800 mb-2">No Learning Steps Yet</h3>
+            <p className="text-base font-bold text-purple-600">Your teacher is preparing the lesson content!</p>
           </div>
         )}
 
@@ -365,11 +367,11 @@ export default function ChildLessonDetail() {
 }
 
 // ============================================
-// RESOURCE STEP COMPONENT
+// RESOURCE STEP COMPONENT - More Child-Friendly
 // ============================================
 function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted }) {
   const [expanded, setExpanded] = useState(isCurrent);
-  
+
   useEffect(() => {
     if (isCurrent) {
       setExpanded(true);
@@ -410,70 +412,70 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
 
   const getBorderColor = () => {
     if (isCompleted) return 'border-green-400';
-    if (isCurrent || isInProgress) return 'border-blue-500';
+    if (isCurrent || isInProgress) return 'border-purple-500';
     if (isLocked) return 'border-gray-300';
-    return 'border-green-300';
+    return 'border-pink-400';
   };
 
   const getBgColor = () => {
-    if (isCompleted) return 'bg-green-50';
-    if (isCurrent || isInProgress) return 'bg-blue-50';
+    if (isCompleted) return 'bg-gradient-to-br from-green-50 to-emerald-50';
+    if (isCurrent || isInProgress) return 'bg-gradient-to-br from-purple-50 to-pink-50';
     if (isLocked) return 'bg-gray-50';
     return 'bg-white';
   };
 
   return (
     <div className="relative">
-      {/* Connecting Line */}
+      {/* Connecting Line - More Colorful */}
       {!isLast && (
-        <div className={`absolute left-8 top-20 w-1 h-full ${
-          isCompleted ? 'bg-green-400' : 'bg-gray-300'
-        }`} style={{ height: 'calc(100% - 80px)' }}></div>
+        <div className={`absolute left-10 top-24 w-2 h-full ${
+          isCompleted ? 'bg-gradient-to-b from-green-400 to-emerald-400' : 'bg-gray-300'
+        }`} style={{ height: 'calc(100% - 96px)' }}></div>
       )}
 
       <div
-        className={`relative ${getBgColor()} rounded-3xl border-4 ${getBorderColor()} shadow-lg transition-all duration-300 ${
-          isLocked ? 'opacity-60' : ''
-        } ${isCurrent && !isCompleted ? 'ring-4 ring-yellow-400 ring-offset-2' : ''}`}
+        className={`relative ${getBgColor()} rounded-[2rem] border-4 ${getBorderColor()} shadow-xl transition-all duration-300 ${
+          isLocked ? 'opacity-60' : 'hover:shadow-2xl hover:scale-[1.01]'
+        } ${isCurrent && !isCompleted ? 'ring-4 ring-yellow-400 ring-offset-4 animate-pulse' : ''}`}
       >
-        {/* Current Step Badge */}
+        {/* Current Step Badge - More Colorful */}
         {isCurrent && !isCompleted && (
-          <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-6 py-2 rounded-full font-black text-sm shadow-lg flex items-center gap-2 z-10">
-            <span>⭐</span> YOUR NEXT STEP <span>⭐</span>
+          <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-6 py-2.5 rounded-full font-black text-sm shadow-xl flex items-center gap-2 z-10 border-2 border-yellow-300">
+            <span className="text-xl animate-bounce">⭐</span> YOUR NEXT STEP <span className="text-xl animate-bounce">⭐</span>
           </div>
         )}
 
-        <div className="p-6">
+        <div className="p-6 sm:p-8">
           {/* Step Header - Always Visible */}
-          <div className="flex items-start gap-4">
-            {/* Status Circle */}
+          <div className="flex items-start gap-5">
+            {/* Status Circle - Larger */}
             <div
-              className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl flex-shrink-0 shadow-lg ${
-                isCompleted ? 'bg-gradient-to-br from-green-400 to-emerald-500' :
-                isCurrent || isInProgress ? 'bg-gradient-to-br from-blue-500 to-green-600 animate-pulse' :
-                isLocked ? 'bg-gradient-to-br from-gray-300 to-gray-400' :
-                'bg-gradient-to-br from-green-400 to-pink-500'
+              className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl flex-shrink-0 shadow-2xl border-4 border-white ${
+                isCompleted ? 'bg-gradient-to-br from-green-500 to-emerald-600' :
+                isCurrent || isInProgress ? 'bg-gradient-to-br from-purple-600 to-pink-600 animate-pulse' :
+                isLocked ? 'bg-gradient-to-br from-gray-400 to-gray-500' :
+                'bg-gradient-to-br from-pink-500 to-orange-500'
               }`}
             >
               {getStatusIcon()}
             </div>
 
-            {/* Step Info */}
+            {/* Step Info - More Child-Friendly */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-2">
-                <span className="text-xs font-black text-gray-500 uppercase">
+              <div className="flex items-center gap-2 flex-wrap mb-3">
+                <span className="text-sm font-black text-slate-500 uppercase tracking-wider">
                   Step {index + 1}
                 </span>
-                <span className="text-sm font-black text-green-600 uppercase bg-green-100 px-3 py-1 rounded-full">
+                <span className="text-sm font-black text-purple-600 uppercase bg-purple-100 px-4 py-1.5 rounded-full border-2 border-purple-300">
                   {getStepLabel()}
                 </span>
                 {resource.is_required && (
-                  <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
+                  <span className="text-xs font-bold text-orange-600 bg-orange-100 px-3 py-1.5 rounded-full border-2 border-orange-300">
                     Required
                   </span>
                 )}
                 {!resource.is_required && (
-                  <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                  <span className="text-xs font-bold text-blue-600 bg-blue-100 px-3 py-1.5 rounded-full border-2 border-blue-300">
                     Optional
                   </span>
                 )}
@@ -481,38 +483,38 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
 
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-xl font-black text-gray-800 mb-1 flex items-center gap-2">
-                    <span>{getResourceIcon()}</span>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-800 mb-2 flex items-center gap-2">
+                    <span className="text-2xl">{getResourceIcon()}</span>
                     <span>{resource.title}</span>
                   </h3>
                   {resource.description && (
-                    <p className="text-sm text-gray-600">{resource.description}</p>
+                    <p className="text-sm sm:text-base text-slate-600 font-medium">{resource.description}</p>
                   )}
                 </div>
 
-                {/* Status Badge */}
+                {/* Status Badge - More Colorful */}
                 {isCompleted && (
-                  <span className="bg-green-100 text-green-800 text-sm font-black px-4 py-2 rounded-full flex items-center gap-1 whitespace-nowrap">
-                    <span>✓</span> COMPLETE
+                  <span className="bg-gradient-to-r from-green-400 to-emerald-500 text-white text-sm font-black px-5 py-2.5 rounded-full flex items-center gap-2 whitespace-nowrap shadow-lg border-2 border-green-300">
+                    <span className="text-lg">✓</span> COMPLETE
                   </span>
                 )}
                 {isInProgress && resource.progress_percentage > 0 && (
-                  <span className="bg-blue-100 text-blue-800 text-sm font-black px-4 py-2 rounded-full whitespace-nowrap">
+                  <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-black px-5 py-2.5 rounded-full whitespace-nowrap shadow-lg border-2 border-purple-300 animate-pulse">
                     {resource.progress_percentage}% DONE
                   </span>
                 )}
                 {isLocked && (
-                  <span className="bg-gray-200 text-gray-600 text-sm font-black px-4 py-2 rounded-full flex items-center gap-1 whitespace-nowrap">
-                    <span>🔒</span> LOCKED
+                  <span className="bg-gray-300 text-gray-600 text-sm font-black px-5 py-2.5 rounded-full flex items-center gap-2 whitespace-nowrap border-2 border-gray-400">
+                    <span className="text-lg">🔒</span> LOCKED
                   </span>
                 )}
               </div>
 
-              {/* Progress Bar for in-progress resources */}
+              {/* Progress Bar for in-progress resources - More Colorful */}
               {isInProgress && resource.progress_percentage > 0 && (
-                <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden mt-3">
+                <div className="w-full bg-purple-100 h-4 rounded-full overflow-hidden mt-4 border-2 border-purple-200">
                   <div
-                    className="bg-gradient-to-r from-blue-500 to-green-600 h-full rounded-full transition-all duration-500"
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-500 shadow-inner"
                     style={{ width: `${resource.progress_percentage}%` }}
                   />
                 </div>
@@ -520,34 +522,35 @@ function ResourceStep({ resource, index, isCurrent, isFirst, isLast, onCompleted
             </div>
           </div>
 
-          {/* Expandable Resource Viewer */}
+          {/* Expandable Resource Viewer - More Child-Friendly */}
           {!isLocked && (
             <div className="mt-6">
               {expanded ? (
-                <div className="border-t-2 border-gray-200 pt-6">
+                <div className="border-t-4 border-purple-200 pt-6">
                   <LessonResourceViewer
                     resource={resource}
                     onCompleted={onCompleted}
                   />
                   <button
                     onClick={() => setExpanded(false)}
-                    className="mt-4 text-sm font-bold text-gray-600 hover:text-gray-800 flex items-center gap-1"
+                    className="mt-4 text-sm font-bold text-purple-600 hover:text-purple-800 flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-purple-50 transition"
                   >
-                    <span>▲</span> Collapse
+                    <span className="text-lg">▲</span> Collapse
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => setExpanded(true)}
-                  className={`w-full py-4 rounded-2xl font-black text-lg shadow-lg transition transform hover:scale-105 ${
+                  className={`w-full py-5 rounded-2xl font-black text-lg sm:text-xl shadow-xl transition transform hover:scale-105 active:scale-95 border-4 ${
                     isCompleted
-                      ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white hover:from-green-500 hover:to-emerald-600'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 border-green-300'
                       : isCurrent || isInProgress
-                      ? 'bg-gradient-to-r from-blue-500 to-green-600 text-white hover:from-blue-600 hover:to-green-700'
-                      : 'bg-gradient-to-r from-green-500 to-pink-500 text-white hover:from-green-600 hover:to-pink-600'
+                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 border-purple-300'
+                      : 'bg-gradient-to-r from-pink-500 to-orange-500 text-white hover:from-pink-600 hover:to-orange-600 border-pink-300'
                   }`}
                 >
-                  {isCompleted ? '👀 Review This Step' : isCurrent ? '🚀 Start This Step' : isInProgress ? '▶️ Continue' : '👀 Open This Step'}
+                  <span className="text-2xl mr-2">{isCompleted ? '👀' : isCurrent ? '🚀' : isInProgress ? '▶️' : '👀'}</span>
+                  {isCompleted ? 'Review This Step' : isCurrent ? 'Start This Step' : isInProgress ? 'Continue' : 'Open This Step'}
                 </button>
               )}
             </div>

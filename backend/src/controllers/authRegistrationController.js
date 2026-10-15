@@ -53,7 +53,18 @@ async function logAudit(client, userId, action, entityType, entityId, oldValues,
 
 async function registerParent(req, res, next) {
   try {
-    const validationErrors = validateRegisterParent(req.body);
+    const emailToCheck = req.body?.email ? String(req.body.email).toLowerCase() : '';
+    const existingCheck = emailToCheck ? await query(
+      `SELECT id, google_id, role FROM users WHERE email = $1`,
+      [emailToCheck]
+    ) : { rows: [] };
+    const isGoogle = Boolean(
+      req.user?.google_id ||
+      req.body.is_google ||
+      (existingCheck.rows.length > 0 && existingCheck.rows[0].google_id)
+    );
+
+    const validationErrors = validateRegisterParent(req.body, isGoogle);
     if (validationErrors.length) {
       return res.status(400).json({ errors: validationErrors });
     }
@@ -80,55 +91,115 @@ async function registerParent(req, res, next) {
     const emRel = emergency_contact_relationship || null;
     const emPhone = emergency_contact_phone || null;
 
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    const passwordHash = password ? await bcrypt.hash(password, SALT_ROUNDS) : null;
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      const result = await client.query(
-        `INSERT INTO registration_requests (
-          full_name, email, password_hash, phone, alt_phone, date_of_birth, gender,
-          nationality, occupation, relationship_to_child, national_id, profile_image_url,
-          country, region, city, sub_city, woreda, house_number, postal_code,
-          emergency_contact_name, emergency_contact_relationship, emergency_contact_phone,
-          terms_agreed, guardian_confirmed, status
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending')
-        RETURNING id, full_name, email, phone, status`,
-        [
-          full_name, email.toLowerCase(), passwordHash, phone, alt_phone || null,
-          date_of_birth, gender, nationality, occupationVal, relationshipVal,
-          national_id || null, profile_image_url || null, country, region, city,
-          sub_city || null, woreda || null, house_number || null, postal_code || null,
-          emName, emRel, emPhone,
-          terms_agreed, guardian_confirmed,
-        ]
+      // Check if user already exists (from Google OAuth)
+      const existingUser = await client.query(
+        `SELECT id, email, full_name, google_id, role FROM users WHERE email = $1`,
+        [email.toLowerCase()]
       );
 
-      await client.query(
-        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [null, 'PARENT_REGISTRATION', 'registration_request', result.rows[0].id, null, {
-          full_name: result.rows[0].full_name, email: result.rows[0].email,
-        }, null, null, null]
-      );
+      let userId;
 
-      // Notify all active administrators about the new registration
-      const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
-      for (const admin of adminResult.rows) {
+      if (existingUser.rows.length > 0) {
+        // User exists from Google OAuth - update role and create parent record
+        userId = existingUser.rows[0].id;
+
+        // Update user role to parent
         await client.query(
-          `INSERT INTO notifications (user_id, type, title, message)
-           VALUES ($1, 'alert', 'New Parent Registration Pending Approval', $2)`,
-          [admin.id, `Parent "${result.rows[0].full_name}" (${result.rows[0].email}) submitted registration and requires administrator approval.`]
+          `UPDATE users SET role = 'parent', full_name = $1, updated_at = now() WHERE id = $2`,
+          [full_name, userId]
         );
-      }
 
-      await client.query('COMMIT');
-      res.status(201).json({
-        message: 'Registration submitted successfully. Your account is now pending administrator approval.',
-        registration_id: result.rows[0].id,
-        status: 'pending',
-      });
+        // Create parent record
+        await client.query(
+          `INSERT INTO parents (user_id, phone, alt_phone, date_of_birth, gender, nationality,
+            occupation, relationship_to_child, national_id, profile_image_url,
+            country, region, city, sub_city, woreda, house_number, postal_code,
+            emergency_contact_name, emergency_contact_relationship, emergency_contact_phone)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+          [
+            userId, phone, alt_phone || null, date_of_birth, gender, nationality,
+            occupationVal, relationshipVal, national_id || null, profile_image_url || null,
+            country, region, city, sub_city || null, woreda || null, house_number || null, postal_code || null,
+            emName, emRel, emPhone
+          ]
+        );
+
+        // Create registration request
+        const regResult = await client.query(
+          `INSERT INTO registration_requests (user_id, full_name, email, phone, status)
+           VALUES ($1, $2, $3, $4, 'pending')
+           RETURNING id, full_name, email, phone, status`,
+          [userId, full_name, email.toLowerCase(), phone]
+        );
+
+        // Notify admins
+        const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
+        for (const admin of adminResult.rows) {
+          await client.query(
+            `INSERT INTO notifications (user_id, type, title, message)
+             VALUES ($1, 'alert', 'New Parent Registration Pending Approval', $2)`,
+            [admin.id, `Parent "${full_name}" (${email}) submitted registration via Google and requires administrator approval.`]
+          );
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({
+          message: 'Registration submitted successfully. Your account is now pending administrator approval.',
+          registration_id: regResult.rows[0].id,
+          status: 'pending',
+        });
+      } else {
+        // New user - create registration request
+        const result = await client.query(
+          `INSERT INTO registration_requests (
+            full_name, email, password_hash, phone, alt_phone, date_of_birth, gender,
+            nationality, occupation, relationship_to_child, national_id, profile_image_url,
+            country, region, city, sub_city, woreda, house_number, postal_code,
+            emergency_contact_name, emergency_contact_relationship, emergency_contact_phone,
+            terms_agreed, guardian_confirmed, status
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending')
+          RETURNING id, full_name, email, phone, status`,
+          [
+            full_name, email.toLowerCase(), passwordHash, phone, alt_phone || null,
+            date_of_birth, gender, nationality, occupationVal, relationshipVal,
+            national_id || null, profile_image_url || null, country, region, city,
+            sub_city || null, woreda || null, house_number || null, postal_code || null,
+            emName, emRel, emPhone,
+            terms_agreed, guardian_confirmed,
+          ]
+        );
+
+        await client.query(
+          `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [null, 'PARENT_REGISTRATION', 'registration_request', result.rows[0].id, null, {
+            full_name: result.rows[0].full_name, email: result.rows[0].email,
+          }, null, null, null]
+        );
+
+        // Notify all active administrators about the new registration
+        const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
+        for (const admin of adminResult.rows) {
+          await client.query(
+            `INSERT INTO notifications (user_id, type, title, message)
+             VALUES ($1, 'alert', 'New Parent Registration Pending Approval', $2)`,
+            [admin.id, `Parent "${result.rows[0].full_name}" (${result.rows[0].email}) submitted registration and requires administrator approval.`]
+          );
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({
+          message: 'Registration submitted successfully. Your account is now pending administrator approval.',
+          registration_id: result.rows[0].id,
+          status: 'pending',
+        });
+      }
     } catch (err) {
       await client.query('ROLLBACK');
       if (err.code === '23505') {
@@ -330,54 +401,114 @@ async function registerInstructor(req, res, next) {
     const errs = [];
     if (!full_name || full_name.trim().length < 2) errs.push('Full name is required');
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push('Valid email is required');
-    if (!password || !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password))
+    if (!password && !req.user?.google_id) errs.push('Password is required (unless using Google OAuth)');
+    if (password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password))
       errs.push('Password must be 8+ chars with uppercase, lowercase, number and special character');
     if (!phone || !/^\d{10,15}$/.test(phone)) errs.push('Phone must be 10-15 digits');
     if (!terms_agreed) errs.push('You must agree to the Terms and Conditions');
     if (errs.length) return res.status(400).json({ errors: errs });
 
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    const passwordHash = password ? await bcrypt.hash(password, SALT_ROUNDS) : null;
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      const result = await client.query(
-        `INSERT INTO instructor_registration_requests
-           (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
-         RETURNING id, full_name, email, status`,
-        [
-          full_name.trim(), email.toLowerCase(), passwordHash, phone,
-          specialization || null, education_level || null,
-          years_of_experience ? parseInt(years_of_experience, 10) : null,
-          bio || null, terms_agreed,
-        ]
+      // Check if user already exists (from Google OAuth)
+      const existingUser = await client.query(
+        `SELECT id, email, full_name, google_id, role FROM users WHERE email = $1`,
+        [email.toLowerCase()]
       );
 
-      await client.query(
-        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [null, 'INSTRUCTOR_REGISTRATION', 'instructor_registration_request', result.rows[0].id,
-         null, { full_name: result.rows[0].full_name, email: result.rows[0].email }, null, null, null]
-      );
+      let result;
 
-      // Notify all active administrators about the new instructor application
-      const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
-      for (const admin of adminResult.rows) {
+      if (existingUser.rows.length > 0) {
+        // User exists from Google OAuth - update role and create instructor record
+        const userId = existingUser.rows[0].id;
+
+        // Update user role to instructor
         await client.query(
-          `INSERT INTO notifications (user_id, type, title, message)
-           VALUES ($1, 'alert', 'New Instructor Application Pending Review', $2)`,
-          [admin.id, `Instructor candidate "${result.rows[0].full_name}" (${result.rows[0].email}, Specialization: ${specialization || 'General'}) submitted an application.`]
+          `UPDATE users SET role = 'instructor', full_name = $1, updated_at = now() WHERE id = $2`,
+          [full_name.trim(), userId]
         );
-      }
 
-      await client.query('COMMIT');
-      res.status(201).json({
-        message: 'Instructor application submitted. Your account is pending administrator review.',
-        registration_id: result.rows[0].id,
-        status: 'pending',
-      });
+        // Create instructor record
+        result = await client.query(
+          `INSERT INTO instructors (user_id, phone, specialization, education_level, years_of_experience, bio)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, full_name, email, status`,
+          [
+            userId, phone,
+            specialization || null, education_level || null,
+            years_of_experience ? parseInt(years_of_experience, 10) : null,
+            bio || null
+          ]
+        );
+
+        // Create registration request
+        await client.query(
+          `INSERT INTO instructor_registration_requests (user_id, full_name, email, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+           RETURNING id, full_name, email, status`,
+          [userId, full_name.trim(), email.toLowerCase(), phone, specialization || null, education_level || null,
+           years_of_experience ? parseInt(years_of_experience, 10) : null, bio || null, terms_agreed]
+        );
+
+        // Notify admins
+        const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
+        for (const admin of adminResult.rows) {
+          await client.query(
+            `INSERT INTO notifications (user_id, type, title, message)
+             VALUES ($1, 'alert', 'New Instructor Application Pending Review', $2)`,
+            [admin.id, `Instructor candidate "${full_name}" (${email}, Specialization: ${specialization || 'General'}) submitted an application via Google.`]
+          );
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({
+          message: 'Instructor application submitted. Your account is pending administrator review.',
+          registration_id: result.rows[0].id,
+          status: 'pending',
+        });
+      } else {
+        // New user - create registration request
+        result = await client.query(
+          `INSERT INTO instructor_registration_requests
+             (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
+           RETURNING id, full_name, email, status`,
+          [
+            full_name.trim(), email.toLowerCase(), passwordHash, phone,
+            specialization || null, education_level || null,
+            years_of_experience ? parseInt(years_of_experience, 10) : null,
+            bio || null, terms_agreed,
+          ]
+        );
+
+        await client.query(
+          `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [null, 'INSTRUCTOR_REGISTRATION', 'instructor_registration_request', result.rows[0].id,
+           null, { full_name: result.rows[0].full_name, email: result.rows[0].email }, null, null, null]
+        );
+
+        // Notify all active administrators about the new instructor application
+        const adminResult = await client.query("SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE");
+        for (const admin of adminResult.rows) {
+          await client.query(
+            `INSERT INTO notifications (user_id, type, title, message)
+             VALUES ($1, 'alert', 'New Instructor Application Pending Review', $2)`,
+            [admin.id, `Instructor candidate "${result.rows[0].full_name}" (${result.rows[0].email}, Specialization: ${specialization || 'General'}) submitted an application.`]
+          );
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({
+          message: 'Instructor application submitted. Your account is pending administrator review.',
+          registration_id: result.rows[0].id,
+          status: 'pending',
+        });
+      }
     } catch (err) {
       await client.query('ROLLBACK');
       if (err.code === '23505') {
@@ -401,4 +532,4 @@ module.exports = {
   sendVerificationToken,
   verifyEmail,
   logAudit,
-};
+};

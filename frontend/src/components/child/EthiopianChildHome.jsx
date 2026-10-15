@@ -144,25 +144,27 @@ export default function EthiopianChildHome({ data, loading, error, onRetry }) {
         </button>
       </div>
 
-      {/* ── Greeting: name, time of day, one line of Amharic ── */}
-      <header className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-600 via-teal-600 to-sky-600 p-6 sm:p-8 text-white shadow-xl">
-        <div className="absolute -top-6 -right-4 text-[9rem] opacity-10 select-none pointer-events-none">
+      {/* ── Greeting: name, time of day, one line of Amharic - More Colorful & Playful ── */}
+      <header className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 p-6 sm:p-10 text-white shadow-2xl border-4 border-white/20">
+        <div className="absolute -top-8 -right-6 text-[10rem] opacity-10 select-none pointer-events-none animate-float">
           🇪🇹
         </div>
-        <div className="absolute bottom-0 right-24 text-6xl opacity-20 select-none pointer-events-none">
+        <div className="absolute bottom-0 right-32 text-7xl opacity-20 select-none pointer-events-none animate-float-slow">
           🌿
         </div>
+        <div className="absolute top-1/3 left-10 text-6xl opacity-15 select-none pointer-events-none animate-float">⭐</div>
+        <div className="absolute bottom-10 left-1/4 text-5xl opacity-10 select-none pointer-events-none animate-float-slow">✨</div>
 
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-5">
-          <div className="w-20 h-20 shrink-0 rounded-3xl bg-white/20 backdrop-blur border-2 border-white/40 flex items-center justify-center text-5xl shadow-lg">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-6">
+          <div className="w-24 h-24 shrink-0 rounded-3xl bg-white/30 backdrop-blur-md border-4 border-white/50 flex items-center justify-center text-6xl shadow-2xl animate-bounce">
             {greeting.emoji}
           </div>
 
-          <div className="space-y-1.5 flex-1">
-            <h1 className="text-2xl sm:text-4xl font-black leading-tight">
+          <div className="space-y-2 flex-1">
+            <h1 className="text-3xl sm:text-5xl font-black leading-tight drop-shadow-lg">
               {greeting.amharic} {child.full_name || 'ትንሹ ኮከብ'}!
             </h1>
-            <p className="text-sm sm:text-base font-bold text-amber-100">
+            <p className="text-base sm:text-lg font-bold text-yellow-100 leading-relaxed">
               እንኳን ወደ ብራና የህፃናት መማሪያ በደህና መጣህ!
             </p>
           </div>
@@ -178,15 +180,15 @@ export default function EthiopianChildHome({ data, loading, error, onRetry }) {
                 },
               ])
             }
-            className="shrink-0 w-full sm:w-auto px-6 py-4 bg-white text-emerald-800 font-black rounded-3xl shadow-xl active:scale-95 transition text-base flex items-center justify-center gap-2"
+            className="shrink-0 w-full sm:w-auto px-8 py-5 bg-white/30 backdrop-blur-md border-4 border-white/50 text-white font-black rounded-3xl shadow-2xl active:scale-95 transition text-lg flex items-center justify-center gap-3 hover:bg-white/40"
           >
-            <span className="text-xl">{voice.isSpeaking ? '🔊' : '🔈'}</span>
+            <span className="text-2xl">{voice.isSpeaking ? '🔊' : '🔈'}</span>
             አስማም
           </button>
         </div>
       </header>
 
-      {/* ── THE ONE BIG THING: what the teacher set for today ── */}
+      {/* ── THE ONE BIG THING: what the teacher set for today - More Colorful & Playful ── */}
       {continueLearning ? (
         <section>
           <PrimaryLessonCard
@@ -204,31 +206,31 @@ export default function EthiopianChildHome({ data, loading, error, onRetry }) {
         <section>
           <Link
             to={`/child/courses/${fallbackCourse.id}`}
-            className="block rounded-[2rem] bg-gradient-to-br from-sky-600 to-indigo-600 p-6 sm:p-8 text-white shadow-xl active:scale-[0.99] transition"
+            className="block rounded-[2.5rem] bg-gradient-to-br from-cyan-500 via-blue-600 to-purple-600 p-6 sm:p-10 text-white shadow-2xl active:scale-[0.99] transition border-4 border-white/20"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-              <div className="space-y-1.5">
-                <span className="inline-block bg-black/20 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              <div className="space-y-2">
+                <span className="inline-block bg-white/30 backdrop-blur-md px-4 py-2 rounded-full text-sm font-black uppercase tracking-wide shadow-lg border-2 border-white/50">
                   👨‍🏫 የመምህርህ ትምህርት
                 </span>
-                <h2 className="text-xl sm:text-3xl font-black">{fallbackCourse.title}</h2>
-                <p className="text-sm font-bold text-sky-100">
+                <h2 className="text-2xl sm:text-4xl font-black drop-shadow-lg">{fallbackCourse.title}</h2>
+                <p className="text-base font-bold text-cyan-100">
                   መምህር: {fallbackCourse.instructor_name || 'የክፍሉ መምህር'}
                 </p>
               </div>
-              <span className="shrink-0 px-7 py-4 bg-white text-sky-700 font-black rounded-3xl shadow-xl text-lg flex items-center gap-2">
-                ▶ ጀምር
+              <span className="shrink-0 px-8 py-5 bg-white/30 backdrop-blur-md border-4 border-white/50 text-white font-black rounded-3xl shadow-2xl text-xl flex items-center gap-3 hover:bg-white/40 transition">
+                <span className="text-3xl animate-bounce">▶</span> ጀምር
               </span>
             </div>
           </Link>
         </section>
       ) : (
-        <section className="rounded-[2rem] bg-white border-4 border-dashed border-slate-200 p-8 text-center space-y-3">
-          <span className="text-6xl block">📚</span>
-          <h2 className="text-lg sm:text-xl font-black text-slate-800">
+        <section className="rounded-[2.5rem] bg-gradient-to-br from-purple-100 to-pink-100 border-4 border-dashed border-purple-300 p-10 text-center space-y-4 shadow-xl">
+          <span className="text-7xl block animate-bounce">📚</span>
+          <h2 className="text-xl sm:text-2xl font-black text-purple-800">
             መምህርህ አስደሳች ትምህርት እየዘጋጀ ነው
           </h2>
-          <p className="text-sm font-bold text-slate-500">
+          <p className="text-base font-bold text-purple-600">
             ትንሽ ቆይተህ ተጫን። በዚህ ውስጥ ልለት ተጫን!
           </p>
         </section>

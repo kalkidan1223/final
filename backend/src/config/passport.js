@@ -46,60 +46,22 @@ passport.use(
             user.google_id = google_id;
           }
         } else {
-          // New user - create account as parent (default role for Google sign-in)
-          // Note: This creates a pending parent account that needs admin approval
+          // New user - create temporary user with 'pending' role
+          // User will choose role (Instructor or Parent) after Google auth
           
           // Generate a random password (user won't need it for Google sign-in)
           const randomPassword = Math.random().toString(36).slice(-12) + Math.random().toString(36).slice(-12);
           const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
-          // Create user
+          // Create user with 'pending' role
           const newUserResult = await query(
-            `INSERT INTO users (email, password_hash, full_name, role, google_id, is_active)
-             VALUES ($1, $2, $3, 'parent', $4, FALSE)
+            `INSERT INTO users (email, password_hash, full_name, google_id, is_active, role)
+             VALUES ($1, $2, $3, $4, FALSE, 'pending')
              RETURNING *`,
             [email, hashedPassword, full_name, google_id]
           );
 
           user = newUserResult.rows[0];
-
-          // Create parent record
-          const parentResult = await query(
-            `INSERT INTO parents (user_id, full_name)
-             VALUES ($1, $2)
-             RETURNING id`,
-            [user.id, full_name]
-          );
-
-          user.parent_id = parentResult.rows[0].id;
-
-          // Create registration request
-          await query(
-            `INSERT INTO registration_requests (user_id, status, created_at)
-             VALUES ($1, 'pending', now())`,
-            [user.id]
-          );
-
-          // Notify admins
-          const adminResult = await query(
-            `SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE`
-          );
-
-          if (adminResult.rows.length > 0) {
-            const adminIds = adminResult.rows.map(r => r.id);
-            const values = adminIds.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(',');
-            const params = adminIds.flatMap(adminId => [
-              adminId,
-              'info',
-              'New Parent Registration (Google)',
-              `${full_name} registered via Google and is pending approval`,
-            ]);
-            
-            await query(
-              `INSERT INTO notifications (user_id, type, title, message) VALUES ${values}`,
-              params
-            );
-          }
         }
 
         return done(null, user);

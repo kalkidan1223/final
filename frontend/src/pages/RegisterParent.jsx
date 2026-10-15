@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DateOfBirthField from '../components/DateOfBirthField';
+import axiosClient from '../api/axiosClient';
 
 function calculateAge(dob) {
   if (!dob) return null;
@@ -78,6 +79,7 @@ export default function RegisterParent() {
   const [errors, setErrors] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isGoogleUser, setIsGoogleUser] = useState(false);
 
   const [form, setForm] = useState({
     // Personal
@@ -93,6 +95,31 @@ export default function RegisterParent() {
     // Consent
     terms_agreed: false, guardian_confirmed: false,
   });
+
+  useEffect(() => {
+    // Check if user is authenticated via Google
+    const checkGoogleAuth = async () => {
+      try {
+        const res = await axiosClient.get('/auth/me');
+        const user = res.data.user;
+        if (user && user.google_id && user.role === 'pending') {
+          setIsGoogleUser(true);
+          // Pre-fill form with Google user data
+          const nameParts = user.full_name ? user.full_name.split(' ') : ['', '', ''];
+          setForm(prev => ({
+            ...prev,
+            first_name: nameParts[0] || '',
+            middle_name: nameParts[1] || '',
+            last_name: nameParts.slice(2).join(' ') || '',
+            email: user.email || '',
+          }));
+        }
+      } catch (err) {
+        // Not authenticated or error, proceed with normal registration
+      }
+    };
+    checkGoogleAuth();
+  }, []);
 
   function update(field) {
     return (e) => {
@@ -118,10 +145,10 @@ export default function RegisterParent() {
       if (!form.phone || !/^\d{10,15}$/.test(form.phone)) errs.push('Phone number must be 10-15 digits');
       if (form.alt_phone && !/^\d{10,15}$/.test(form.alt_phone)) errs.push('Alt phone must be 10-15 digits');
       if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.push('Valid email is required');
-      if (!form.password) errs.push('Password is required');
-      if (form.password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.password))
+      if (!isGoogleUser && !form.password) errs.push('Password is required');
+      if (!isGoogleUser && form.password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(form.password))
         errs.push('Password must be 8+ chars, with uppercase, lowercase, number, and special character');
-      if (form.password !== form.confirm_password) errs.push('Passwords do not match');
+      if (!isGoogleUser && form.password !== form.confirm_password) errs.push('Passwords do not match');
     } else if (step === 1) {
       if (!form.country) errs.push('Country is required');
       if (!form.region) errs.push('Region is required');
@@ -172,6 +199,7 @@ export default function RegisterParent() {
         date_of_birth: form.date_of_birth || null,
         occupation: form.occupation || 'Not Specified',
         relationship_to_child: form.relationship_to_child || 'Parent',
+        is_google: isGoogleUser,
       };
       await registerParent(payload);
       setSubmitted(true);
@@ -184,7 +212,7 @@ export default function RegisterParent() {
   }
 
   const allFieldsFilled = currentStep === 2
-    ? form.first_name && form.last_name && form.email && form.password && form.confirm_password && form.terms_agreed && form.guardian_confirmed
+    ? form.first_name && form.last_name && form.email && (isGoogleUser || (form.password && form.confirm_password)) && form.terms_agreed && form.guardian_confirmed
     : currentStep === 1
     ? form.country && form.region && form.city
     : form.first_name && form.last_name && form.gender && form.date_of_birth && form.nationality && form.phone && form.email;
@@ -296,9 +324,21 @@ export default function RegisterParent() {
                   </div>
                   <input placeholder="Alternative Phone" value={form.alt_phone} onChange={update('alt_phone')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
                   <input required type="email" placeholder="Email Address *" value={form.email} onChange={update('email')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
-                  <input required type="password" placeholder="Password *" value={form.password} onChange={update('password')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
-                  <input required type="password" placeholder="Confirm Password *" value={form.confirm_password} onChange={update('confirm_password')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
-                  {form.password && <PasswordStrength password={form.password} />}
+                  {!isGoogleUser && (
+                    <>
+                      <input required type="password" placeholder="Password *" value={form.password} onChange={update('password')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
+                      <input required type="password" placeholder="Confirm Password *" value={form.confirm_password} onChange={update('confirm_password')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
+                      {form.password && <PasswordStrength password={form.password} />}
+                    </>
+                  )}
+                  {isGoogleUser && (
+                    <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4">
+                      <p className="text-sm text-blue-700 flex items-center gap-2">
+                        <span className="text-xl">🔐</span>
+                        You're signing in with Google. No password needed.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -350,18 +390,30 @@ export default function RegisterParent() {
                 </div>
               )}
 
-              <div className="mt-8 flex justify-between">
-                {currentStep > 0 ? (
-                  <button type="button" onClick={handleBack} className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</button>
-                ) : (
-                  <Link to="/signup" className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</Link>
-                )}
+              <div className="mt-8 space-y-4">
                 {currentStep < 2 ? (
-                  <button type="button" onClick={handleNext} className="rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-bold text-white shadow-lg transition hover:scale-105">Next →</button>
+                  <div className="flex justify-between">
+                    {currentStep > 0 ? (
+                      <button type="button" onClick={handleBack} className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</button>
+                    ) : (
+                      <Link to="/signup" className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</Link>
+                    )}
+                    <button type="button" onClick={handleNext} className="rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-bold text-white shadow-lg transition hover:scale-105">Next →</button>
+                  </div>
                 ) : (
-                  <button type="submit" disabled={submitting} className="rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-bold text-white shadow-lg transition hover:scale-105 disabled:opacity-60 disabled:hover:scale-100">
-                    {submitting ? 'Creating...' : '✨ Create Parent Account'}
-                  </button>
+                  <>
+                    <button type="submit" disabled={submitting} className="w-full rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-bold text-white shadow-lg transition hover:scale-105 disabled:opacity-60 disabled:hover:scale-100">
+                      {submitting ? 'Creating...' : '✨ Create Parent Account'}
+                    </button>
+
+                    <div className="flex justify-between">
+                      {currentStep > 0 ? (
+                        <button type="button" onClick={handleBack} className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</button>
+                      ) : (
+                        <Link to="/signup" className="rounded-2xl bg-slate-100 px-8 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition">← Back</Link>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
               </>
