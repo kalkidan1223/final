@@ -20,12 +20,14 @@ BEGIN
     END IF;
 END$$;
 
+-- Normalize existing rows before PostgreSQL validates the new constraint
+UPDATE activities
+SET status = 'active'
+WHERE status IS NULL OR status NOT IN ('active', 'inactive', 'archived');
+
 -- Add the correct constraint
 ALTER TABLE activities
-ADD CONSTRAINT activities_status_check 
+ADD CONSTRAINT activities_status_check
 CHECK (status IN ('active', 'inactive', 'archived'));
-
--- Update any existing rows with invalid status values to 'active'
-UPDATE activities SET status = 'active' WHERE status NOT IN ('active', 'inactive', 'archived');
 
 COMMIT;
