@@ -51,19 +51,19 @@ async function updateLessonProgress(client, studentId, lessonId) {
       student_id, lesson_id, status, progress_percentage, 
       required_resources_completed, total_required_resources, 
       started_at, completed_at, last_accessed_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, 
-      CASE WHEN $3 != 'not_started' THEN COALESCE((SELECT started_at FROM student_lesson_progress WHERE student_id = $1 AND lesson_id = $2), now()) ELSE NULL END,
-      CASE WHEN $3 = 'completed' THEN now() ELSE NULL END,
+    ) VALUES ($1, $2, $3::text, $4, $5, $6, 
+      CASE WHEN $3::text != 'not_started' THEN COALESCE((SELECT started_at FROM student_lesson_progress WHERE student_id = $1 AND lesson_id = $2), now()) ELSE NULL END,
+      CASE WHEN $3::text = 'completed' THEN now() ELSE NULL END,
       now(), now()
     )
     ON CONFLICT (student_id, lesson_id) 
     DO UPDATE SET
-      status = $3,
+      status = $3::text,
       progress_percentage = $4,
       required_resources_completed = $5,
       total_required_resources = $6,
-      started_at = COALESCE(student_lesson_progress.started_at, CASE WHEN $3 != 'not_started' THEN now() ELSE NULL END),
-      completed_at = CASE WHEN $3 = 'completed' THEN COALESCE(student_lesson_progress.completed_at, now()) ELSE NULL END,
+      started_at = COALESCE(student_lesson_progress.started_at, CASE WHEN $3::text != 'not_started' THEN now() ELSE NULL END),
+      completed_at = CASE WHEN $3::text = 'completed' THEN COALESCE(student_lesson_progress.completed_at, now()) ELSE NULL END,
       last_accessed_at = now(),
       updated_at = now()`,
     [studentId, lessonId, lessonStatus, progressPercentage, completedRequired, totalRequired]
@@ -663,15 +663,15 @@ async function updateResourceProgressFromVideo(client, studentId, videoId, compl
     `INSERT INTO student_resource_progress (
       student_id, lesson_resource_id, status, progress_percentage,
       started_at, completed_at, last_accessed_at, updated_at
-    ) VALUES ($1, $2, $3, $4, now(), 
-      CASE WHEN $3 = 'completed' THEN now() ELSE NULL END, 
+    ) VALUES ($1, $2, $3::text, $4, now(), 
+      CASE WHEN $3::text = 'completed' THEN now() ELSE NULL END, 
       now(), now())
     ON CONFLICT (student_id, lesson_resource_id)
     DO UPDATE SET
-      status = $3,
+      status = $3::text,
       progress_percentage = $4,
       started_at = COALESCE(student_resource_progress.started_at, now()),
-      completed_at = CASE WHEN $3 = 'completed' THEN COALESCE(student_resource_progress.completed_at, now()) ELSE NULL END,
+      completed_at = CASE WHEN $3::text = 'completed' THEN COALESCE(student_resource_progress.completed_at, now()) ELSE NULL END,
       last_accessed_at = now(),
       updated_at = now()`,
     [studentId, lessonResource.id, status, progressPercentage]
@@ -791,15 +791,15 @@ async function updateResourceProgressFromMaterial(client, studentId, materialId,
     `INSERT INTO student_resource_progress (
       student_id, lesson_resource_id, status, progress_percentage,
       started_at, completed_at, last_accessed_at, updated_at
-    ) VALUES ($1, $2, $3, $4, now(),
-      CASE WHEN $3 = 'completed' THEN now() ELSE NULL END,
+    ) VALUES ($1, $2, $3::text, $4, now(),
+      CASE WHEN $3::text = 'completed' THEN now() ELSE NULL END,
       now(), now())
     ON CONFLICT (student_id, lesson_resource_id)
     DO UPDATE SET
-      status = $3,
+      status = $3::text,
       progress_percentage = $4,
       started_at = COALESCE(student_resource_progress.started_at, now()),
-      completed_at = CASE WHEN $3 = 'completed' THEN COALESCE(student_resource_progress.completed_at, now()) ELSE NULL END,
+      completed_at = CASE WHEN $3::text = 'completed' THEN COALESCE(student_resource_progress.completed_at, now()) ELSE NULL END,
       last_accessed_at = now(),
       updated_at = now()`,
     [studentId, lessonResource.id, status, progressPercentage]

@@ -10,6 +10,8 @@ export default function MaterialViewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState('viewer'); // viewer, download
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     fetchMaterial();
@@ -53,6 +55,31 @@ export default function MaterialViewer() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch(err => {
+        console.error('Fullscreen error:', err);
+      });
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -94,19 +121,19 @@ export default function MaterialViewer() {
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
-          <button onClick={() => navigate(-1)} className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium">
+          <button onClick={() => navigate(-1)} className="inline-flex items-center text-green-600 hover:text-green-700 font-medium">
             <span className="mr-2">←</span> Back to Lesson
           </button>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className={`w-16 h-16 rounded-xl flex items-center justify-center ${isUpload ? 'bg-green-100' : 'bg-blue-100'}`}>
+          <div className={`w-16 h-16 rounded-xl flex items-center justify-center ${isUpload ? 'bg-green-100' : 'bg-teal-100'}`}>
             <span className="text-3xl">{isPDF ? '📄' : isImage ? '🖼️' : isVideo ? '🎬' : isAudio ? '🎧' : '📎'}</span>
           </div>
           <div className="flex-1">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">{material.title}</h1>
             <div className="flex flex-wrap gap-3 text-sm">
-              <span className={`px-3 py-1 rounded-full ${isUpload ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+              <span className={`px-3 py-1 rounded-full ${isUpload ? 'bg-green-100 text-green-700' : 'bg-teal-100 text-teal-700'}`}>
                 {isUpload ? '📁 Uploaded File' : '🔗 External Link'}
               </span>
               <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700">{material.type.toUpperCase()}</span>
@@ -123,7 +150,7 @@ export default function MaterialViewer() {
       </div>
 
       {/* Content Viewer */}
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+      <div ref={containerRef} className="bg-white rounded-2xl shadow-lg overflow-hidden">
         {/* Toolbar */}
         <div className="bg-gray-50 border-b border-gray-100 px-6 py-4 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
@@ -131,7 +158,7 @@ export default function MaterialViewer() {
               onClick={() => setViewMode('viewer')}
               className={`px-4 py-2 rounded-xl font-medium transition ${
                 viewMode === 'viewer'
-                  ? 'bg-blue-500 text-white'
+                  ? 'bg-green-500 text-white'
                   : 'text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -139,9 +166,16 @@ export default function MaterialViewer() {
             </button>
             <button
               onClick={handleDownload}
-              className="px-4 py-2 rounded-xl font-medium bg-green-500 text-white hover:bg-green-600 transition"
+              className="px-4 py-2 rounded-xl font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition"
             >
               ⬇️ Download
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className="px-4 py-2 rounded-xl font-medium bg-teal-500 text-white hover:bg-teal-600 transition"
+              title="Fullscreen"
+            >
+              <span>{isFullscreen ? '⛶' : '⛶'}</span> {isFullscreen ? 'Exit' : 'Fullscreen'}
             </button>
             <button
               onClick={handleOpenInNewTab}
@@ -185,7 +219,7 @@ export default function MaterialViewer() {
                 <div className="text-center">
                   <span className="text-4xl block mb-2">🖼️</span>
                   <p className="text-gray-600">Unable to display image</p>
-                  <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-blue-600 hover:underline">
+                  <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-green-600 hover:underline">
                     Open in new tab →
                   </a>
                 </div>
@@ -219,7 +253,7 @@ export default function MaterialViewer() {
                 href={fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition"
               >
                 <span>🔗</span> Open in New Tab
               </a>

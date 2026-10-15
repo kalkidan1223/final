@@ -2,6 +2,7 @@ const { query, pool } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
 const { canReadCourse } = require('../utils/courseAccess');
 const { upsertLessonProgress } = require('../utils/progress');
+const { gradeAnswer } = require('../utils/quizGrading');
 
 // Resolves a lesson's owning instructor_id via its course, for ownership checks.
 async function getLessonOwnerInstructorId(lessonId) {
@@ -461,7 +462,7 @@ const { id } = req.params;
     const studentId = studentResult.rows[0].id;
 
     const questionsResult = await query(
-      'SELECT id, correct_answer, points FROM quiz_questions WHERE quiz_id = $1',
+      'SELECT id, question_type, options, correct_answer, points FROM quiz_questions WHERE quiz_id = $1',
       [id]
     );
     if (questionsResult.rows.length === 0) {
@@ -472,9 +473,7 @@ const { id } = req.params;
     let totalPoints = 0;
     for (const q of questionsResult.rows) {
       totalPoints += q.points;
-      const submitted = (answers[q.id] || '').toString().trim().toLowerCase();
-      const correct = q.correct_answer.toString().trim().toLowerCase();
-      if (submitted && submitted === correct) {
+      if (gradeAnswer(q, answers[q.id])) {
         score += q.points;
       }
     }

@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const { resolvePins } = require('./homePinController');
 const { getLessonAccess, getResourceAccess } = require('../utils/learningAccess');
+const { gradeAnswer, correctAnswerText, formatMatchingAnswer } = require('../utils/quizGrading');
 
 /**
  * Helper: Resolve the active student record based on whether the logged in user
@@ -902,8 +903,7 @@ async function submitQuiz(req, res, next) {
       const qPoints = Number(q.points) || 1;
       totalPoints += qPoints;
       const given = answers ? answers[q.id] : undefined;
-      const isCorrect = given !== undefined && given !== null &&
-        given.toString().trim().toLowerCase() === q.correct_answer.toString().trim().toLowerCase();
+      const isCorrect = gradeAnswer(q, given);
 
       if (isCorrect) score += qPoints;
 
@@ -912,8 +912,8 @@ async function submitQuiz(req, res, next) {
         question_text: q.question_text,
         question_type: q.question_type,
         options: q.options,
-        student_answer: given,
-        correct_answer: first.show_result_immediately !== false ? q.correct_answer : null,
+        student_answer: q.question_type === 'matching' ? formatMatchingAnswer(q, given) : given,
+        correct_answer: first.show_result_immediately !== false ? correctAnswerText(q) : null,
         is_correct: isCorrect,
         points: qPoints,
         explanation: first.show_result_immediately !== false ? q.explanation : null,
@@ -1789,14 +1789,42 @@ async function getNotifications(req, res, next) {
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
     const result = await query(
-      `SELECT * FROM notifications 
-       WHERE user_id = $1 
-       ORDER BY created_at DESC 
-       LIMIT 50`,
-      [child.user_id]
+      `SELECT 
+        cn.id,
+        cn.type,
+        cn.title,
+        cn.message,
+        cn.related_course_id,
+        cn.related_lesson_id,
+        cn.related_activity_id,
+        cn.related_quiz_id,
+        cn.related_result_id,
+        cn.is_read,
+        cn.created_at,
+        c.title as course_title,
+        l.title as lesson_title,
+        a.title as activity_title,
+        q.title as quiz_title
+      FROM child_notifications cn
+      LEFT JOIN courses c ON c.id = cn.related_course_id
+      LEFT JOIN lessons l ON l.id = cn.related_lesson_id
+      LEFT JOIN activities a ON a.id = cn.related_activity_id
+      LEFT JOIN quizzes q ON q.id = cn.related_quiz_id
+      WHERE cn.student_id = $1
+      ORDER BY cn.created_at DESC
+      LIMIT 50`,
+      [child.id]
     );
 
-    res.json({ notifications: result.rows });
+    const unreadCount = await query(
+      'SELECT COUNT(*) as count FROM child_notifications WHERE student_id = $1 AND is_read = FALSE',
+      [child.id]
+    );
+
+    res.json({
+      notifications: result.rows,
+      unread_count: parseInt(unreadCount.rows[0].count)
+    });
   } catch (err) {
     next(err);
   }
@@ -1809,12 +1837,18 @@ async function markNotificationRead(req, res, next) {
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
-    await query(
-      'UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2',
-      [id, child.user_id]
+    const result = await query(
+      'UPDATE child_notifications SET is_read = TRUE WHERE id = $1 AND student_id = $2 RETURNING *',
+      [id, child.id]
     );
 
-    res.json({ success: true });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    res.json({
+      notification: result.rows[0]
+    });
   } catch (err) {
     next(err);
   }

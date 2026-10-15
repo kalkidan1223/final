@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { label: 'Courses',         to: '/instructor/courses',       icon: MdMenuBook },
   { label: 'Child Home',      to: '/instructor/child-home',    icon: MdChildCare },
   { label: 'Vocabulary Bank', to: '/instructor/vocabulary',    icon: MdTranslate },
+  { label: 'Results',         to: '/instructor/results',       icon: MdSchool },
   { label: 'My Students',     to: '/instructor/students',      icon: MdPeople },
   { label: 'Messages',        to: '/instructor/messages',      icon: MdMessage },
   { label: 'Notifications',   to: '/instructor/notifications', icon: MdNotifications },

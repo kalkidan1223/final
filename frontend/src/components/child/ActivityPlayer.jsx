@@ -45,10 +45,10 @@ export default function ActivityPlayer({ activity, onComplete }) {
   // If submitted but pending review
   if (submission && submission.status === 'pending') {
     return (
-      <div className="text-center py-12 bg-blue-50 rounded-3xl border-2 border-blue-200">
-        <div className="text-6xl mb-4">✅</div>
-        <h3 className="text-2xl font-black text-blue-700 mb-2">Submitted!</h3>
-        <p className="text-blue-600 font-medium">
+      <div className="text-center py-12 bg-green-50 rounded-3xl border-2 border-green-200 animate-slide-up">
+        <div className="text-6xl mb-4 animate-bounce">✅</div>
+        <h3 className="text-2xl font-black text-green-700 mb-2">Submitted!</h3>
+        <p className="text-green-600 font-medium">
           Your teacher will review your work soon.
         </p>
       </div>
@@ -134,57 +134,161 @@ function DragAndDropPlayer({ activity, config, onSubmit }) {
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState(null);
+  const [matchedPairs, setMatchedPairs] = useState(new Set());
 
-  const handleDragStart = (item) => {
-    setDraggedItem(item);
+  // Calculate the result of a math expression (e.g., "3+4" = 7)
+  const calculateResult = (expression) => {
+    try {
+      // Safely evaluate simple math expressions
+      const sanitized = expression.replace(/[^0-9+\-*/().]/g, '');
+      return eval(sanitized);
+    } catch {
+      return NaN;
+    }
   };
 
-  const handleDrop = (target) => {
-    if (draggedItem) {
-      setAnswers(prev => ({ ...prev, [target]: draggedItem.draggable }));
-      setDraggedItem(null);
+  const handleDragStart = (e, item) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify(item));
+    setDraggedItem(item);
+    // Play sound effect
+    playClickSound();
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e, target) => {
+    e.preventDefault();
+    if (!draggedItem) return;
+
+    const itemData = JSON.parse(e.dataTransfer.getData('text/plain'));
+    setAnswers(prev => ({ ...prev, [target]: itemData.draggable }));
+    setMatchedPairs(prev => new Set([...prev, `${itemData.draggable}-${target}`]));
+    setDraggedItem(null);
+    
+    // Play success sound
+    playSuccessSound();
+  };
+
+  const handleReset = (target) => {
+    if (answers[target]) {
+      const prevAnswer = answers[target];
+      setMatchedPairs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`${prevAnswer}-${target}`);
+        return newSet;
+      });
+      setAnswers(prev => {
+        const newAnswers = { ...prev };
+        delete newAnswers[target];
+        return newAnswers;
+      });
     }
   };
 
   const handleSubmit = async () => {
     setSubmitted(true);
-    
-    // Calculate score
+
+    // Calculate score based on math results
     let correct = 0;
     items.forEach(item => {
-      if (answers[item.target] === item.draggable) {
+      const questionResult = calculateResult(item.draggable);
+      const answerValue = parseInt(item.target);
+      const userAnswer = answers[item.target];
+      const userResult = calculateResult(userAnswer);
+
+      // Check if the user's answer matches the target answer
+      if (userResult === answerValue && questionResult === answerValue) {
         correct++;
       }
     });
-    
+
     const score = items.length > 0 ? (correct / items.length) * activity.max_score : 0;
-    
+
     try {
       await axiosClient.post(`/child/activities/${activity.id}/submit`, {
         submission_text: JSON.stringify(answers),
         score: score,
         auto_graded: true
       });
-      
+
       setResult({ correct, total: items.length, score });
-      
+
       if (onSubmit) onSubmit();
     } catch (err) {
-      alert('Failed to submit. Please try again.');
-      setSubmitted(false);
+      console.error('Submission error:', err);
+      // Check for authentication error
+      if (err.response?.status === 401) {
+        alert('Please log in to submit your activity');
+        // Redirect to login
+        window.location.href = '/login';
+        return;
+      }
+      // Even if submission fails, show the result locally for practice
+      setResult({ correct, total: items.length, score });
+      if (onSubmit) onSubmit();
+    }
+  };
+
+  const playClickSound = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.value = 600;
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.1);
+    } catch (e) {
+      // Audio not supported
+    }
+  };
+
+  const playSuccessSound = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.value = 880;
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (e) {
+      // Audio not supported
     }
   };
 
   if (result) {
     return (
-      <div className="text-center py-8 space-y-4">
-        <div className="text-6xl">
+      <div className="text-center py-8 space-y-4 animate-slide-up">
+        <div className="text-6xl animate-bounce">
           {result.correct === result.total ? '🎉' : result.correct >= result.total / 2 ? '👍' : '💪'}
         </div>
         <h3 className="text-2xl font-black text-gray-800">
           {result.correct} out of {result.total} correct!
         </h3>
-        <p className="text-lg font-bold text-purple-600">Score: {Math.round(result.score)}/{activity.max_score}</p>
+        <p className="text-lg font-black text-green-600">Score: {Math.round(result.score)}/{activity.max_score}</p>
         {result.correct === result.total && (
           <p className="text-green-600 font-medium">Perfect! You got them all right! 🌟</p>
         )}
@@ -194,51 +298,136 @@ function DragAndDropPlayer({ activity, config, onSubmit }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 border-2 border-purple-200">
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200 animate-gradient">
         <h3 className="text-lg font-black text-gray-800 mb-2">🎯 Drag and Drop</h3>
-        <p className="text-gray-700">{activity.instructions}</p>
+        <p className="text-gray-700 font-medium">{activity.instructions || 'First calculate the number then drag and drop!'}</p>
       </div>
 
-      {/* Draggable Items */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-bold text-gray-600 uppercase">Drag These Items:</h4>
-        <div className="flex flex-wrap gap-3">
-          {items.map((item, idx) => (
-            <div
-              key={idx}
-              draggable
-              onDragStart={() => handleDragStart(item)}
-              className="px-6 py-3 bg-gradient-to-r from-blue-400 to-purple-400 text-white font-bold rounded-xl shadow-lg cursor-move hover:scale-105 transition transform"
-            >
-              {item.draggable}
-            </div>
-          ))}
+      {/* Vertical Matching Layout - Questions Left, Answers Right */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Left Column - Questions (Draggable) */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-black text-green-700 uppercase tracking-wide flex items-center gap-2">
+            <span>❓</span> Questions
+          </h4>
+          <div className="space-y-3">
+            {items.map((item, idx) => {
+              const isMatched = Object.values(answers).includes(item.draggable);
+              return (
+                <div
+                  key={idx}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  onDragEnd={handleDragEnd}
+                  className={`h-[80px] px-6 py-4 bg-gradient-to-r from-green-400 to-emerald-500 text-white font-black rounded-2xl shadow-lg cursor-move transition-all transform hover:scale-105 hover:shadow-xl flex items-center justify-center ${
+                    isMatched ? 'opacity-50 cursor-not-allowed' : 'animate-float'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">➕</span>
+                    <span className="text-xl">{item.draggable}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right Column - Answers (Drop Targets) */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-black text-green-700 uppercase tracking-wide flex items-center gap-2">
+            <span>🎯</span> Answers
+          </h4>
+          <div className="space-y-3">
+            {items.map((item, idx) => {
+              const isMatched = answers[item.target] === item.draggable;
+              const questionResult = calculateResult(item.draggable);
+              const answerValue = parseInt(item.target);
+              const isCorrect = isMatched && questionResult === answerValue;
+
+              return (
+                <div
+                  key={idx}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, item.target)}
+                  className={`h-[80px] rounded-2xl border-4 border-dashed flex items-center justify-between px-6 py-4 transition-all duration-300 ${
+                    isMatched
+                      ? isCorrect
+                        ? 'bg-green-100 border-green-500 shadow-lg scale-105'
+                        : 'bg-rose-100 border-rose-500'
+                      : 'bg-gray-50 border-gray-300 hover:border-green-400 hover:bg-green-50'
+                  }`}
+                >
+                  <div className="text-2xl font-black text-gray-600">{item.target}</div>
+
+                  {isMatched ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{isCorrect ? '✅' : '❌'}</span>
+                      <span className="text-lg font-bold text-gray-700">{answers[item.target]}</span>
+                      <button
+                        onClick={() => handleReset(item.target)}
+                        className="ml-2 px-3 py-1 bg-white rounded-full text-xs font-bold text-gray-600 hover:bg-gray-100 transition"
+                        title="Reset"
+                      >
+                        ↩
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-3xl text-gray-300 animate-pulse">?</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Drop Targets */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-bold text-gray-600 uppercase">Drop Here:</h4>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {items.map((item, idx) => (
-            <div
-              key={idx}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(item.target)}
-              className={`min-h-[100px] rounded-2xl border-4 border-dashed flex flex-col items-center justify-center p-4 transition ${
-                answers[item.target]
-                  ? 'bg-green-50 border-green-400'
-                  : 'bg-gray-50 border-gray-300 hover:border-purple-400'
-              }`}
-            >
-              <div className="text-xs font-bold text-gray-500 mb-2">{item.target}</div>
-              {answers[item.target] && (
-                <div className="px-4 py-2 bg-white rounded-lg font-bold text-purple-600 shadow">
-                  {answers[item.target]}
+      {/* Connection Lines Visualization */}
+      {Object.keys(answers).length > 0 && (
+        <div className="bg-white rounded-2xl p-4 border-2 border-green-100">
+          <h4 className="text-sm font-black text-green-700 mb-3 flex items-center gap-2">
+            <span>🔗</span> Matches
+          </h4>
+          <div className="space-y-2">
+            {items.map((item, idx) => {
+              const isMatched = answers[item.target] === item.draggable;
+              const questionResult = calculateResult(item.draggable);
+              const answerValue = parseInt(item.target);
+              const isCorrect = isMatched && questionResult === answerValue;
+
+              if (!isMatched) return null;
+
+              return (
+                <div
+                  key={idx}
+                  className={`flex items-center gap-3 px-4 py-2 rounded-xl ${
+                    isCorrect ? 'bg-green-50 border-2 border-green-200' : 'bg-rose-50 border-2 border-rose-200'
+                  } animate-slide-up`}
+                  style={{ animationDelay: `${idx * 0.1}s` }}
+                >
+                  <span className="text-lg font-bold text-gray-700">{item.draggable}</span>
+                  <span className="text-2xl">{isCorrect ? '✓' : '✗'}</span>
+                  <span className="text-lg font-bold text-gray-700">{item.target}</span>
                 </div>
-              )}
-            </div>
-          ))}
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Progress */}
+      <div className="bg-white rounded-2xl p-4 border-2 border-green-100">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-gray-600">Progress</span>
+          <span className="text-sm font-black text-green-600">
+            {Object.keys(answers).length} / {items.length}
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+          <div
+            className="bg-gradient-to-r from-green-500 to-emerald-500 h-full rounded-full transition-all duration-500 progress-bar-animated"
+            style={{ width: `${(Object.keys(answers).length / items.length) * 100}%` }}
+          />
         </div>
       </div>
 

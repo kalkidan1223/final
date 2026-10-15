@@ -165,8 +165,8 @@ async function getStudentProfile(req, res, next) {
         [studentId]
       ),
       query(
-        `SELECT sub.id, sub.status, sub.score, sub.max_score, sub.submitted_at,
-                a.title AS activity_title
+        `SELECT sub.id, sub.status, sub.score, sub.submitted_at,
+                a.title AS activity_title, a.max_score
          FROM activity_submissions sub
          JOIN activities a ON a.id = sub.activity_id
          WHERE sub.student_id = $1

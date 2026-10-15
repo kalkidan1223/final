@@ -185,7 +185,7 @@ function VideoResourceViewer({ resourceId, onCompleted }) {
   }, [isYouTube, resourceId, videoData?.resource?.video_url]);
 
   if (loading) {
-    return <div className="text-center py-8"><div className="text-4xl animate-bounce">ðŸŽ¬</div></div>;
+    return <div className="text-center py-8"><div className="text-4xl animate-bounce">📺</div></div>;
   }
 
   const required = progress.required_percentage || 90;
@@ -219,26 +219,26 @@ function VideoResourceViewer({ resourceId, onCompleted }) {
 
       <div className="bg-white rounded-2xl p-6 border-2 border-gray-200">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-lg font-black text-gray-800">ðŸ“¹ Watch Progress</h4>
-          <span className="text-2xl font-black text-purple-600">{pct}%</span>
+          <h4 className="text-lg font-black text-gray-800">📺 Watch Progress</h4>
+          <span className="text-2xl font-black text-green-600">{pct}%</span>
         </div>
 
         <div className="w-full bg-gray-200 h-4 rounded-full overflow-hidden mb-3">
           <div
-            className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-500"
+            className="bg-gradient-to-r from-green-500 to-emerald-500 h-full rounded-full transition-all duration-500"
             style={{ width: `${pct}%` }}
           />
         </div>
 
         {isComplete ? (
           <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4 text-center">
-            <div className="text-3xl mb-2">ðŸŽ‰</div>
+            <div className="text-3xl mb-2">🎉</div>
             <p className="text-lg font-black text-green-700">Great Job!</p>
             <p className="text-sm font-medium text-green-600">You completed the video!</p>
           </div>
         ) : (
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-center">
-            <p className="text-sm font-bold text-blue-700">
+          <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center">
+            <p className="text-sm font-bold text-green-700">
               Watch at least {required}% of the video to continue. Watching is counted only while it really plays.
             </p>
           </div>
@@ -306,7 +306,7 @@ function MaterialResourceViewer({ resourceId, onCompleted }) {
     }
   };
 
-  if (loading) return <div className="text-center py-8"><div className="text-4xl animate-bounce">ðŸ“–</div></div>;
+  if (loading) return <div className="text-center py-8"><div className="text-4xl animate-bounce">📄</div></div>;
 
   const material = data?.resource || {};
   const type = (material.material_type || material.type || '').toLowerCase();
@@ -316,7 +316,7 @@ function MaterialResourceViewer({ resourceId, onCompleted }) {
 
   return (
     <div className="space-y-4">
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
+      <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200">
         <h3 className="text-xl font-black text-gray-800 mb-3">{material.title}</h3>
 
         {type === 'audio' && fileUrl && (
@@ -337,29 +337,29 @@ function MaterialResourceViewer({ resourceId, onCompleted }) {
         )}
 
         {type === 'document' && fileUrl && (
-          <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-block px-6 py-3 bg-blue-600 text-white font-bold rounded-full hover:bg-blue-700">
-            ðŸ“„ Open Document
+          <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-block px-6 py-3 bg-green-600 text-white font-bold rounded-full hover:bg-green-700">
+            📄 Open Document
           </a>
         )}
       </div>
 
       <div className="bg-white rounded-2xl p-6 border-2 border-gray-200">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-lg font-black text-gray-800">ðŸ“š Reading Progress</h4>
-          <span className="text-2xl font-black text-purple-600">{pct}%</span>
+          <h4 className="text-lg font-black text-gray-800">📖 Reading Progress</h4>
+          <span className="text-2xl font-black text-green-600">{pct}%</span>
         </div>
         <div className="w-full bg-gray-200 h-4 rounded-full overflow-hidden mb-3">
-          <div className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
         </div>
 
         {completed ? (
           <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4 text-center">
-            <div className="text-3xl mb-2">ðŸŽ‰</div>
+            <div className="text-3xl mb-2">🎉</div>
             <p className="text-lg font-black text-green-700">Excellent!</p>
             <p className="text-sm font-medium text-green-600">You finished this material!</p>
           </div>
         ) : (
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-center space-y-3">
+          <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center space-y-3">
             {type === 'pdf' ? (
               <button
                 onClick={() => {
@@ -368,18 +368,18 @@ function MaterialResourceViewer({ resourceId, onCompleted }) {
                   report({ pages_viewed: next, total_pages: totalPages });
                 }}
                 disabled={pagesViewed >= totalPages}
-                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-full hover:bg-blue-700 disabled:opacity-50"
+                className="px-6 py-2 bg-green-600 text-white font-bold rounded-full hover:bg-green-700 disabled:opacity-50"
               >
-                I read this page âž”
+                I read this page ✓
               </button>
             ) : type === 'audio' ? (
-              <p className="text-sm font-bold text-blue-700">Listen to at least 90% of the audio to finish.</p>
+              <p className="text-sm font-bold text-green-700">Listen to at least 90% of the audio to finish.</p>
             ) : (
               <button
                 onClick={() => report({ view_percentage: 100 })}
-                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-full hover:bg-blue-700"
+                className="px-6 py-2 bg-green-600 text-white font-bold rounded-full hover:bg-green-700"
               >
-                I finished this âœ“
+                I finished this ✓
               </button>
             )}
           </div>
@@ -408,7 +408,7 @@ function ActivityResourceViewer({ resourceId }) {
     }
   };
 
-  if (loading) return <div className="text-center py-8"><div className="text-4xl animate-bounce">âœï¸</div></div>;
+  if (loading) return <div className="text-center py-8"><div className="text-4xl animate-bounce">✏️</div></div>;
 
   const status = activityData?.progress?.status;
   const hasSubmission = status === 'graded' || status === 'pending' || status === 'submitted';
@@ -417,7 +417,7 @@ function ActivityResourceViewer({ resourceId }) {
     <div className="space-y-4">
       <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-8 border-2 border-green-200 min-h-[300px]">
         <div className="text-center space-y-4">
-          <div className="text-6xl">âœï¸</div>
+          <div className="text-6xl">✏️</div>
           <h3 className="text-2xl font-black text-gray-800">{activityData?.resource?.title}</h3>
           <p className="text-gray-700 font-bold text-lg">
             {activityData?.resource?.activity_type?.replace(/_/g, ' ').toUpperCase()}
@@ -428,7 +428,7 @@ function ActivityResourceViewer({ resourceId }) {
 
           {hasSubmission ? (
             <div className="bg-white border-2 border-green-300 rounded-2xl p-6">
-              <div className="text-4xl mb-2">âœ…</div>
+              <div className="text-4xl mb-2">✅</div>
               <p className="text-lg font-black text-green-700">Activity Submitted!</p>
               <p className="text-sm font-medium text-green-600">Your teacher will review your work</p>
             </div>
@@ -437,7 +437,7 @@ function ActivityResourceViewer({ resourceId }) {
               to={`/child/activities/${resourceId}`}
               className="inline-block px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-lg rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
             >
-              ðŸŽ¯ Start Activity
+              ▶️ Start Activity
             </Link>
           )}
         </div>
@@ -466,7 +466,7 @@ function QuizResourceViewer({ resourceId }) {
     }
   };
 
-  if (loading) return <div className="text-center py-8"><div className="text-4xl animate-bounce">ðŸ§ </div></div>;
+  if (loading) return <div className="text-center py-8"><div className="text-4xl animate-bounce">🧠</div></div>;
 
   const passing = quizData?.resource?.passing_score || 60;
   const scorePct = quizData?.progress?.percentage != null ? Number(quizData.progress.percentage) : null;
@@ -477,7 +477,7 @@ function QuizResourceViewer({ resourceId }) {
     <div className="space-y-4">
       <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-8 border-2 border-yellow-200 min-h-[300px]">
         <div className="text-center space-y-4">
-          <div className="text-6xl">ðŸ§ </div>
+          <div className="text-6xl">🧠</div>
           <h3 className="text-2xl font-black text-gray-800">{quizData?.resource?.title}</h3>
           <p className="text-gray-600 font-medium max-w-2xl mx-auto">
             {quizData?.resource?.description || 'Test your knowledge with this quiz!'}
@@ -486,7 +486,7 @@ function QuizResourceViewer({ resourceId }) {
 
           {hasAttempt && isPassed ? (
             <div className="bg-white border-2 border-green-300 rounded-2xl p-6">
-              <div className="text-4xl mb-2">ðŸŽ‰</div>
+              <div className="text-4xl mb-2">🎉</div>
               <p className="text-lg font-black text-green-700">Quiz Passed!</p>
               <p className="text-sm font-medium text-green-600">Score: {Math.round(scorePct)}%</p>
             </div>

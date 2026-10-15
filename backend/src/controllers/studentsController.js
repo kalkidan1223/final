@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { gradeAnswer } = require('../utils/quizGrading');
 
 // Helper: Get student record from user
 async function getStudentFromUser(userId) {
@@ -646,8 +647,7 @@ async function submitQuiz(req, res, next) {
 
     questions.rows.forEach(q => {
       totalPoints += q.points || 1;
-      const studentAnswer = answers[q.id];
-      if (studentAnswer && studentAnswer.toString().toLowerCase() === q.correct_answer.toString().toLowerCase()) {
+      if (gradeAnswer(q, answers[q.id])) {
         score += q.points || 1;
       }
     });

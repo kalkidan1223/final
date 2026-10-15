@@ -1,7 +1,37 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import { resolveFileUrl } from '../../utils/fileUrl';
+
+// Deterministic shuffle so the answer pool is mixed but stable across renders.
+function seededShuffle(list, seed) {
+  const a = [...list];
+  let s = Number(seed) || 1;
+  const rand = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Reads the pairs stored on a matching question: options = { pairs: [...] }.
+function matchingPairs(q) {
+  return q?.options && Array.isArray(q.options.pairs) ? q.options.pairs : [];
+}
+
+function parseMatchingSelections(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
 
 export default function ChildQuizTake() {
   const { id } = useParams();
@@ -33,6 +63,17 @@ export default function ChildQuizTake() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [id]);
+
+  // Shuffled answer pools for matching questions, keyed by question id.
+  const matchingPools = useMemo(() => {
+    const pools = {};
+    questions.forEach((q) => {
+      if (q.question_type === 'matching') {
+        pools[q.id] = seededShuffle(matchingPairs(q).map((p) => p.answer), q.id);
+      }
+    });
+    return pools;
+  }, [questions]);
 
   const fetchQuiz = async () => {
     try {
@@ -102,8 +143,27 @@ export default function ChildQuizTake() {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  const handleMatchingAnswer = (questionId, index, value) => {
+    setAnswers((prev) => {
+      const current = parseMatchingSelections(prev[questionId]);
+      if (value) {
+        current[index] = value;
+      } else {
+        delete current[index];
+      }
+      return { ...prev, [questionId]: JSON.stringify(current) };
+    });
+  };
+
   const submitQuiz = () => {
-    const unanswered = questions.filter((q) => answers[q.id] === undefined || answers[q.id] === '');
+    const unanswered = questions.filter((q) => {
+      if (q.question_type === 'matching') {
+        const pairs = matchingPairs(q);
+        const picked = parseMatchingSelections(answers[q.id]);
+        return pairs.some((_, idx) => !picked[idx]);
+      }
+      return answers[q.id] === undefined || answers[q.id] === '';
+    });
     if (unanswered.length > 0) {
       setError(`እባክዎን ሁሉንም ጥያቄዎች ይመልሱ! ${unanswered.length} ያልተመለሰ ጥያቄ አለ / Please answer all questions! (${unanswered.length} remaining)`);
       return;
@@ -178,9 +238,9 @@ export default function ChildQuizTake() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center p-8 bg-white rounded-3xl shadow-lg border border-purple-100 max-w-sm">
+        <div className="text-center p-8 bg-white rounded-3xl shadow-lg border border-green-100 max-w-sm">
           <div className="text-5xl animate-bounce mb-4">📝</div>
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent mx-auto mb-3"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent mx-auto mb-3"></div>
           <p className="text-gray-700 font-bold text-lg">ፈተናው እየተጫነ ነው...</p>
           <p className="text-gray-400 text-xs">Loading Ethiopian Quiz...</p>
         </div>
@@ -192,7 +252,7 @@ export default function ChildQuizTake() {
   if (error && !quiz) {
     return (
       <div className="space-y-4 max-w-lg mx-auto my-12">
-        <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-purple-600 hover:text-purple-700 font-bold">
+        <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-green-600 hover:text-green-700 font-bold">
           <span>←</span> Back
         </button>
         <div className="bg-rose-50 border-2 border-rose-200 p-6 rounded-3xl text-center">
@@ -200,7 +260,7 @@ export default function ChildQuizTake() {
           <p className="text-rose-700 font-bold text-sm mb-4">{error}</p>
           <button
             onClick={fetchQuiz}
-            className="px-6 py-2 bg-purple-600 text-white font-bold rounded-2xl shadow hover:bg-purple-700 transition"
+            className="px-6 py-2 bg-green-600 text-white font-bold rounded-2xl shadow hover:bg-green-700 transition"
           >
             እንደገና ሞክር / Try Again 🔄
           </button>
@@ -224,20 +284,20 @@ export default function ChildQuizTake() {
         <div className="flex items-center justify-between">
           <Link
             to={quiz.lesson_id ? `/child/lessons/${quiz.lesson_id}` : '/child/quizzes'}
-            className="inline-flex items-center gap-2 text-purple-700 hover:text-purple-800 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-purple-100 transition hover:scale-105"
+            className="inline-flex items-center gap-2 text-green-700 hover:text-green-800 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-sm border border-green-100 transition hover:scale-105"
           >
             <span>←</span> ወደ ትምህርቱ ተመለስ / Back to Lesson
           </Link>
           <Link
             to="/child/quizzes"
-            className="text-xs font-extrabold text-slate-500 hover:text-purple-600"
+            className="text-xs font-extrabold text-slate-500 hover:text-green-600"
           >
             📋 ሁሉም ፈተናዎች / All Quizzes
           </Link>
         </div>
 
         {/* Main Quiz Hero Card */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-md border-2 border-purple-100 text-center space-y-6">
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-md border-2 border-green-100 text-center space-y-6">
           <div className="w-20 h-20 mx-auto bg-gradient-to-tr from-amber-400 to-orange-400 rounded-3xl flex items-center justify-center text-4xl shadow-md transform hover:rotate-6 transition">
             🧠
           </div>
@@ -248,7 +308,7 @@ export default function ChildQuizTake() {
             </span>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-800">{quiz.title}</h1>
             {quiz.lesson_title && (
-              <p className="text-xs sm:text-sm font-bold text-purple-700">
+              <p className="text-xs sm:text-sm font-bold text-green-700">
                 ትምህርት: {quiz.lesson_title} • {quiz.course_title}
               </p>
             )}
@@ -259,10 +319,10 @@ export default function ChildQuizTake() {
 
           {/* Quick Metrics */}
           <div className="grid grid-cols-3 gap-3 max-w-md mx-auto">
-            <div className="bg-purple-50 p-3 rounded-2xl border border-purple-100">
+            <div className="bg-green-50 p-3 rounded-2xl border border-green-100">
               <span className="text-xl block">❓</span>
               <span className="text-xs font-bold text-slate-500">ጥያቄዎች</span>
-              <p className="text-base font-black text-purple-900">{questions.length}</p>
+              <p className="text-base font-black text-green-900">{questions.length}</p>
             </div>
             <div className="bg-amber-50 p-3 rounded-2xl border border-amber-100">
               <span className="text-xl block">⏱️</span>
@@ -291,7 +351,7 @@ export default function ChildQuizTake() {
               </div>
               <div className="flex items-center justify-between text-sm font-extrabold text-slate-800">
                 <span>ውጤት: {previousResult.score} / {previousResult.total_points}</span>
-                <span className="text-lg font-black text-purple-700">{prevPct}%</span>
+                <span className="text-lg font-black text-green-700">{prevPct}%</span>
               </div>
             </div>
           )}
@@ -308,7 +368,7 @@ export default function ChildQuizTake() {
               <button
                 onClick={handleStartQuiz}
                 disabled={submitting || questions.length === 0}
-                className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white font-black text-lg rounded-2xl shadow-lg hover:shadow-xl transition transform hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-2 mx-auto"
+                className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-green-600 via-indigo-600 to-pink-500 hover:from-green-700 hover:to-pink-600 text-white font-black text-lg rounded-2xl shadow-lg hover:shadow-xl transition transform hover:scale-105 disabled:opacity-50 flex items-center justify-center gap-2 mx-auto"
               >
                 {submitting ? (
                   <>
@@ -354,7 +414,7 @@ export default function ChildQuizTake() {
           </p>
 
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-inner border border-slate-100 mb-4">
-            <span className="text-3xl sm:text-4xl font-black text-purple-700">{pct}%</span>
+            <span className="text-3xl sm:text-4xl font-black text-green-700">{pct}%</span>
             <span className="text-2xl">{stars}</span>
             <span className="text-sm font-extrabold text-slate-600">
               ({result.score} / {result.total_points} ነጥብ)
@@ -366,8 +426,8 @@ export default function ChildQuizTake() {
 
         {/* Detailed Question Review */}
         {result.review && result.review.length > 0 && (
-          <div className="bg-white rounded-3xl shadow-md border border-purple-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 text-white flex items-center justify-between">
+          <div className="bg-white rounded-3xl shadow-md border border-green-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-green-600 to-indigo-600 px-6 py-4 text-white flex items-center justify-between">
               <h2 className="text-lg font-black flex items-center gap-2">
                 <span>📊</span> የጥያቄዎች ግምገማ / Question Review
               </h2>
@@ -437,7 +497,7 @@ export default function ChildQuizTake() {
           {quizMeta.can_attempt && (
             <button
               onClick={handleStartQuiz}
-              className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 text-white font-black rounded-2xl text-center shadow-md transition"
+              className="w-full sm:flex-1 py-3.5 bg-gradient-to-r from-green-600 to-indigo-600 hover:from-green-700 text-white font-black rounded-2xl text-center shadow-md transition"
             >
               🔄 እንደገና ፈትን / Retake Quiz
             </button>
@@ -445,7 +505,7 @@ export default function ChildQuizTake() {
 
           <Link
             to="/child/quizzes"
-            className="w-full sm:w-auto px-5 py-3.5 bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 font-bold rounded-2xl text-center transition"
+            className="w-full sm:w-auto px-5 py-3.5 bg-white border border-green-200 hover:bg-green-50 text-green-700 font-bold rounded-2xl text-center transition"
           >
             📋 ፈተናዎች / Quizzes
           </Link>
@@ -458,16 +518,24 @@ export default function ChildQuizTake() {
   // 3. QUIZ TAKING SCREEN
   // ─────────────────────────────────────────────────────────────
   const currentQ = questions[currentQuestion];
-  const answeredCount = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== '').length;
+  const isQuestionAnswered = (q) => {
+    if (q.question_type === 'matching') {
+      const pairs = matchingPairs(q);
+      const picked = parseMatchingSelections(answers[q.id]);
+      return pairs.length > 0 && pairs.every((_, idx) => picked[idx]);
+    }
+    return answers[q.id] !== undefined && answers[q.id] !== '';
+  };
+  const answeredCount = questions.filter(isQuestionAnswered).length;
   const progressPercent = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
 
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto pb-16">
       {/* Top Header with Timer */}
-      <div className="bg-white rounded-3xl shadow-sm border border-purple-100 p-5 sm:p-6 flex items-center justify-between gap-4">
+      <div className="bg-white rounded-3xl shadow-sm border border-green-100 p-5 sm:p-6 flex items-center justify-between gap-4">
         <button
           onClick={() => setMode('intro')}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-purple-600"
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-green-600"
         >
           <span>✕</span> ሰርዝ / Quit Quiz
         </button>
@@ -476,7 +544,7 @@ export default function ChildQuizTake() {
 
         {quiz?.time_limit_seconds > 0 && (
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl font-black text-sm ${
-            timeLeft !== null && timeLeft < 60 ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-purple-100 text-purple-700'
+            timeLeft !== null && timeLeft < 60 ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-green-100 text-green-700'
           }`}>
             <span>⏱️</span>
             <span>{formatTime(timeLeft)}</span>
@@ -485,10 +553,10 @@ export default function ChildQuizTake() {
       </div>
 
       {/* Progress Bar & Current Question Counter */}
-      <div className="bg-white rounded-3xl shadow-sm border border-purple-100 p-5 sm:p-6 space-y-3">
+      <div className="bg-white rounded-3xl shadow-sm border border-green-100 p-5 sm:p-6 space-y-3">
         <div className="flex items-center justify-between text-xs sm:text-sm font-black">
-          <div className="flex items-center gap-2 text-purple-700">
-            <span className="w-7 h-7 bg-purple-100 rounded-full flex items-center justify-center text-xs">
+          <div className="flex items-center gap-2 text-green-700">
+            <span className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center text-xs">
               {currentQuestion + 1}
             </span>
             <span>ጥያቄ {currentQuestion + 1} ከ {questions.length}</span>
@@ -496,9 +564,9 @@ export default function ChildQuizTake() {
           <span className="text-slate-500">{answeredCount} ተመልሷል / {questions.length}</span>
         </div>
 
-        <div className="w-full bg-purple-100 h-3 rounded-full overflow-hidden">
+        <div className="w-full bg-green-100 h-3 rounded-full overflow-hidden">
           <div
-            className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full transition-all duration-300"
+            className="bg-gradient-to-r from-green-500 to-emerald-500 h-full rounded-full transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
@@ -506,10 +574,10 @@ export default function ChildQuizTake() {
 
       {/* Question Card */}
       {currentQ && (
-        <div className="bg-white rounded-3xl shadow-md border-2 border-purple-100 p-6 sm:p-8 space-y-6">
+        <div className="bg-white rounded-3xl shadow-md border-2 border-green-100 p-6 sm:p-8 space-y-6 animate-slide-up">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="px-3 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs font-black uppercase">
+              <span className="px-3 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-black uppercase">
                 {currentQ.question_type}
               </span>
               <span className="px-3 py-0.5 bg-amber-50 text-amber-800 rounded-full text-xs font-black">
@@ -551,19 +619,19 @@ export default function ChildQuizTake() {
                       key={idx}
                       type="button"
                       onClick={() => handleAnswer(currentQ.id, option)}
-                      className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left font-bold text-base sm:text-lg transition-all flex items-center gap-4 ${
+                      className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left font-bold text-base sm:text-lg transition-all flex items-center gap-4 hover:scale-105 ${
                         isSelected
-                          ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-200 text-purple-900 shadow-sm'
-                          : 'bg-slate-50/70 border-slate-200 hover:bg-purple-50/50 hover:border-purple-300 text-slate-800'
+                          ? 'bg-green-50 border-green-500 ring-2 ring-green-200 text-green-900 shadow-sm animate-pop'
+                          : 'bg-slate-50/70 border-slate-200 hover:bg-green-50/50 hover:border-green-300 text-slate-800'
                       }`}
                     >
                       <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black transition ${
-                        isSelected ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'
+                        isSelected ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-600'
                       }`}>
                         {letter}
                       </span>
                       <span className="flex-1 text-left leading-snug">{option}</span>
-                      {isSelected && <span className="text-xl text-purple-600">✓</span>}
+                      {isSelected && <span className="text-xl text-green-600">✓</span>}
                     </button>
                   );
                 })}
@@ -583,15 +651,53 @@ export default function ChildQuizTake() {
                       key={opt.value}
                       type="button"
                       onClick={() => handleAnswer(currentQ.id, opt.value)}
-                      className={`p-6 rounded-3xl border-2 font-black text-center transition flex flex-col items-center gap-2 ${
+                      className={`p-6 rounded-3xl border-2 font-black text-center transition flex flex-col items-center gap-2 hover:scale-105 ${
                         isSelected
-                          ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-200 text-purple-900 shadow-md'
-                          : 'bg-slate-50 border-slate-200 hover:bg-purple-50 text-slate-700'
+                          ? 'bg-green-50 border-green-500 ring-2 ring-green-200 text-green-900 shadow-md animate-pop'
+                          : 'bg-slate-50 border-slate-200 hover:bg-green-50 text-slate-700'
                       }`}
                     >
                       <span className="text-4xl">{opt.icon}</span>
                       <span className="text-base sm:text-lg">{opt.amharic}</span>
                     </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Matching: each prompt gets a dropdown of the shuffled answers */}
+            {currentQ.question_type === 'matching' && matchingPairs(currentQ).length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-500">
+                  🔗 ከቀኝ ያለውን መልስ ለእያንዳንዱ ጥያቄ ይምረጡ / Match each item with its answer
+                </p>
+                {matchingPairs(currentQ).map((pair, idx) => {
+                  const picked = parseMatchingSelections(answers[currentQ.id]);
+                  return (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-1 sm:grid-cols-[1fr,auto,1fr] gap-2 sm:gap-3 items-center bg-slate-50/70 border-2 border-slate-200 rounded-2xl p-3"
+                    >
+                      <div className="px-4 py-3 bg-blue-50 rounded-xl border-2 border-blue-200 font-bold text-slate-800">
+                        <span className="text-xs text-blue-500 mr-2">{idx + 1}.</span>
+                        {pair.question}
+                      </div>
+                      <div className="hidden sm:block text-2xl text-slate-400 text-center">→</div>
+                      <select
+                        value={picked[idx] || ''}
+                        onChange={(e) => handleMatchingAnswer(currentQ.id, idx, e.target.value)}
+                        className={`w-full px-4 py-3 rounded-xl border-2 font-bold outline-none transition ${
+                          picked[idx]
+                            ? 'border-green-400 bg-green-50 text-green-900'
+                            : 'border-slate-200 bg-white text-slate-600'
+                        }`}
+                      >
+                        <option value="">— ይምረጡ / Choose —</option>
+                        {(matchingPools[currentQ.id] || []).map((answer, i) => (
+                          <option key={i} value={answer}>{answer}</option>
+                        ))}
+                      </select>
+                    </div>
                   );
                 })}
               </div>
@@ -606,7 +712,7 @@ export default function ChildQuizTake() {
                   value={answers[currentQ.id] || ''}
                   onChange={(e) => handleAnswer(currentQ.id, e.target.value)}
                   placeholder="መልስ..."
-                  className="w-full px-5 py-4 border-2 border-slate-200 focus:border-purple-500 rounded-2xl text-lg font-bold text-slate-800 outline-none transition"
+                  className="w-full px-5 py-4 border-2 border-slate-200 focus:border-green-500 rounded-2xl text-lg font-bold text-slate-800 outline-none transition"
                   autoFocus
                 />
               </div>
@@ -626,7 +732,7 @@ export default function ChildQuizTake() {
             {/* Quick question pill buttons */}
             <div className="hidden sm:flex items-center gap-1.5">
               {questions.map((q, idx) => {
-                const isAns = answers[q.id] !== undefined && answers[q.id] !== '';
+                const isAns = isQuestionAnswered(q);
                 const isCurr = idx === currentQuestion;
 
                 return (
@@ -635,7 +741,7 @@ export default function ChildQuizTake() {
                     onClick={() => goToQuestion(idx)}
                     className={`w-8 h-8 rounded-xl text-xs font-black transition ${
                       isCurr
-                        ? 'bg-purple-600 text-white ring-2 ring-purple-300'
+                        ? 'bg-green-600 text-white ring-2 ring-green-300'
                         : isAns
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
@@ -650,7 +756,7 @@ export default function ChildQuizTake() {
             {currentQuestion < questions.length - 1 ? (
               <button
                 onClick={() => goToQuestion(currentQuestion + 1)}
-                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow transition flex items-center gap-1.5"
+                className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow transition flex items-center gap-1.5"
               >
                 <span>ቀጣይ / Next</span>
                 <span>→</span>
@@ -668,7 +774,7 @@ export default function ChildQuizTake() {
       )}
 
       {/* Ready to Submit Card */}
-      <div className="bg-white rounded-3xl shadow-sm border border-purple-100 p-6 text-center space-y-3">
+      <div className="bg-white rounded-3xl shadow-sm border border-green-100 p-6 text-center space-y-3">
         {error && (
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold">
             ⚠️ {error}
@@ -686,7 +792,7 @@ export default function ChildQuizTake() {
           <button
             onClick={submitQuiz}
             disabled={submitting}
-            className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 text-white font-black rounded-2xl shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-green-600 to-pink-500 hover:from-green-700 text-white font-black rounded-2xl shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {submitting ? (
               <>
@@ -706,7 +812,7 @@ export default function ChildQuizTake() {
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
-            <div className="w-16 h-16 bg-purple-100 rounded-2xl mx-auto flex items-center justify-center text-3xl">
+            <div className="w-16 h-16 bg-green-100 rounded-2xl mx-auto flex items-center justify-center text-3xl">
               📤
             </div>
             <h3 className="text-xl font-black text-slate-800">ፈተናውን ማስገባት ትፈልጋለህ/ሽ?</h3>
@@ -723,7 +829,7 @@ export default function ChildQuizTake() {
               <button
                 onClick={confirmSubmit}
                 disabled={submitting}
-                className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 text-white font-black rounded-2xl text-xs shadow-md transition disabled:opacity-50"
+                className="flex-1 py-3 bg-gradient-to-r from-green-600 to-pink-500 hover:from-green-700 text-white font-black rounded-2xl text-xs shadow-md transition disabled:opacity-50"
               >
                 {submitting ? 'እያስገባ ነው...' : 'አዎ አስገባ / Yes, Submit'}
               </button>

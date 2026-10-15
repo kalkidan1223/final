@@ -41,6 +41,7 @@ import InstructorNotifications from './pages/instructor/InstructorNotifications'
 import InstructorProfile from './pages/instructor/InstructorProfile';
 import InstructorChildHome from './pages/instructor/InstructorChildHome';
 import InstructorVocabulary from './pages/instructor/InstructorVocabulary';
+import InstructorResults from './pages/instructor/Results';
 import ParentDashboard from './pages/parent/ParentDashboard';
 import ParentChildren from './pages/parent/ParentChildren';
 import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
@@ -64,6 +65,9 @@ import ChildActivityDetail from './pages/child/ChildActivityDetail';
 import ChildProgress from './pages/child/ChildProgress';
 import ChildActivities from './pages/child/ChildActivities';
 import ChildQuizzes from './pages/child/ChildQuizzes';
+import ChildResults from './pages/child/ChildResults';
+import ActivityResultDetail from './pages/child/ActivityResultDetail';
+import QuizResultDetail from './pages/child/QuizResultDetail';
 import ChildAchievements from './pages/child/ChildAchievements';
 import ChildNotifications from './pages/child/ChildNotifications';
 import ChildProfile from './pages/child/ChildProfile';
@@ -276,6 +280,14 @@ export default function App() {
         }
       />
       <Route
+        path="/instructor/results"
+        element={
+          <ProtectedRoute roles={['instructor', 'admin']}>
+            <InstructorResults />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/instructor/courses"
         element={
           <ProtectedRoute roles={['instructor']}>
@@ -415,6 +427,9 @@ export default function App() {
         <Route path="progress" element={<ChildProgress />} />
         <Route path="activities" element={<ChildActivities />} />
         <Route path="quizzes" element={<ChildQuizzes />} />
+        <Route path="results" element={<ChildResults />} />
+        <Route path="results/activities/:submissionId" element={<ActivityResultDetail />} />
+        <Route path="results/quizzes/:resultId" element={<QuizResultDetail />} />
         <Route path="achievements" element={<ChildAchievements />} />
         <Route path="notifications" element={<ChildNotifications />} />
         <Route path="profile" element={<ChildProfile />} />

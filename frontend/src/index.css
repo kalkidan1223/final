@@ -256,28 +256,34 @@ input::-ms-clear {
     animation: bounce-x 0.5s ease-in-out;
   }
 
-  /* ── Child-Friendly Buttons ── */
+  /* ── Child-Friendly Buttons (Green Theme) ── */
   .btn-child {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-4 font-black text-lg
            transition-all duration-200 active:scale-95;
   }
 
   .btn-child-primary {
-    @apply btn-child bg-gradient-to-r from-purple-500 to-pink-500 text-white
-           hover:from-purple-600 hover:to-pink-600 shadow-lg hover:shadow-xl
-           hover:shadow-purple-500/30;
-  }
-
-  .btn-child-success {
     @apply btn-child bg-gradient-to-r from-green-400 to-emerald-500 text-white
            hover:from-green-500 hover:to-emerald-600 shadow-lg hover:shadow-xl
            hover:shadow-green-500/30;
   }
 
+  .btn-child-success {
+    @apply btn-child bg-gradient-to-r from-teal-400 to-cyan-500 text-white
+           hover:from-teal-500 hover:to-cyan-600 shadow-lg hover:shadow-xl
+           hover:shadow-teal-500/30;
+  }
+
   .btn-child-warning {
-    @apply btn-child bg-gradient-to-r from-amber-400 to-orange-500 text-white
-           hover:from-amber-500 hover:to-orange-600 shadow-lg hover:shadow-xl
-           hover:shadow-amber-500/30;
+    @apply btn-child bg-gradient-to-r from-lime-400 to-green-500 text-white
+           hover:from-lime-500 hover:to-green-600 shadow-lg hover:shadow-xl
+           hover:shadow-lime-500/30;
+  }
+
+  .btn-child-fun {
+    @apply btn-child bg-gradient-to-r from-emerald-400 to-green-500 text-white
+           hover:from-emerald-500 hover:to-green-600 shadow-lg hover:shadow-xl
+           hover:shadow-emerald-500/30;
   }
 
   /* ── Progress Bar Enhancements ── */
