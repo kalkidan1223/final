@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MdNotifications, MdCheck, MdDoneAll } from 'react-icons/md';
+import { Link } from 'react-router-dom';
 import InstructorLayout from '../../components/InstructorLayout';
 import axiosClient from '../../api/axiosClient';
 
@@ -7,6 +8,7 @@ const TYPE_ICONS = {
   assignment: '📋',
   submission: '📬',
   message:    '💬',
+  question:   '🙋',
   feedback:   '⭐',
   system:     '🔔',
   ai:         '🤖',
@@ -107,6 +109,14 @@ export default function InstructorNotifications() {
                 <p className="text-xs text-slate-400 mt-1">
                   {new Date(n.created_at).toLocaleString()}
                 </p>
+                {n.related_question_id && (
+                  <Link
+                    to={`/instructor/questions?open=${n.related_question_id}`}
+                    className="inline-block mt-2 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Open question →
+                  </Link>
+                )}
               </div>
               {!n.is_read && (
                 <button

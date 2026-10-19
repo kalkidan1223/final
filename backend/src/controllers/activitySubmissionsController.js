@@ -3,7 +3,7 @@ const { getInstructorIdForUser, getParentIdForUser, getStudentIdForUser } = requ
 const { loadActivityWithContext } = require('./activitiesController');
 const { upsertLessonProgress } = require('../utils/progress');
 const { createNotification } = require('./notificationsController');
-const { canReadCourse } = require('../utils/courseAccess');
+const { canReadCourse, canManageCourse } = require('../utils/courseAccess');
 
 // ----------------------------------------------------------------------------
 // POST /api/activities/:id/submissions
@@ -99,8 +99,8 @@ async function listSubmissionsForActivity(req, res, next) {
     const params = [activityId];
 
     if (req.user.role === 'instructor') {
-      const instructorId = await getInstructorIdForUser(req.user.id);
-      if (instructorId !== activity.owner_instructor_id) {
+      const allowed = await canManageCourse(req.user, activity.course_id);
+      if (!allowed) {
         return res.status(403).json({ error: 'You do not have permission to view these submissions' });
       }
     } else if (req.user.role === 'parent') {
@@ -125,7 +125,7 @@ async function listSubmissionsForActivity(req, res, next) {
 // ----------------------------------------------------------------------------
 // PUT /api/submissions/:id/review  (owning instructor or admin)
 // Body: { status: 'reviewed' | 'graded', score, feedback }
-// Grading also advances the student's lesson progress.
+// Grading also advances the student's lesson progress and returns results.
 // ----------------------------------------------------------------------------
 async function reviewSubmission(req, res, next) {
   try {
@@ -140,7 +140,7 @@ async function reviewSubmission(req, res, next) {
     }
 
     const submissionResult = await query(
-      `SELECT sub.*, a.lesson_id, a.max_score, l.course_id, c.instructor_id AS owner_instructor_id
+      `SELECT sub.*, a.title AS activity_title, a.lesson_id, a.max_score, l.course_id, c.instructor_id AS owner_instructor_id
        FROM activity_submissions sub
        JOIN activities a ON a.id = sub.activity_id
        JOIN lessons l ON l.id = a.lesson_id
@@ -153,28 +153,30 @@ async function reviewSubmission(req, res, next) {
     }
     const submission = submissionResult.rows[0];
 
-    if (req.user.role !== 'admin') {
-      const instructorId = await getInstructorIdForUser(req.user.id);
-      if (!instructorId || instructorId !== submission.owner_instructor_id) {
-        return res.status(403).json({ error: 'You do not have permission to review this submission' });
-      }
+    const allowed = await canManageCourse(req.user, submission.course_id);
+    if (!allowed) {
+      return res.status(403).json({ error: 'You do not have permission to review this submission' });
     }
 
     if (status === 'graded' && (!Number.isFinite(Number(score)) || Number(score) < 0 || Number(score) > Number(submission.max_score))) {
       return res.status(400).json({ error: `score must be between 0 and ${submission.max_score}` });
     }
 
+    const percentage = status === 'graded' && submission.max_score > 0
+      ? Math.min(100, Math.max(0, Math.round((Number(score) / Number(submission.max_score)) * 100 * 10) / 10))
+      : (status === 'graded' ? 100 : null);
+
     const reviewerInstructorId = await getInstructorIdForUser(req.user.id);
     const result = await query(
       `UPDATE activity_submissions
-       SET status = $1, score = $2, feedback = $3, reviewed_by = $4, reviewed_at = now()
-       WHERE id = $5
+       SET status = $1, score = $2, percentage = $3, feedback = $4, reviewed_by = $5, reviewed_at = now(), graded_at = now()
+       WHERE id = $6
        RETURNING *`,
-      [status, status === 'graded' ? Number(score) : null, feedback || null, reviewerInstructorId, id]
+      [status, status === 'graded' ? Number(score) : null, percentage, feedback || null, reviewerInstructorId, id]
     );
 
     if (status === 'graded') {
-      const completionPct = submission.max_score > 0 ? (Number(score) / submission.max_score) * 100 : 100;
+      const completionPct = percentage || 100;
       await upsertLessonProgress(
         submission.student_id,
         submission.course_id,
@@ -184,8 +186,30 @@ async function reviewSubmission(req, res, next) {
       );
     }
 
-    // Notify whoever is on the account attached to this student, plus the
-    // linked parent (covers both the 11-12 self-managed and 5-10 parent-managed cases).
+    // Notify child through child_notifications (for Category 1 ages 5-9 & direct)
+    const notifTitle = status === 'graded' ? `Activity graded: ${submission.activity_title}` : `Activity reviewed: ${submission.activity_title}`;
+    const notifMessage = feedback || (status === 'graded' ? `Score: ${score}/${submission.max_score} (${percentage}%)` : 'Your submission was reviewed.');
+
+    try {
+      await query(
+        `INSERT INTO child_notifications (
+           student_id, type, title, message, related_course_id, related_lesson_id, related_activity_id, related_result_id
+         ) VALUES ($1, 'activity_graded', $2, $3, $4, $5, $6, $7)`,
+        [
+          submission.student_id,
+          notifTitle,
+          notifMessage,
+          submission.course_id,
+          submission.lesson_id,
+          submission.activity_id,
+          submission.id
+        ]
+      );
+    } catch (notifErr) {
+      console.warn('Child notification warning:', notifErr.message);
+    }
+
+    // Also notify account user / parent
     const studentAccount = await query(
       `SELECT u.id AS user_id, p.user_id AS parent_user_id
        FROM students s
@@ -195,13 +219,11 @@ async function reviewSubmission(req, res, next) {
       [submission.student_id]
     );
     const recipients = studentAccount.rows[0];
-    const notifTitle = status === 'graded' ? 'Activity graded' : 'Activity reviewed';
-    const notifMessage = feedback || (status === 'graded' ? `Score: ${score}/${submission.max_score}` : 'Your submission was reviewed.');
     if (recipients?.user_id) {
-      await createNotification(recipients.user_id, 'feedback', notifTitle, notifMessage);
+      await createNotification(recipients.user_id, 'feedback', notifTitle, notifMessage).catch(() => {});
     }
     if (recipients?.parent_user_id) {
-      await createNotification(recipients.parent_user_id, 'feedback', notifTitle, notifMessage);
+      await createNotification(recipients.parent_user_id, 'feedback', notifTitle, notifMessage).catch(() => {});
     }
 
     res.json({ submission: result.rows[0] });

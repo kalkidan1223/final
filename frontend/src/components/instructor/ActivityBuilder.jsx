@@ -1917,6 +1917,27 @@ function LetterTracingGameConfig({ config, setConfig, inputCls, labelCls, refere
     );
   };
 
+  const moveLetter = (index, direction) => {
+    const newLetters = [...letters];
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= newLetters.length) return;
+    const [moved] = newLetters.splice(index, 1);
+    newLetters.splice(targetIdx, 0, moved);
+    setConfig('letters', newLetters);
+  };
+
+  const handleAudioUpload = async (base, file) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const { data } = await axiosClient.post('/uploads/file', formData);
+      updateLetter(base, 'audio_url', data.url);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to upload audio');
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -1955,40 +1976,119 @@ function LetterTracingGameConfig({ config, setConfig, inputCls, labelCls, refere
 
       {letters.length > 0 && (
         <div>
-          <label className={labelCls}>The word that shows each letter</label>
+          <label className={labelCls}>Character Sequence, Words & Audio Recordings</label>
           <p className="text-xs text-gray-600 mb-3">
-            A Grade 1 child meets a letter inside a word they already know. Pick the
-            word for each one, or leave the reference example.
+            Arrange the teaching order, associate an example word, explanation tip, and optional custom audio recording per character.
           </p>
-          <div className="space-y-2">
-            {letters.map((l) => (
+          <div className="space-y-3">
+            {letters.map((l, index) => (
               <div
                 key={l.base}
-                className="flex flex-wrap items-center gap-2 bg-white rounded-lg p-3 border border-gray-200"
+                className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm space-y-2.5"
               >
-                <span className="text-2xl font-black text-emerald-700 shrink-0 w-10 text-center">
-                  {l.base}
-                </span>
-                {l.syllables?.length === 7 && (
-                  <span className="text-xs text-gray-400 shrink-0">
-                    {l.syllables.join(' ')}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Order control */}
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => moveLetter(index, -1)}
+                      className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 text-xs font-bold text-slate-600"
+                      title="Move Up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === letters.length - 1}
+                      onClick={() => moveLetter(index, 1)}
+                      className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 text-xs font-bold text-slate-600"
+                      title="Move Down"
+                    >
+                      ▼
+                    </button>
+                  </div>
+
+                  <span className="text-2xl font-black text-emerald-700 shrink-0 w-8 text-center">
+                    {l.base}
                   </span>
-                )}
-                <span className="flex-1 min-w-0">
+
+                  {l.syllables?.length === 7 && (
+                    <span className="text-xs text-slate-400 shrink-0 hidden sm:inline">
+                      {l.syllables.join(' ')}
+                    </span>
+                  )}
+
+                  <div className="flex-1 min-w-[130px]">
+                    <input
+                      value={l.word || ''}
+                      onChange={(e) => updateLetter(l.base, 'word', e.target.value)}
+                      placeholder="Amharic word (e.g. ሀብት)"
+                      className={`${inputCls} text-sm`}
+                    />
+                  </div>
+
                   <input
-                    value={l.word || ''}
-                    onChange={(e) => updateLetter(l.base, 'word', e.target.value)}
-                    placeholder="Amharic word"
-                    className={`${inputCls} text-sm`}
+                    value={l.emoji || ''}
+                    onChange={(e) => updateLetter(l.base, 'emoji', e.target.value)}
+                    placeholder="🎨 Emoji"
+                    className={`w-16 ${inputCls} text-center text-sm`}
+                    aria-label="Picture emoji"
                   />
-                </span>
-                <input
-                  value={l.emoji || ''}
-                  onChange={(e) => updateLetter(l.base, 'emoji', e.target.value)}
-                  placeholder="🎨"
-                  className={`w-16 ${inputCls} text-center`}
-                  aria-label="Picture emoji"
-                />
+
+                  <button
+                    type="button"
+                    onClick={() => toggleLetter(l.base)}
+                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg text-sm font-bold"
+                    title="Remove letter"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Audio Recording & Explanation row */}
+                <div className="grid sm:grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={l.audio_url || ''}
+                        onChange={(e) => updateLetter(l.base, 'audio_url', e.target.value)}
+                        placeholder="Audio URL (or upload file)"
+                        className={`${inputCls} text-xs flex-1`}
+                      />
+                      <label className="cursor-pointer px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold whitespace-nowrap transition">
+                        🎙️ Upload Audio
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          className="hidden"
+                          onChange={(e) => handleAudioUpload(l.base, e.target.files?.[0])}
+                        />
+                      </label>
+                    </div>
+                    {l.audio_url && (
+                      <div className="mt-1 flex items-center gap-2">
+                        <audio src={l.audio_url} controls className="h-6 w-full max-w-[220px]" />
+                        <button
+                          type="button"
+                          onClick={() => updateLetter(l.base, 'audio_url', '')}
+                          className="text-xs text-rose-600 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <input
+                      value={l.explanation || ''}
+                      onChange={(e) => updateLetter(l.base, 'explanation', e.target.value)}
+                      placeholder="Teaching tip / pronunciation explanation (optional)"
+                      className={`${inputCls} text-xs`}
+                    />
+                  </div>
+                </div>
               </div>
             ))}
           </div>

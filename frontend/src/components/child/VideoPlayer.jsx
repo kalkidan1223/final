@@ -2,6 +2,28 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import { resolveFileUrl } from '../../utils/fileUrl';
+import { useGenuineWatch } from '../../hooks/useGenuineWatch';
+
+function getYouTubeId(url) {
+  if (!url) return '';
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  return m ? m[1] : '';
+}
+
+function loadYouTubeApi() {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+  return new Promise((resolve) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof prev === 'function') prev();
+      resolve(window.YT);
+    };
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  });
+}
 
 export default function VideoPlayer() {
   const { id } = useParams();
@@ -9,130 +31,132 @@ export default function VideoPlayer() {
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [watched, setWatched] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [savedTime, setSavedTime] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const videoRef = useRef(null);
   const containerRef = useRef(null);
-  const progressIntervalRef = useRef(null);
+  const videoRef = useRef(null);
+  const ytPlayerRef = useRef(null);
+  const ytTimerRef = useRef(null);
+
+  const { progress, setProgress, tick, reset } = useGenuineWatch(id, () => {});
 
   useEffect(() => {
     fetchVideo();
     return () => {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-      }
+      if (ytTimerRef.current) clearInterval(ytTimerRef.current);
+      if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') ytPlayerRef.current.destroy();
     };
   }, [id]);
 
   const fetchVideo = async () => {
     try {
       setLoading(true);
-      // Try the new learning journey API first
+      const response = await axiosClient.get(`/child/learning/resources/video/${id}`);
+      const v = response.data.resource;
+      setVideo({
+        title: v.title,
+        video_url: v.video_url,
+        thumbnail_url: v.thumbnail_url,
+        description: v.description,
+        duration_seconds: v.duration_seconds,
+        status: v.status,
+      });
+      if (response.data.progress) setProgress((p) => ({ ...p, ...response.data.progress }));
+    } catch (err) {
+      // Fallback to legacy endpoint
       try {
-        const response = await axiosClient.get(`/child/learning/resources/video/${id}`);
-        const videoData = response.data.resource;
-        const progressData = response.data.progress;
-
-        setVideo({
-          title: videoData.title,
-          video_url: videoData.video_url,
-          thumbnail_url: videoData.thumbnail_url,
-          description: videoData.description,
-          duration_seconds: videoData.duration_seconds
-        });
-
-        // Load saved progress
-        if (progressData) {
-          setProgress(progressData.watch_percentage || 0);
-          setSavedTime(progressData.current_position_seconds || 0);
-          setWatched(progressData.completed || progressData.watch_percentage >= 90);
-        }
-      } catch (newApiError) {
-        // Fallback to legacy endpoint
         const response = await axiosClient.get(`/students/videos/${id}`);
         setVideo(response.data.video);
-        if (response.data.video?.watched) {
-          setWatched(true);
-          setProgress(100);
-        }
+      } catch (e2) {
+        setError(err.response?.data?.error || 'Failed to load video');
       }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load video');
     } finally {
       setLoading(false);
     }
   };
 
-  const saveProgress = async (currentTime, duration) => {
-    if (!duration || duration === 0) return;
+  const isYouTube = !!video?.video_url?.includes('youtube.com') || !!video?.video_url?.includes('youtu.be');
+  const isVimeo = !!video?.video_url?.includes('vimeo.com');
+  const isUpload = !!video?.video_url?.startsWith('/uploads/');
+  const isDirect = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(video?.video_url || '');
+  const isNative = isUpload || isDirect;
+  const youtubeId = isYouTube ? getYouTubeId(video?.video_url) : '';
+  const videoSrc = isNative ? resolveFileUrl(video?.video_url) : null;
 
-    const watchPercentage = (currentTime / duration) * 100;
-
-    try {
-      await axiosClient.post(`/child/learning/progress/video/${id}`, {
-        current_position_seconds: currentTime,
-        duration_seconds: duration,
-        watch_percentage: watchPercentage
+  // YouTube genuine tracking via the IFrame API
+  useEffect(() => {
+    if (!isYouTube || !youtubeId) return undefined;
+    let cancelled = false;
+    loadYouTubeApi().then((YT) => {
+      if (cancelled || !YT) return;
+      ytPlayerRef.current = new YT.Player('vp-yt-' + id, {
+        videoId: youtubeId,
+        playerVars: { rel: 0, modestbranding: 1, start: Math.floor(progress.current_position_seconds || 0) },
+        events: {
+          onStateChange: (event) => {
+            if (event.data === 1) {
+              ytTimerRef.current = setInterval(() => {
+                const player = ytPlayerRef.current;
+                if (!player || typeof player.getCurrentTime !== 'function') return;
+                tick(player.getCurrentTime(), player.getDuration(), true);
+              }, 3000);
+            } else {
+              if (ytTimerRef.current) { clearInterval(ytTimerRef.current); ytTimerRef.current = null; }
+              reset();
+            }
+          },
+        },
       });
-    } catch (err) {
-      console.error('Failed to save progress:', err);
-    }
-  };
+    });
+    return () => {
+      cancelled = true;
+      if (ytTimerRef.current) clearInterval(ytTimerRef.current);
+      if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') ytPlayerRef.current.destroy();
+    };
+  }, [isYouTube, youtubeId, id]);
 
-  const handleTimeUpdate = () => {
-    if (videoRef.current && videoRef.current.duration) {
-      const currentTime = videoRef.current.currentTime;
-      const duration = videoRef.current.duration;
-      const currentProgress = (currentTime / duration) * 100;
-
-      setProgress(currentProgress);
-
-      if (currentProgress > 90 && !watched) {
-        markAsWatched();
-      }
-
-      // Save progress every 5 seconds
-      if (Math.floor(currentTime) % 5 === 0 && Math.floor(currentTime) !== Math.floor(savedTime)) {
-        saveProgress(currentTime, duration);
-        setSavedTime(currentTime);
-      }
-    }
-  };
-
-  const handleEnded = () => {
-    if (!watched) {
-      markAsWatched();
-    }
-  };
-
-  const markAsWatched = async () => {
-    setWatched(true);
-    setProgress(100);
-    try {
-      await axiosClient.post(`/child/learning/progress/video/${id}`, {
-        current_position_seconds: videoRef.current?.duration || 0,
-        duration_seconds: videoRef.current?.duration || 0,
-        watch_percentage: 100,
-        completed: true
+  const vimeoPlayerRef = useRef(null);
+  const vimeoTimerRef = useRef(null);
+  useEffect(() => {
+    if (!isVimeo || !video?.video_url) return undefined;
+    let cancelled = false;
+    const script = document.createElement('script');
+    script.src = 'https://player.vimeo.com/api/player.js';
+    script.async = true;
+    script.onload = () => {
+      if (cancelled || !window.Vimeo) return;
+      const m = (video.video_url || '').match(/vimeo\.com\/(?:video\/)?(\d+)/);
+      if (!m) return;
+      const iframe = document.getElementById('vp-vimeo-' + id);
+      if (!iframe) return;
+      const player = new window.Vimeo.Player(iframe);
+      vimeoPlayerRef.current = player;
+      player.on('play', () => {
+        vimeoTimerRef.current = setInterval(async () => {
+          try {
+            const [seconds, duration] = await Promise.all([player.getCurrentTime(), player.getDuration()]);
+            tick(seconds, duration, true);
+          } catch (e) {}
+        }, 3000);
       });
-    } catch (e) {
-      console.error('Failed to mark as watched:', e);
-    }
-  };
+      player.on('pause', () => { if (vimeoTimerRef.current) { clearInterval(vimeoTimerRef.current); vimeoTimerRef.current = null; } reset(); });
+      player.on('ended', () => { if (vimeoTimerRef.current) { clearInterval(vimeoTimerRef.current); vimeoTimerRef.current = null; } reset(); });
+    };
+    document.head.appendChild(script);
+    return () => {
+      cancelled = true;
+      if (vimeoTimerRef.current) clearInterval(vimeoTimerRef.current);
+    };
+  }, [isVimeo, video?.video_url, id]);
 
-  const handlePlay = () => {
-    // Track play event
+  const handleTimeUpdate = (e) => {
+    const v = e.target;
+    if (v.duration > 0) tick(v.currentTime, v.duration, !v.paused);
   };
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
-
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(err => {
-        console.error('Fullscreen error:', err);
-      });
+      containerRef.current.requestFullscreen().catch(() => {});
       setIsFullscreen(true);
     } else {
       document.exitFullscreen();
@@ -154,21 +178,14 @@ export default function VideoPlayer() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Download error:', err);
-      // Fallback: open in new tab
       window.open(videoSrc, '_blank');
     }
   };
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
   if (loading) {
@@ -199,38 +216,18 @@ export default function VideoPlayer() {
 
   if (!video) return null;
 
-  const isYouTube = video.video_url?.includes('youtube.com') || video.video_url?.includes('youtu.be');
-  const isUpload = video.video_url?.startsWith('/uploads/');
-  
-  function getYouTubeEmbedUrl(url) {
-    if (!url) return null;
-    // Handle various YouTube URL formats
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=)([^&\n]+)/,
-      /(?:youtube\.com\/embed\/)([^&\n]+)/,
-      /(?:youtu\.be\/)([^&\n]+)/,
-      /(?:youtube\.com\/shorts\/)([^&\n]+)/,
-    ];
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) return `https://www.youtube.com/embed/${match[1]}`;
-    }
-    return null;
-  }
-  
-  const youtubeEmbedUrl = isYouTube ? getYouTubeEmbedUrl(video.video_url) : null;
-  const videoSrc = isYouTube ? youtubeEmbedUrl : resolveFileUrl(video.video_url);
+  const pct = Math.min(100, Math.round(progress.watch_percentage || 0));
+  const required = progress.required_percentage || 90;
+  const watched = progress.completed || pct >= required;
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <button onClick={() => navigate(-1)} className="inline-flex items-center text-green-600 hover:text-green-700 font-medium">
             <span className="mr-2">←</span> Back to Lesson
           </button>
         </div>
-
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center">
             <span className="text-3xl">🎬</span>
@@ -240,16 +237,10 @@ export default function VideoPlayer() {
             <div className="flex flex-wrap gap-3 text-sm">
               {isYouTube && <span className="px-3 py-1 rounded-full bg-red-100 text-red-700">YouTube</span>}
               {isUpload && <span className="px-3 py-1 rounded-full bg-green-100 text-green-700">Uploaded Video</span>}
-              {video.status && <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">{video.status}</span>}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {watched && <span className="px-4 py-2 bg-green-100 text-green-700 rounded-xl font-bold flex items-center gap-1">
-              <span>✅</span> Watched
-            </span>}
-          </div>
+          {watched && <span className="px-4 py-2 bg-green-100 text-green-700 rounded-xl font-bold flex items-center gap-1"><span>✅</span> Completed</span>}
         </div>
-
         {video.description && (
           <div className="mt-4 p-4 bg-gray-50 rounded-xl">
             <p className="text-gray-700">{video.description}</p>
@@ -257,39 +248,20 @@ export default function VideoPlayer() {
         )}
       </div>
 
-      {/* Video Player */}
       <div ref={containerRef} className="bg-white rounded-2xl shadow-lg overflow-hidden">
-        {/* Progress Bar at top */}
         <div className="h-2 bg-gray-200 relative overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-300"
-            style={{ width: `${Math.min(progress, 100)}%` }}
-          />
-          {watched && (
-            <div className="absolute top-0 right-4 -translate-y-1/2 text-green-600 text-xs font-bold">
-              ✅ Completed
-            </div>
-          )}
+          <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-300" style={{ width: `${Math.min(pct, 100)}%` }} />
         </div>
-
         <div className="aspect-video bg-black relative">
           {isYouTube ? (
-            youtubeEmbedUrl ? (
-              <iframe
-                src={`${youtubeEmbedUrl}?autoplay=0&rel=0&modestbranding=1`}
-                title={video.title}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            ) : (
+            youtubeId ? <div id={'vp-yt-' + id} className="w-full h-full" /> : (
               <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white">
-                <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">
-                  ▶ Open on YouTube
-                </a>
+                <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">▶ Open on YouTube</a>
               </div>
             )
-          ) : isUpload ? (
+          ) : isVimeo ? (
+            <iframe id={'vp-vimeo-' + id} src={'https://player.vimeo.com/video/' + ((video.video_url || '').match(/vimeo\.com\/(?:video\/)?(\d+)/) || [])[1]} className="w-full h-full" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />
+          ) : isNative ? (
             <video
               ref={videoRef}
               src={videoSrc}
@@ -297,68 +269,43 @@ export default function VideoPlayer() {
               className="w-full h-full"
               poster={video.thumbnail_url}
               onTimeUpdate={handleTimeUpdate}
-              onEnded={handleEnded}
-              onPlay={handlePlay}
+              onPause={reset}
+              onSeeking={reset}
               onLoadedMetadata={() => {
-                // Restore saved position when video loads
-                if (savedTime > 0 && videoRef.current) {
-                  videoRef.current.currentTime = savedTime;
+                if (progress.current_position_seconds > 0 && videoRef.current) {
+                  videoRef.current.currentTime = progress.current_position_seconds;
                 }
               }}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-700 font-medium">
-                ▶ Watch Video
-              </a>
+            <div className="w-full h-full flex items-center justify-center text-white p-4 text-center bg-gray-900">
+              <p>This video is hosted externally. Open it to watch; progress tracking is not available for this provider.</p>
             </div>
           )}
         </div>
-
-        {/* Info Bar with Download and Fullscreen */}
         <div className="px-6 py-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4 text-sm text-gray-500">
             {video.duration_seconds && (
               <span>⏱️ {Math.floor(video.duration_seconds / 60)}:{String(video.duration_seconds % 60).padStart(2, '0')}</span>
             )}
+            <span>Progress: {pct}% (need {required}%)</span>
           </div>
           <div className="flex items-center gap-2">
             {isUpload && (
-              <button
-                onClick={handleDownload}
-                className="px-4 py-2 bg-green-500 text-white rounded-xl font-medium hover:bg-green-600 transition flex items-center gap-2"
-                title="Download video"
-              >
+              <button onClick={handleDownload} className="px-4 py-2 bg-green-500 text-white rounded-xl font-medium hover:bg-green-600 transition flex items-center gap-2" title="Download video">
                 <span>⬇️</span> Download
               </button>
             )}
-            <button
-              onClick={toggleFullscreen}
-              className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition flex items-center gap-2"
-              title="Fullscreen"
-            >
-              <span>{isFullscreen ? '⛶' : '⛶'}</span> {isFullscreen ? 'Exit' : 'Fullscreen'}
-            </button>
-            <button
-              onClick={markAsWatched}
-              disabled={watched}
-              className={`px-4 py-2 rounded-xl font-medium transition ${watched ? 'bg-green-100 text-green-700 cursor-default' : 'bg-teal-500 text-white hover:bg-teal-600'}`}
-            >
-              {watched ? '✅ Marked' : '✅ Mark Watched'}
+            <button onClick={toggleFullscreen} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition flex items-center gap-2" title="Fullscreen">
+              <span>⛶</span> {isFullscreen ? 'Exit' : 'Fullscreen'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Learning Tips */}
       <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6">
-        <h3 className="font-bold text-green-800 mb-3 flex items-center gap-2">
-          <span>💡</span> Learning Tip
-        </h3>
-        <p className="text-gray-700">
-          Take notes while watching! Pause the video to write down important points. 
-          You can re-watch any part as many times as you need.
-        </p>
+        <h3 className="font-bold text-green-800 mb-3 flex items-center gap-2"><span>💡</span> Learning Tip</h3>
+        <p className="text-gray-700">Take notes while watching! Pause the video to write down important points. You can re-watch any part as many times as you need. Progress counts only the parts you actually watch.</p>
       </div>
     </div>
   );

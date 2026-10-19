@@ -118,6 +118,10 @@ export function normalizeLetters(config, reference = {}) {
         word: l.word || refWord?.word || base,
         emoji: l.emoji || refWord?.emoji || '🔤',
         english: l.english || refWord?.english || '',
+        audio_url: l.audio_url || null,
+        syllable_audio: l.syllable_audio || null,
+        explanation: l.explanation || null,
+        picture_url: l.picture_url || null,
       };
     });
 
@@ -133,6 +137,10 @@ export function normalizeLetters(config, reference = {}) {
       word: refWord?.word || f.base_char,
       emoji: refWord?.emoji || '🔤',
       english: refWord?.english || '',
+      audio_url: null,
+      syllable_audio: null,
+      explanation: null,
+      picture_url: null,
     };
   });
 }

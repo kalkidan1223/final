@@ -33,12 +33,19 @@ import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
 import InstructorLessonDetail from './pages/instructor/InstructorLessonDetail';
 import InstructorLessonCreate from './pages/instructor/InstructorLessonCreate';
+import InstructorLessons from './pages/instructor/InstructorLessons';
+import InstructorMaterials from './pages/instructor/InstructorMaterials';
+import InstructorActivities from './pages/instructor/InstructorActivities';
+import InstructorQuizzes from './pages/instructor/InstructorQuizzes';
+import InstructorProgress from './pages/instructor/InstructorProgress';
+import InstructorSubmissions from './pages/instructor/InstructorSubmissions';
 import InstructorQuizManage from './pages/instructor/InstructorQuizManage';
 import InstructorActivitySubmissions from './pages/instructor/InstructorActivitySubmissions';
 import InstructorStudentProfile from './pages/instructor/InstructorStudentProfile';
 import InstructorStudents from './pages/instructor/InstructorStudents';
 import InstructorMessages from './pages/instructor/InstructorMessages';
 import InstructorNotifications from './pages/instructor/InstructorNotifications';
+import InstructorQuestions from './pages/instructor/InstructorQuestions';
 import InstructorProfile from './pages/instructor/InstructorProfile';
 import InstructorChildHome from './pages/instructor/InstructorChildHome';
 import InstructorVocabulary from './pages/instructor/InstructorVocabulary';
@@ -71,6 +78,7 @@ import ActivityResultDetail from './pages/child/ActivityResultDetail';
 import QuizResultDetail from './pages/child/QuizResultDetail';
 import ChildAchievements from './pages/child/ChildAchievements';
 import ChildNotifications from './pages/child/ChildNotifications';
+import ChildQuestions from './pages/child/ChildQuestions';
 import ChildProfile from './pages/child/ChildProfile';
 import ChildQuizTake from './pages/child/ChildQuizTake';
 import WritingActivity from './pages/child/WritingActivity';
@@ -360,31 +368,34 @@ export default function App() {
         element={<ProtectedRoute roles={['instructor']}><InstructorStudents /></ProtectedRoute>}
       />
       <Route path="/instructor/lessons"
-        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorLessons /></ProtectedRoute>}
+      />
+      <Route path="/instructor/lessons/create"
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorLessonCreate /></ProtectedRoute>}
       />
       <Route path="/instructor/materials"
-        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorMaterials /></ProtectedRoute>}
       />
       <Route path="/instructor/activities"
-        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorActivities /></ProtectedRoute>}
       />
       <Route path="/instructor/quizzes"
-        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorQuizzes /></ProtectedRoute>}
       />
       <Route path="/instructor/submissions"
-        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
-      />
-      <Route path="/instructor/attendance"
-        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorSubmissions /></ProtectedRoute>}
       />
       <Route path="/instructor/progress"
-        element={<ProtectedRoute roles={['instructor']}><Navigate to="/instructor/courses" replace /></ProtectedRoute>}
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorProgress /></ProtectedRoute>}
       />
       <Route path="/instructor/messages"
         element={<ProtectedRoute roles={['instructor']}><InstructorMessages /></ProtectedRoute>}
       />
       <Route path="/instructor/notifications"
         element={<ProtectedRoute roles={['instructor']}><InstructorNotifications /></ProtectedRoute>}
+      />
+      <Route path="/instructor/questions"
+        element={<ProtectedRoute roles={['instructor']}><InstructorQuestions /></ProtectedRoute>}
       />
       <Route path="/instructor/profile"
         element={<ProtectedRoute roles={['instructor']}><InstructorProfile /></ProtectedRoute>}
@@ -434,6 +445,7 @@ export default function App() {
         <Route path="results/quizzes/:resultId" element={<QuizResultDetail />} />
         <Route path="achievements" element={<ChildAchievements />} />
         <Route path="notifications" element={<ChildNotifications />} />
+        <Route path="questions" element={<ChildQuestions />} />
         <Route path="profile" element={<ChildProfile />} />
         <Route path="quizzes/:id" element={<ChildQuizTake />} />
         <Route path="activities/:id/write" element={<WritingActivity />} />

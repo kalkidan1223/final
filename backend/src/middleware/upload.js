@@ -57,4 +57,28 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ storage, limits: { fileSize: MAX_SIZE }, fileFilter });
 
-module.exports = { upload, UPLOAD_ROOT, MATERIAL_DIR, MAX_SIZE };
+/**
+ * Middleware: parse an OPTIONAL multipart file (default field "file") plus any
+ * text fields. Requests that are not multipart (e.g. application/json) pass
+ * straight through untouched, so it is safe to attach to routes that accept
+ * both JSON and FormData bodies.
+ *
+ * Without this, a FormData body arrives with an empty req.body on a route that
+ * has no multipart parser, silently dropping the child's typed answer.
+ */
+function parseMultipartFile(field = 'file') {
+  return (req, res, next) => {
+    upload.single(field)(req, res, (err) => {
+      if (!err) return next();
+      const message =
+        err.code === 'LIMIT_FILE_SIZE'
+          ? `File is too large (max ${Math.round(MAX_SIZE / (1024 * 1024))} MB)`
+          : err.code === 'FILE_TYPE_NOT_ALLOWED'
+            ? 'This file type is not allowed. Upload PDF, image, audio, video or zip files.'
+            : err.message || 'Upload failed';
+      return res.status(400).json({ error: message });
+    });
+  };
+}
+
+module.exports = { upload, parseMultipartFile, UPLOAD_ROOT, MATERIAL_DIR, MAX_SIZE };

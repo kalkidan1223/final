@@ -140,17 +140,18 @@ async function getResourceAccess(studentId, resourceType, resourceId) {
 }
 
 /**
- * Lazily register a lesson's existing content into `lesson_resources` so the
- * learning order always comes from the database. Only runs when the lesson has
- * no journey rows yet, so it never overwrites an instructor's ordering.
+ * Register a lesson's existing content into `lesson_resources` so the learning
+ * order always comes from the database.
+ *
+ * This is idempotent and self-healing: every call appends any content that is
+ * not yet part of the journey (a PDF/material, video, activity or quiz added
+ * after the journey was first built) while leaving already-registered rows and
+ * the instructor's saved order untouched. Without this, content created through
+ * a path that does not register itself (e.g. a legacy material) would be
+ * permanently invisible to children because the journey is read purely from
+ * `lesson_resources`.
  */
 async function ensureLessonResources(lessonId) {
-  const existing = await query(
-    'SELECT COUNT(*)::int AS n FROM lesson_resources WHERE lesson_id = $1',
-    [lessonId]
-  );
-  if (existing.rows[0].n > 0) return;
-
   const sources = [
     ['activity', 'activities', 'Complete this activity to practice'],
     ['video', 'videos', 'Watch this video to learn'],
@@ -161,12 +162,28 @@ async function ensureLessonResources(lessonId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    let displayOrder = 0;
+
+    // Continue numbering after the last saved position; existing rows keep the
+    // order the instructor arranged them in.
+    const orderRes = await client.query(
+      'SELECT COALESCE(MAX(display_order), -1) + 1 AS next_order FROM lesson_resources WHERE lesson_id = $1',
+      [lessonId]
+    );
+    let displayOrder = orderRes.rows[0].next_order;
 
     for (const [type, table, description] of sources) {
       const rows = await client.query(
-        `SELECT id, title FROM ${table} WHERE lesson_id = $1 ORDER BY created_at, id`,
-        [lessonId]
+        `SELECT ct.id, ct.title
+         FROM ${table} ct
+         WHERE ct.lesson_id = $1
+           AND NOT EXISTS (
+             SELECT 1 FROM lesson_resources lr
+             WHERE lr.lesson_id = ct.lesson_id
+               AND lr.resource_type = $2
+               AND lr.resource_id = ct.id
+           )
+         ORDER BY ct.created_at, ct.id`,
+        [lessonId, type]
       );
       for (const row of rows.rows) {
         await client.query(

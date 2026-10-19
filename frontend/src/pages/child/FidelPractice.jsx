@@ -95,17 +95,51 @@ export default function FidelPractice({ activity, reference = {} }) {
     pointsRef.current = [];
   }, [letterIndex, orderIndex]);
 
+  const playLetterSound = useCallback((idx = orderIndex) => {
+    if (!letter) return;
+    const soundChar = syllableList[idx] || letter.base;
+    const specificAudio = letter.syllable_audio?.[idx] || (idx === 0 ? letter.audio_url : null);
+    if (specificAudio) {
+      const audio = new Audio(specificAudio);
+      audio.play().catch(() => {
+        voice.speak([
+          { text: soundChar, lang: 'am' },
+          { text: orders[idx]?.name || '', lang: 'am' },
+        ]);
+      });
+    } else {
+      voice.speak([
+        { text: soundChar, lang: 'am' },
+        { text: orders[idx]?.name || '', lang: 'am' },
+      ]);
+    }
+  }, [letter, orderIndex, orders, syllableList, voice]);
+
   // Speak the new character as soon as it appears, so a child who cannot read
   // always knows which sound to draw.
   useEffect(() => {
     if (!letter) return;
-    voice.speakOnce(
-      `fidel-${letter.base}-${orderIndex}`,
-      [
-        { text: letter.base, lang: 'am' },
-        { text: orders[orderIndex]?.name || '', lang: 'am' },
-      ]
-    );
+    const specificAudio = letter.syllable_audio?.[orderIndex] || (orderIndex === 0 ? letter.audio_url : null);
+    if (specificAudio) {
+      const audio = new Audio(specificAudio);
+      audio.play().catch(() => {
+        voice.speakOnce(
+          `fidel-${letter.base}-${orderIndex}`,
+          [
+            { text: letter.base, lang: 'am' },
+            { text: orders[orderIndex]?.name || '', lang: 'am' },
+          ]
+        );
+      });
+    } else {
+      voice.speakOnce(
+        `fidel-${letter.base}-${orderIndex}`,
+        [
+          { text: letter.base, lang: 'am' },
+          { text: orders[orderIndex]?.name || '', lang: 'am' },
+        ]
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [letter?.base, orderIndex]);
 
@@ -270,13 +304,19 @@ export default function FidelPractice({ activity, reference = {} }) {
 
           <div className="flex flex-col sm:flex-row items-center gap-5">
             <button
-              onClick={() => voice.speak([{ text: target, lang: 'am' }])}
+              onClick={() => playLetterSound(orderIndex)}
               className="w-32 h-32 sm:w-40 sm:h-40 rounded-[2rem] bg-amber-100 border-4 border-amber-300 text-7xl sm:text-8xl font-black text-amber-950 active:scale-95 transition shadow-inner shrink-0"
             >
               {target}
             </button>
 
             <div className="flex-1 w-full space-y-3">
+              {letter.explanation && (
+                <div className="bg-amber-50/80 border border-amber-200 rounded-xl px-3 py-2 text-xs font-medium text-amber-900 flex items-center gap-2">
+                  <span>💡</span>
+                  <span>{letter.explanation}</span>
+                </div>
+              )}
               {syllableList.length > 0 && (
                 <>
                   <p className="text-sm font-black text-slate-700">
@@ -293,9 +333,7 @@ export default function FidelPractice({ activity, reference = {} }) {
                           onClick={() => {
                             setCelebrate(false);
                             setOrderIndex(index);
-                            if (syllableList[index]) {
-                              voice.speak([{ text: syllableList[index], lang: 'am' }]);
-                            }
+                            playLetterSound(index);
                           }}
                           className={`px-3.5 py-2.5 rounded-2xl font-black text-lg transition active:scale-95 ${
                             active

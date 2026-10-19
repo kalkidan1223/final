@@ -672,9 +672,12 @@ async function getActivity(req, res, next) {
 async function submitActivity(req, res, next) {
   try {
     const { activityId } = req.params;
+    const body = req.body || {};
     // Accept both the child-portal field names and the generic submission ones.
-    const submitted_content = req.body.submitted_content ?? req.body.submission_text ?? req.body.submission_data ?? null;
-    const file_url = req.body.file_url ?? req.body.submission_url ?? null;
+    const submitted_content = body.submitted_content ?? body.submission_text ?? body.submission_data ?? null;
+    // The file may arrive as a URL (JSON players) or as an uploaded file
+    // (the generic FormData player), so derive it from req.file when present.
+    const file_url = body.file_url ?? body.submission_url ?? (req.file ? `/uploads/materials/${req.file.filename}` : null);
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
@@ -747,33 +750,38 @@ async function submitActivity(req, res, next) {
       );
     }
 
-    // Upsert student_activity_progress lifecycle table
-    const actProgStatus = initialStatus === 'graded' ? 'completed' : 'submitted';
-    await query(
-      `INSERT INTO student_activity_progress (
-        student_id, activity_id, status, progress_percentage,
-        submission_id, started_at, submitted_at, completed_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, now(), now(), $6, now())
-      ON CONFLICT (student_id, activity_id)
-      DO UPDATE SET
-        status = EXCLUDED.status,
-        progress_percentage = EXCLUDED.progress_percentage,
-        submission_id = EXCLUDED.submission_id,
-        submitted_at = now(),
-        completed_at = EXCLUDED.completed_at,
-        updated_at = now()`,
-      [
-        child.id,
-        activityId,
-        actProgStatus,
-        initialStatus === 'graded' ? 100 : 80,
-        subResult.rows[0]?.id || null,
-        initialStatus === 'graded' ? new Date() : null,
-      ]
-    );
+    // Derived progress tables. The submission above is the authoritative record,
+    // so a failure in these auxiliary writes must never tell the child that the
+    // submission failed (previously a bad column here caused exactly that).
+    try {
+      const actProgStatus = initialStatus === 'graded' ? 'completed' : 'submitted';
+      await query(
+        `INSERT INTO student_activity_progress (
+          student_id, activity_id, status, progress_percentage,
+          started_at, submitted_at, completed_at, updated_at
+        ) VALUES ($1, $2, $3, $4, now(), now(), $5, now())
+        ON CONFLICT (student_id, activity_id)
+        DO UPDATE SET
+          status = EXCLUDED.status,
+          progress_percentage = EXCLUDED.progress_percentage,
+          submitted_at = now(),
+          completed_at = EXCLUDED.completed_at,
+          updated_at = now()`,
+        [
+          child.id,
+          activityId,
+          actProgStatus,
+          initialStatus === 'graded' ? 100 : 80,
+          initialStatus === 'graded' ? new Date() : null,
+        ]
+      );
 
-    // Update overall lesson progress
-    await updateLessonProgress(child.id, activity.course_id, activity.lesson_id);
+      // Update overall lesson progress
+      await updateLessonProgress(child.id, activity.course_id, activity.lesson_id);
+    } catch (progressErr) {
+      // The submission is already saved — log and continue rather than 500.
+      console.error('Failed to update activity/lesson progress:', progressErr);
+    }
 
     res.json({
       success: true,
@@ -1522,7 +1530,7 @@ async function updateLessonProgress(studentId, courseId, lessonId) {
   try {
     const [vidsRes, matsRes, actsRes, quizRes] = await Promise.all([
       query(`SELECT id, duration_seconds FROM videos WHERE lesson_id = $1`, [lessonId]),
-      query(`SELECT id, material_type FROM learning_materials WHERE lesson_id = $1 AND status = 'active'`, [lessonId]),
+      query(`SELECT id FROM learning_materials WHERE lesson_id = $1 AND status = 'active'`, [lessonId]),
       query(`SELECT id FROM activities WHERE lesson_id = $1 AND status = 'active'`, [lessonId]),
       query(`SELECT id FROM quizzes WHERE lesson_id = $1`, [lessonId]),
     ]);
@@ -1799,6 +1807,7 @@ async function getNotifications(req, res, next) {
         cn.related_activity_id,
         cn.related_quiz_id,
         cn.related_result_id,
+        cn.related_question_id,
         cn.is_read,
         cn.created_at,
         c.title as course_title,

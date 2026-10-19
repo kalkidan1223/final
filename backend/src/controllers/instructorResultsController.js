@@ -49,8 +49,9 @@ async function getResultsOverview(req, res, next) {
         `SELECT COUNT(*)::int as count
          FROM activity_submissions asub
          JOIN activities a ON a.id = asub.activity_id
-         WHERE a.instructor_id = $1`,
-        [instructorId]
+         JOIN lessons l ON l.id = a.lesson_id
+         WHERE (a.instructor_id = $1 OR l.course_id = ANY($2))`,
+        [instructorId, courseIds]
       ),
       
       // Pending reviews
@@ -58,8 +59,9 @@ async function getResultsOverview(req, res, next) {
         `SELECT COUNT(*)::int as count
          FROM activity_submissions asub
          JOIN activities a ON a.id = asub.activity_id
-         WHERE a.instructor_id = $1 AND asub.status = 'pending'`,
-        [instructorId]
+         JOIN lessons l ON l.id = a.lesson_id
+         WHERE (a.instructor_id = $1 OR l.course_id = ANY($2)) AND asub.status = 'pending'`,
+        [instructorId, courseIds]
       ),
       
       // Total quizzes taken
@@ -87,8 +89,9 @@ async function getResultsOverview(req, res, next) {
         `SELECT AVG(asub.percentage)::numeric(5,2) as avg_score
          FROM activity_submissions asub
          JOIN activities a ON a.id = asub.activity_id
-         WHERE a.instructor_id = $1 AND asub.percentage IS NOT NULL`,
-        [instructorId]
+         JOIN lessons l ON l.id = a.lesson_id
+         WHERE (a.instructor_id = $1 OR l.course_id = ANY($2)) AND asub.percentage IS NOT NULL`,
+        [instructorId, courseIds]
       )
     ]);
 
@@ -142,7 +145,7 @@ async function getActivitySubmissions(req, res, next) {
       JOIN students s ON s.id = asub.student_id
       JOIN lessons l ON l.id = a.lesson_id
       JOIN courses c ON c.id = l.course_id
-      WHERE a.instructor_id = $1
+      WHERE (a.instructor_id = $1 OR c.id IN (SELECT course_id FROM instructor_assignments WHERE instructor_id = $1 AND status = 'active'))
     `;
     
     const params = [instructorId];
@@ -170,8 +173,9 @@ async function getActivitySubmissions(req, res, next) {
       SELECT COUNT(*)::int as total
       FROM activity_submissions asub
       JOIN activities a ON a.id = asub.activity_id
-      JOIN courses c ON c.id = a.course_id
-      WHERE a.instructor_id = $1
+      JOIN lessons l ON l.id = a.lesson_id
+      JOIN courses c ON c.id = l.course_id
+      WHERE (a.instructor_id = $1 OR c.id IN (SELECT course_id FROM instructor_assignments WHERE instructor_id = $1 AND status = 'active'))
     `;
     const countParams = [instructorId];
     let countIndex = 2;

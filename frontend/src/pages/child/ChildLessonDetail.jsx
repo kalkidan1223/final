@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import LessonResourceViewer from '../../components/child/LessonResourceViewer';
 import LessonCompletionCelebration from '../../components/child/LessonCompletionCelebration';
+import AskTeacherModal from '../../components/child/AskTeacherModal';
 
 export default function ChildLessonDetail() {
   const { id } = useParams();
@@ -13,6 +14,7 @@ export default function ChildLessonDetail() {
   const [errorCode, setErrorCode] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
   const completionShownRef = useRef(false);
 
   useEffect(() => {
@@ -317,6 +319,23 @@ export default function ChildLessonDetail() {
       </div>
 
       {/* ============================================ */}
+      {/* ASK MY TEACHER - Big, easy-to-find help button */}
+      {/* ============================================ */}
+      <button
+        onClick={() => setAskOpen(true)}
+        className="w-full bg-white rounded-[2rem] border-4 border-purple-200 p-5 sm:p-6 shadow-xl flex items-center gap-4 hover:scale-[1.01] active:scale-[0.99] transition text-left"
+      >
+        <span className="text-5xl flex-shrink-0 animate-bounce">🙋</span>
+        <span className="flex-1">
+          <span className="block text-xl sm:text-2xl font-black text-purple-700">Ask My Teacher</span>
+          <span className="block text-sm font-bold text-slate-500">
+            Don’t understand something? Ask your teacher for help!
+          </span>
+        </span>
+        <span className="text-3xl">➜</span>
+      </button>
+
+      {/* ============================================ */}
       {/* LEARNING PATH - More Child-Friendly */}
       {/* ============================================ */}
       <div className="space-y-6">
@@ -362,6 +381,15 @@ export default function ChildLessonDetail() {
           </div>
         )}
       </div>
+
+      <AskTeacherModal
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+        courseId={lesson?.course_id || null}
+        courseTitle={lesson?.course_title || ''}
+        lessonId={lesson?.id || null}
+        lessonTitle={lesson?.title || ''}
+      />
     </div>
   );
 }

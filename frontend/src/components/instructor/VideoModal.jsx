@@ -17,7 +17,7 @@ export default function VideoModal({ open, onClose, lessonId, video, onSaved }) 
   const isEdit = Boolean(video);
 
   const [form, setForm] = useState({
-    title: '', description: '', video_url: '', thumbnail_url: '', duration_seconds: '',
+    title: '', description: '', video_url: '', thumbnail_url: '', duration_seconds: '', completion_threshold: '90',
   });
   const [source, setSource] = useState('link');
   const [file, setFile] = useState(null);
@@ -39,10 +39,11 @@ export default function VideoModal({ open, onClose, lessonId, video, onSaved }) 
         video_url: video.video_url || '',
         thumbnail_url: video.thumbnail_url || '',
         duration_seconds: video.duration_seconds || '',
+        completion_threshold: video.completion_threshold || '90',
       });
       setSource(video.source_type === 'upload' || video.video_url?.startsWith('/uploads/') ? 'upload' : 'link');
     } else {
-      setForm({ title: '', description: '', video_url: '', thumbnail_url: '', duration_seconds: '' });
+      setForm({ title: '', description: '', video_url: '', thumbnail_url: '', duration_seconds: '', completion_threshold: '90' });
       setSource('link');
     }
     setFile(null);
@@ -84,7 +85,8 @@ export default function VideoModal({ open, onClose, lessonId, video, onSaved }) 
         video_url: form.video_url,
         thumbnail_url: form.thumbnail_url || null,
         duration_seconds: form.duration_seconds ? Number(form.duration_seconds) : null,
-        source_type: source === 'upload' ? 'upload' : 'youtube',
+        completion_threshold: form.completion_threshold ? Number(form.completion_threshold) : 90,
+        source_type: source === 'upload' ? 'upload' : /vimeo\.com/.test(form.video_url) ? 'vimeo' : 'youtube',
       };
       if (isEdit) {
         await axiosClient.patch(`/videos/${video.id}`, payload);
@@ -172,7 +174,17 @@ export default function VideoModal({ open, onClose, lessonId, video, onSaved }) 
               </div>
             )}
             {form.video_url?.startsWith('/uploads/') && (
-              <video src={resolveFileUrl(form.video_url)} controls className="mt-3 aspect-video w-full max-w-sm rounded-xl bg-slate-100" />
+              <video
+                src={resolveFileUrl(form.video_url)}
+                controls
+                className="mt-3 aspect-video w-full max-w-sm rounded-xl bg-slate-100"
+                onLoadedMetadata={(e) => {
+                  const d = Math.round(e.target.duration || 0);
+                  if (d > 0 && !form.duration_seconds) {
+                    setForm((f) => ({ ...f, duration_seconds: String(d) }));
+                  }
+                }}
+              />
             )}
           </div>
         ) : (
@@ -222,6 +234,19 @@ export default function VideoModal({ open, onClose, lessonId, video, onSaved }) 
         {!isUpload && form.video_url && !embedUrl && (
           <p className="text-xs text-slate-500">Preview will appear once the URL is a valid YouTube or Vimeo link.</p>
         )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Duration (seconds)</label>
+            <input type="number" min="1" value={form.duration_seconds} onChange={(e) => setForm((f) => ({ ...f, duration_seconds: e.target.value }))} placeholder="e.g. 180" className={inputCls} />
+            <p className="mt-1 text-xs text-slate-400">Auto-filled for uploaded videos.</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Completion threshold (%)</label>
+            <input type="number" min="50" max="100" value={form.completion_threshold} onChange={(e) => setForm((f) => ({ ...f, completion_threshold: e.target.value }))} placeholder="90" className={inputCls} />
+            <p className="mt-1 text-xs text-slate-400">50-100. Default 90.</p>
+          </div>
+        </div>
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <button

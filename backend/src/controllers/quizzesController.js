@@ -1,31 +1,17 @@
 const { query, pool } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
-const { canReadCourse } = require('../utils/courseAccess');
+const { canReadCourse, canManageCourse, canManageLesson } = require('../utils/courseAccess');
 const { upsertLessonProgress } = require('../utils/progress');
 const { gradeAnswer } = require('../utils/quizGrading');
 
-// Resolves a lesson's owning instructor_id via its course, for ownership checks.
-async function getLessonOwnerInstructorId(lessonId) {
-  const result = await query(
-    `SELECT c.instructor_id
-     FROM lessons l
-     JOIN courses c ON c.id = l.course_id
-     WHERE l.id = $1`,
-    [lessonId]
-  );
-  return result.rows[0]?.instructor_id || null;
-}
-
 async function assertLessonOwnership(req, res, lessonId) {
-  const ownerInstructorId = await getLessonOwnerInstructorId(lessonId);
-  if (ownerInstructorId === null) {
+  const lessonCheck = await query('SELECT id FROM lessons WHERE id = $1', [lessonId]);
+  if (lessonCheck.rows.length === 0) {
     res.status(404).json({ error: 'Lesson not found' });
     return false;
   }
-  if (req.user.role === 'admin') return true;
-
-  const instructorId = await getInstructorIdForUser(req.user.id);
-  if (!instructorId || instructorId !== ownerInstructorId) {
+  const allowed = await canManageLesson(req.user, lessonId);
+  if (!allowed) {
     res.status(403).json({ error: 'You do not have permission to modify this lesson' });
     return false;
   }
@@ -56,10 +42,8 @@ async function assertQuizOwnership(req, res, quizId) {
     res.status(404).json({ error: 'Quiz not found' });
     return null;
   }
-  if (req.user.role === 'admin') return quiz;
-
-  const instructorId = await getInstructorIdForUser(req.user.id);
-  if (!instructorId || instructorId !== quiz.owner_instructor_id) {
+  const allowed = await canManageCourse(req.user, quiz.course_id);
+  if (!allowed) {
     res.status(403).json({ error: 'You do not have permission to modify this quiz' });
     return null;
   }

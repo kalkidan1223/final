@@ -468,8 +468,9 @@ async function getResourceDetail(req, res, next) {
         watch_percentage: 0,
         current_position_seconds: 0,
         completed: false,
-        required_percentage: 90
-      };
+        required_percentage: Number(resource?.completion_threshold) || 90
+       };
+       if (progress) progress.required_percentage = Number(resource?.completion_threshold) || progress.required_percentage || 90;
     } else if (resourceType === 'material') {
       const materialResult = await query('SELECT * FROM learning_materials WHERE id = $1', [resourceId]);
       resource = materialResult.rows[0];
@@ -559,10 +560,11 @@ async function updateVideoProgress(req, res, next) {
       return res.status(403).json({ error: 'This step is locked.', code: 'RESOURCE_LOCKED' });
     }
 
-    const videoRes = await query('SELECT duration_seconds FROM videos WHERE id = $1', [videoId]);
+    const videoRes = await query('SELECT duration_seconds, completion_threshold FROM videos WHERE id = $1', [videoId]);
     const clientDuration = Math.max(1, Number(duration_seconds) || 0);
     const storedDuration = Math.max(0, Number(videoRes.rows[0]?.duration_seconds) || 0);
     const effectiveDuration = Math.max(1, clientDuration, storedDuration);
+    const requiredThreshold = Number(videoRes.rows[0]?.completion_threshold) || 90;
 
     // Record only a GENUINE watched interval: the delta between consecutive
     // playback positions while the video was actually playing. Seeking forward
@@ -590,7 +592,7 @@ async function updateVideoProgress(req, res, next) {
     );
     const uniqueWatched = mergeWatchIntervals(intervalsRes.rows);
     const watchPct = Math.min(100, Math.round((uniqueWatched / effectiveDuration) * 100));
-    const isCompleted = watchPct >= 90;
+    const isCompleted = watchPct >= requiredThreshold;
     const status = isCompleted ? 'completed' : uniqueWatched > 0 ? 'in_progress' : 'not_started';
     const lastPosition = Math.round(Number(current_position_seconds ?? to) || 0);
 
@@ -602,8 +604,8 @@ async function updateVideoProgress(req, res, next) {
         `INSERT INTO student_video_progress (
           student_id, video_id, duration_seconds, watched_seconds, last_position_seconds,
           progress_percentage, status, watch_percentage, current_position_seconds,
-          completed, last_watched_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now())
+          completed, required_percentage, last_watched_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
         ON CONFLICT (student_id, video_id)
         DO UPDATE SET
           duration_seconds = GREATEST(student_video_progress.duration_seconds, EXCLUDED.duration_seconds),
@@ -614,9 +616,10 @@ async function updateVideoProgress(req, res, next) {
           current_position_seconds = EXCLUDED.current_position_seconds,
           status = CASE WHEN student_video_progress.status = 'completed' THEN 'completed' ELSE EXCLUDED.status END,
           completed = student_video_progress.completed OR EXCLUDED.completed,
+          required_percentage = EXCLUDED.required_percentage,
           last_watched_at = now(),
           updated_at = now()`,
-        [studentId, videoId, effectiveDuration, uniqueWatched, lastPosition, watchPct, status, watchPct, lastPosition, isCompleted]
+        [studentId, videoId, effectiveDuration, uniqueWatched, lastPosition, watchPct, status, watchPct, lastPosition, isCompleted, requiredThreshold]
       );
 
       await updateResourceProgressFromVideo(client, studentId, videoId, isCompleted);
@@ -637,7 +640,7 @@ async function updateVideoProgress(req, res, next) {
         duration_seconds: effectiveDuration,
         watch_percentage: watchPct,
         current_position_seconds: lastPosition,
-        required_percentage: 90,
+        required_percentage: requiredThreshold,
         completed: isCompleted,
       },
     });

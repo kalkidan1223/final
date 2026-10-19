@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 
 export default function ChildNotifications() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [error, setError] = useState('');
@@ -100,7 +101,10 @@ export default function ChildNotifications() {
           {notifications.map((n) => (
             <button
               key={n.id}
-              onClick={() => !n.is_read && markRead(n.id)}
+              onClick={() => {
+                if (!n.is_read) markRead(n.id);
+                if (n.related_question_id) navigate(`/child/questions?open=${n.related_question_id}`);
+              }}
               className={`w-full text-left bg-white rounded-2xl shadow-md p-5 border transition ${
                 n.is_read ? 'border-gray-100' : 'border-blue-200 hover:border-blue-300'
               }`}
@@ -117,6 +121,9 @@ export default function ChildNotifications() {
                     <span className="text-xs text-gray-400 flex-shrink-0">{formatTime(n.created_at)}</span>
                   </div>
                   <p className={`text-sm ${n.is_read ? 'text-gray-400' : 'text-gray-600'}`}>{n.message || n.body || ''}</p>
+                  {n.related_question_id && (
+                    <p className="text-xs font-black text-purple-600 mt-1">Tap to read the answer →</p>
+                  )}
                 </div>
                 {!n.is_read && <span className="w-2.5 h-2.5 bg-blue-500 rounded-full mt-2 flex-shrink-0"></span>}
               </div>

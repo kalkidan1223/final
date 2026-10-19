@@ -5,6 +5,7 @@ import {
   MdClose, MdEdit, MdSave
 } from 'react-icons/md';
 import axiosClient from '../../api/axiosClient';
+import InstructorLayout from '../../components/InstructorLayout';
 
 function InstructorResults() {
   const [overview, setOverview] = useState(null);
@@ -154,14 +155,17 @@ function InstructorResults() {
 
   if (!overview) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-slate-500">Loading results...</div>
-      </div>
+      <InstructorLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-slate-500 font-medium">Loading results & analytics...</div>
+        </div>
+      </InstructorLayout>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <InstructorLayout>
+      <div className="max-w-7xl mx-auto space-y-6 pb-12">
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Student Results & Analytics</h1>
@@ -673,7 +677,8 @@ function InstructorResults() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </InstructorLayout>
   );
 }
 

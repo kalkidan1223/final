@@ -32,10 +32,13 @@ async function verifyCourseOwnership(courseId, instructorId) {
 
 /* ─── Dashboard ─── */
 
+/* ─── Dashboard ─── */
+
 async function getDashboard(req, res, next) {
   try {
     const instructorId = await getInstructorId(req.user.id);
 
+    // Get assigned courses
     const coursesRes = await query(
       `SELECT
          c.id AS course_id,
@@ -49,17 +52,22 @@ async function getDashboard(req, res, next) {
          ia.section,
          ia.id AS assignment_id,
          COUNT(DISTINCT l.id)::int AS lesson_count,
+         COUNT(DISTINCT l.id) FILTER (WHERE l.status = 'active')::int AS published_lesson_count,
          COUNT(DISTINCT m.id)::int AS material_count,
+         COUNT(DISTINCT a.id)::int AS activity_count,
+         COUNT(DISTINCT q.id)::int AS quiz_count,
          COUNT(DISTINCT s.id)::int AS student_count,
-         COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_count
+         COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending')::int AS pending_count
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
        JOIN age_groups ag ON ag.id = ia.age_group_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN learning_materials m ON m.lesson_id = l.id
-       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
-       LEFT JOIN activity_submissions sub ON sub.student_id = s.id
+       LEFT JOIN activities a ON a.lesson_id = l.id
+       LEFT JOIN quizzes q ON q.lesson_id = l.id
+       LEFT JOIN students s ON s.age_group_id = ia.age_group_id AND s.is_active = TRUE
+       LEFT JOIN activity_submissions sub ON sub.activity_id = a.id AND sub.student_id = s.id
        WHERE ia.instructor_id = $1 AND ia.status = 'active'
        GROUP BY c.id, c.title, c.description, c.thumbnail_url, c.status,
                 ag.name, ay.label, ia.grade, ia.section, ia.id
@@ -67,37 +75,147 @@ async function getDashboard(req, res, next) {
       [instructorId]
     );
 
-    const statsRes = await query(
-      `SELECT
-         COUNT(DISTINCT ia.id) AS courses,
-         COUNT(DISTINCT s.id) AS students,
-         COUNT(DISTINCT l.id) AS lessons,
-         COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending') AS pending_submissions,
-         COUNT(DISTINCT m.id) AS materials,
-         COUNT(DISTINCT v.id) AS videos
-       FROM instructor_assignments ia
-       JOIN courses c ON c.id = ia.course_id
-       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
-       LEFT JOIN lessons l ON l.course_id = ia.course_id
-       LEFT JOIN learning_materials m ON m.lesson_id = l.id
-       LEFT JOIN videos v ON v.lesson_id = l.id
-       LEFT JOIN activity_submissions sub ON sub.student_id = s.id
-       WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
-      [instructorId]
-    );
+    const courseIds = coursesRes.rows.map(r => r.course_id);
+
+    // If no courses assigned yet
+    if (courseIds.length === 0) {
+      return res.json({
+        summary: {
+          courses: 0,
+          students: 0,
+          lessons: 0,
+          published_lessons: 0,
+          materials: 0,
+          activities: 0,
+          quizzes: 0,
+          pending_submissions: 0,
+          avg_score: 0,
+        },
+        courses: [],
+        recent_submissions: [],
+        recent_quiz_results: [],
+        progress_overview: {
+          active_students: 0,
+          completed_students: 0,
+          avg_progress: 0,
+        }
+      });
+    }
+
+    // Consolidated database statistics across all assigned courses
+    const [statsRes, recentSubsRes, recentQuizzesRes, progressRes] = await Promise.all([
+      query(
+        `SELECT
+           COUNT(DISTINCT ia.id)::int AS courses,
+           COUNT(DISTINCT s.id)::int AS students,
+           COUNT(DISTINCT l.id)::int AS lessons,
+           COUNT(DISTINCT l.id) FILTER (WHERE l.status = 'active')::int AS published_lessons,
+           COUNT(DISTINCT m.id)::int AS materials,
+           COUNT(DISTINCT a.id)::int AS activities,
+           COUNT(DISTINCT q.id)::int AS quizzes,
+           COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending')::int AS pending_submissions
+         FROM instructor_assignments ia
+         JOIN courses c ON c.id = ia.course_id
+         LEFT JOIN students s ON s.age_group_id = ia.age_group_id AND s.is_active = TRUE
+         LEFT JOIN lessons l ON l.course_id = ia.course_id
+         LEFT JOIN learning_materials m ON m.lesson_id = l.id
+         LEFT JOIN activities a ON a.lesson_id = l.id
+         LEFT JOIN quizzes q ON q.lesson_id = l.id
+         LEFT JOIN activity_submissions sub ON sub.activity_id = a.id AND sub.student_id = s.id
+         WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
+        [instructorId]
+      ),
+      query(
+        `SELECT
+           sub.id,
+           sub.activity_id,
+           sub.student_id,
+           sub.status,
+           sub.score,
+           sub.percentage,
+           sub.submitted_at,
+           sub.submission_url,
+           sub.submission_text,
+           s.full_name AS student_name,
+           a.title AS activity_title,
+           a.activity_type,
+           a.max_score,
+           l.title AS lesson_title,
+           c.title AS course_title,
+           c.id AS course_id
+         FROM activity_submissions sub
+         JOIN activities a ON a.id = sub.activity_id
+         JOIN students s ON s.id = sub.student_id
+         JOIN lessons l ON l.id = a.lesson_id
+         JOIN courses c ON c.id = l.course_id
+         WHERE l.course_id = ANY($1)
+         ORDER BY sub.submitted_at DESC
+         LIMIT 6`,
+        [courseIds]
+      ),
+      query(
+        `SELECT
+           qr.id,
+           qr.quiz_id,
+           qr.student_id,
+           qr.score,
+           qr.total_points,
+           qr.percentage,
+           qr.submitted_at,
+           s.full_name AS student_name,
+           q.title AS quiz_title,
+           q.passing_score,
+           l.title AS lesson_title,
+           c.title AS course_title,
+           c.id AS course_id,
+           CASE WHEN qr.percentage >= COALESCE(q.passing_score, 70) THEN true ELSE false END AS is_passed
+         FROM quiz_results qr
+         JOIN quizzes q ON q.id = qr.quiz_id
+         JOIN students s ON s.id = qr.student_id
+         JOIN lessons l ON l.id = q.lesson_id
+         JOIN courses c ON c.id = l.course_id
+         WHERE l.course_id = ANY($1)
+         ORDER BY qr.submitted_at DESC
+         LIMIT 6`,
+        [courseIds]
+      ),
+      query(
+        `SELECT
+           COUNT(DISTINCT p.student_id)::int AS active_students,
+           COUNT(DISTINCT p.student_id) FILTER (WHERE p.status = 'completed')::int AS completed_students,
+           COALESCE(AVG(p.completion_percentage), 0)::numeric(5,1) AS avg_progress
+         FROM progress p
+         WHERE p.course_id = ANY($1)`,
+        [courseIds]
+      )
+    ]);
+
+    const stats = statsRes.rows[0] || {};
+    const prog = progressRes.rows[0] || {};
 
     const summary = {
-      courses: parseInt(statsRes.rows[0]?.courses || 0),
-      students: parseInt(statsRes.rows[0]?.students || 0),
-      lessons: parseInt(statsRes.rows[0]?.lessons || 0),
-      materials: parseInt(statsRes.rows[0]?.materials || 0),
-      videos: parseInt(statsRes.rows[0]?.videos || 0),
-      pending_submissions: parseInt(statsRes.rows[0]?.pending_submissions || 0),
-      attendance_rate: 0,
-      avg_score: 0,
+      courses: parseInt(stats.courses || 0),
+      students: parseInt(stats.students || 0),
+      lessons: parseInt(stats.lessons || 0),
+      published_lessons: parseInt(stats.published_lessons || 0),
+      materials: parseInt(stats.materials || 0),
+      activities: parseInt(stats.activities || 0),
+      quizzes: parseInt(stats.quizzes || 0),
+      pending_submissions: parseInt(stats.pending_submissions || 0),
+      avg_score: parseFloat(prog.avg_progress || 0),
     };
 
-    res.json({ summary, courses: coursesRes.rows });
+    res.json({
+      summary,
+      courses: coursesRes.rows,
+      recent_submissions: recentSubsRes.rows,
+      recent_quiz_results: recentQuizzesRes.rows,
+      progress_overview: {
+        active_students: parseInt(prog.active_students || 0),
+        completed_students: parseInt(prog.completed_students || 0),
+        avg_progress: parseFloat(prog.avg_progress || 0),
+      }
+    });
   } catch (err) {
     next(err);
   }
@@ -479,6 +597,349 @@ async function getCourse(req, res, next) {
   }
 }
 
+/* ─── Lessons Management ─── */
+
+async function listLessons(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { course_id, status, search } = req.query;
+
+    const { rows } = await query(
+      `SELECT
+         l.id,
+         l.course_id,
+         l.title,
+         l.description,
+         l.order_index,
+         l.status,
+         l.difficulty_level,
+         l.estimated_duration_minutes AS duration_minutes,
+         l.created_at,
+         l.updated_at,
+         c.title AS course_title,
+         c.thumbnail_url AS course_thumbnail,
+         ag.name AS age_group_name,
+         COUNT(DISTINCT m.id)::int AS material_count,
+         COUNT(DISTINCT a.id)::int AS activity_count,
+         COUNT(DISTINCT q.id)::int AS quiz_count,
+         COUNT(DISTINCT v.id)::int AS video_count
+       FROM lessons l
+       JOIN courses c ON c.id = l.course_id
+       JOIN age_groups ag ON ag.id = c.age_group_id
+       LEFT JOIN learning_materials m ON m.lesson_id = l.id
+       LEFT JOIN activities a ON a.lesson_id = l.id
+       LEFT JOIN quizzes q ON q.lesson_id = l.id
+       LEFT JOIN videos v ON v.lesson_id = l.id
+       WHERE c.id IN (
+         SELECT course_id FROM instructor_assignments
+         WHERE instructor_id = $1 AND status = 'active'
+       )
+         AND ($2::int IS NULL OR l.course_id = $2)
+         AND ($3::varchar IS NULL OR l.status = $3)
+         AND ($4::varchar IS NULL OR l.title ILIKE '%' || $4 || '%' OR l.description ILIKE '%' || $4 || '%')
+       GROUP BY l.id, l.course_id, l.title, l.description, l.order_index, l.status,
+                l.difficulty_level, l.estimated_duration_minutes, l.created_at, l.updated_at,
+                c.title, c.thumbnail_url, ag.name
+       ORDER BY c.title ASC, l.order_index ASC, l.id ASC`,
+      [instructorId, course_id ? parseInt(course_id) : null, status || null, search ? search.trim() : null]
+    );
+
+    res.json({ lessons: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ─── Materials Management ─── */
+
+async function listMaterials(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { course_id, lesson_id, material_type, search } = req.query;
+
+    const { rows } = await query(
+      `SELECT
+         m.id,
+         m.lesson_id,
+         m.title,
+         m.description,
+         m.type AS material_type,
+         m.file_url,
+         m.thumbnail_url,
+         m.status,
+         m.display_order AS order_index,
+         m.created_at,
+         l.title AS lesson_title,
+         c.id AS course_id,
+         c.title AS course_title,
+         ag.name AS age_group_name
+       FROM learning_materials m
+       JOIN lessons l ON l.id = m.lesson_id
+       JOIN courses c ON c.id = l.course_id
+       JOIN age_groups ag ON ag.id = c.age_group_id
+       WHERE c.id IN (
+         SELECT course_id FROM instructor_assignments
+         WHERE instructor_id = $1 AND status = 'active'
+       )
+         AND ($2::int IS NULL OR c.id = $2)
+         AND ($3::int IS NULL OR l.id = $3)
+         AND ($4::varchar IS NULL OR m.type::varchar = $4)
+         AND ($5::varchar IS NULL OR m.title ILIKE '%' || $5 || '%' OR m.description ILIKE '%' || $5 || '%')
+       ORDER BY m.created_at DESC`,
+      [
+        instructorId,
+        course_id ? parseInt(course_id) : null,
+        lesson_id ? parseInt(lesson_id) : null,
+        material_type || null,
+        search ? search.trim() : null
+      ]
+    );
+
+    res.json({ materials: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ─── Activities Management ─── */
+
+async function listActivities(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { course_id, lesson_id, activity_type, search } = req.query;
+
+    const { rows } = await query(
+      `SELECT
+         a.id,
+         a.lesson_id,
+         a.title,
+         a.instructions AS description,
+         a.activity_type,
+         a.max_score,
+         a.display_order AS order_index,
+         a.status,
+         a.difficulty,
+         a.created_at,
+         a.activity_config,
+         l.title AS lesson_title,
+         c.id AS course_id,
+         c.title AS course_title,
+         ag.name AS age_group_name,
+         COUNT(DISTINCT sub.id)::int AS submission_count,
+         COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending')::int AS pending_submissions,
+         COALESCE(AVG(sub.percentage) FILTER (WHERE sub.status IN ('reviewed', 'graded')), 0)::numeric(5,1) AS avg_score
+       FROM activities a
+       JOIN lessons l ON l.id = a.lesson_id
+       JOIN courses c ON c.id = l.course_id
+       JOIN age_groups ag ON ag.id = c.age_group_id
+       LEFT JOIN activity_submissions sub ON sub.activity_id = a.id
+       WHERE c.id IN (
+         SELECT course_id FROM instructor_assignments
+         WHERE instructor_id = $1 AND status = 'active'
+       )
+         AND ($2::int IS NULL OR c.id = $2)
+         AND ($3::int IS NULL OR l.id = $3)
+         AND ($4::varchar IS NULL OR a.activity_type::varchar = $4)
+         AND ($5::varchar IS NULL OR a.title ILIKE '%' || $5 || '%' OR a.instructions ILIKE '%' || $5 || '%')
+       GROUP BY a.id, a.lesson_id, a.title, a.instructions, a.activity_type, a.max_score,
+                a.display_order, a.status, a.difficulty, a.created_at, a.activity_config,
+                l.title, c.id, c.title, ag.name
+       ORDER BY a.created_at DESC`,
+      [
+        instructorId,
+        course_id ? parseInt(course_id) : null,
+        lesson_id ? parseInt(lesson_id) : null,
+        activity_type || null,
+        search ? search.trim() : null
+      ]
+    );
+
+    res.json({ activities: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ─── Quizzes Management ─── */
+
+async function listQuizzes(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { course_id, lesson_id, search } = req.query;
+
+    const { rows } = await query(
+      `SELECT
+         q.id,
+         q.lesson_id,
+         q.title,
+         q.description,
+         q.instructions,
+         q.passing_score,
+         q.max_score,
+         q.status,
+         q.time_limit_seconds,
+         q.created_at,
+         l.title AS lesson_title,
+         c.id AS course_id,
+         c.title AS course_title,
+         ag.name AS age_group_name,
+         COUNT(DISTINCT qq.id)::int AS question_count,
+         COUNT(DISTINCT qr.id)::int AS attempt_count,
+         COUNT(DISTINCT qr.id) FILTER (WHERE qr.percentage >= COALESCE(q.passing_score, 70))::int AS passed_count,
+         COALESCE(AVG(qr.percentage), 0)::numeric(5,1) AS avg_percentage
+       FROM quizzes q
+       JOIN lessons l ON l.id = q.lesson_id
+       JOIN courses c ON c.id = l.course_id
+       JOIN age_groups ag ON ag.id = c.age_group_id
+       LEFT JOIN quiz_questions qq ON qq.quiz_id = q.id
+       LEFT JOIN quiz_results qr ON qr.quiz_id = q.id
+       WHERE c.id IN (
+         SELECT course_id FROM instructor_assignments
+         WHERE instructor_id = $1 AND status = 'active'
+       )
+         AND ($2::int IS NULL OR c.id = $2)
+         AND ($3::int IS NULL OR l.id = $3)
+         AND ($4::varchar IS NULL OR q.title ILIKE '%' || $4 || '%' OR q.description ILIKE '%' || $4 || '%')
+       GROUP BY q.id, q.lesson_id, q.title, q.description, q.instructions, q.passing_score,
+                q.max_score, q.status, q.time_limit_seconds, q.created_at,
+                l.title, c.id, c.title, ag.name
+       ORDER BY q.created_at DESC`,
+      [
+        instructorId,
+        course_id ? parseInt(course_id) : null,
+        lesson_id ? parseInt(lesson_id) : null,
+        search ? search.trim() : null
+      ]
+    );
+
+    res.json({ quizzes: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ─── Student Learning Progress Matrix ─── */
+
+async function getStudentProgress(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { course_id, grade, section, search } = req.query;
+
+    const { rows } = await query(
+      `SELECT
+         s.id AS student_id,
+         s.full_name AS student_name,
+         s.gender,
+         s.grade,
+         s.section,
+         ag.name AS age_group_name,
+         c.id AS course_id,
+         c.title AS course_title,
+         COALESCE(p.status, 'not_started') AS progress_status,
+         COALESCE(p.completion_percentage, 0)::numeric(5,1) AS completion_percentage,
+         p.last_accessed_at,
+         COUNT(DISTINCT sub.id) FILTER (WHERE sub.status IN ('reviewed', 'graded'))::int AS activities_completed,
+         COUNT(DISTINCT qr.id) FILTER (WHERE qr.percentage >= 70)::int AS quizzes_passed,
+         COALESCE(AVG(qr.percentage), 0)::numeric(5,1) AS avg_quiz_score,
+         COALESCE(AVG(sub.percentage) FILTER (WHERE sub.status IN ('reviewed', 'graded')), 0)::numeric(5,1) AS avg_activity_score
+       FROM (
+         SELECT DISTINCT ia.course_id, ia.age_group_id
+         FROM instructor_assignments ia
+         WHERE ia.instructor_id = $1 AND ia.status = 'active'
+       ) my_courses
+       JOIN courses c ON c.id = my_courses.course_id
+       JOIN age_groups ag ON ag.id = my_courses.age_group_id
+       JOIN students s ON s.age_group_id = my_courses.age_group_id AND s.is_active = TRUE
+       LEFT JOIN progress p ON p.student_id = s.id AND p.course_id = c.id
+       LEFT JOIN lessons l ON l.course_id = c.id
+       LEFT JOIN activities a ON a.lesson_id = l.id
+       LEFT JOIN activity_submissions sub ON sub.activity_id = a.id AND sub.student_id = s.id
+       LEFT JOIN quizzes q ON q.lesson_id = l.id
+       LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = s.id
+       WHERE ($2::int IS NULL OR c.id = $2)
+         AND ($3::varchar IS NULL OR s.grade = $3)
+         AND ($4::varchar IS NULL OR s.section = $4)
+         AND ($5::varchar IS NULL OR s.full_name ILIKE '%' || $5 || '%')
+       GROUP BY s.id, s.full_name, s.gender, s.grade, s.section, ag.name, c.id, c.title,
+                p.status, p.completion_percentage, p.last_accessed_at
+       ORDER BY c.title ASC, s.full_name ASC`,
+      [
+        instructorId,
+        course_id ? parseInt(course_id) : null,
+        grade || null,
+        section || null,
+        search ? search.trim() : null
+      ]
+    );
+
+    res.json({ progress: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ─── Activity Submissions & Grading ─── */
+
+async function listSubmissions(req, res, next) {
+  try {
+    const instructorId = await getInstructorId(req.user.id);
+    const { status, course_id, activity_id, search } = req.query;
+
+    const { rows } = await query(
+      `SELECT
+         sub.id,
+         sub.activity_id,
+         sub.student_id,
+         sub.status,
+         sub.score,
+         sub.percentage,
+         sub.submitted_at,
+         sub.graded_at,
+         sub.feedback,
+         sub.submission_url,
+         sub.submission_text,
+         sub.submitted_by,
+         s.full_name AS student_name,
+         s.grade AS student_grade,
+         s.section AS student_section,
+         a.title AS activity_title,
+         a.activity_type,
+         a.max_score,
+         l.id AS lesson_id,
+         l.title AS lesson_title,
+         c.id AS course_id,
+         c.title AS course_title
+       FROM activity_submissions sub
+       JOIN activities a ON a.id = sub.activity_id
+       JOIN students s ON s.id = sub.student_id
+       JOIN lessons l ON l.id = a.lesson_id
+       JOIN courses c ON c.id = l.course_id
+       WHERE c.id IN (
+         SELECT course_id FROM instructor_assignments
+         WHERE instructor_id = $1 AND status = 'active'
+       )
+         AND ($2::varchar IS NULL OR sub.status::varchar = $2)
+         AND ($3::int IS NULL OR c.id = $3)
+         AND ($4::int IS NULL OR a.id = $4)
+         AND ($5::varchar IS NULL OR s.full_name ILIKE '%' || $5 || '%' OR a.title ILIKE '%' || $5 || '%')
+       ORDER BY
+         CASE WHEN sub.status::varchar = 'pending' THEN 0 ELSE 1 END,
+         sub.submitted_at DESC`,
+      [
+        instructorId,
+        status && status !== 'all' ? status : null,
+        course_id ? parseInt(course_id) : null,
+        activity_id ? parseInt(activity_id) : null,
+        search ? search.trim() : null
+      ]
+    );
+
+    res.json({ submissions: rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getDashboard,
   getStudentProfile,
@@ -493,4 +954,10 @@ module.exports = {
   sendMessage,
   listCourses,
   getCourse,
+  listLessons,
+  listMaterials,
+  listActivities,
+  listQuizzes,
+  getStudentProgress,
+  listSubmissions,
 };

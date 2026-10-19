@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: '/child/activities', label: 'Activities', icon: '🎯', sound: 'target' },
   { path: '/child/quizzes', label: 'Quizzes', icon: '📝', sound: 'writing' },
   { path: '/child/results', label: 'Results', icon: '🏆', sound: 'trophy' },
+  { path: '/child/questions', label: 'My Questions', icon: '🙋', sound: 'question' },
   { path: '/child/progress', label: 'My Progress', icon: '⭐', sound: 'star' },
   { path: '/child/achievements', label: 'Achievements', icon: '�', sound: 'medal' },
   { path: '/child/notifications', label: 'Notifications', icon: '🔔', sound: 'bell' },

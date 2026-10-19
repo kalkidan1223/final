@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
+import { resolveFileUrl } from '../../utils/fileUrl';
 
 // ============================================
 // HELPERS
@@ -138,7 +139,12 @@ function VideoResourceViewer({ resourceId, onCompleted }) {
     }
   };
 
-  const isYouTube = videoData?.resource?.source_type === 'youtube';
+  const videoUrl = videoData?.resource?.video_url || '';
+  const isYouTube = /youtube\.com|youtu\.be/.test(videoUrl);
+  const isVimeo = /vimeo\.com/.test(videoUrl);
+  const isUpload = videoData?.resource?.source_type === 'upload' || videoUrl.startsWith('/uploads/');
+  const isDirectVideo = /\.(mp4|webm|ogg|mov)(\?|$)/i.test(videoUrl);
+  const isNative = isUpload || isDirectVideo;
 
   // --- Native uploaded video ---
   const handleNativeTimeUpdate = (e) => {
@@ -184,6 +190,39 @@ function VideoResourceViewer({ resourceId, onCompleted }) {
     };
   }, [isYouTube, resourceId, videoData?.resource?.video_url]);
 
+  // --- Vimeo player (real playback time via the Vimeo Player SDK) ---
+  const vimeoPlayerRef = useRef(null);
+  const vimeoTimerRef = useRef(null);
+  useEffect(() => {
+    if (!isVimeo || !videoData?.resource?.video_url) return undefined;
+    let cancelled = false;
+    const script = document.createElement('script');
+    script.src = 'https://player.vimeo.com/api/player.js';
+    script.async = true;
+    script.onload = () => {
+      if (cancelled || !window.Vimeo) return;
+      const iframe = document.getElementById('vimeo-player-' + resourceId);
+      if (!iframe) return;
+      const player = new window.Vimeo.Player(iframe);
+      vimeoPlayerRef.current = player;
+      player.on('play', () => {
+        vimeoTimerRef.current = setInterval(async () => {
+          try {
+            const [seconds, duration] = await Promise.all([player.getCurrentTime(), player.getDuration()]);
+            tick(seconds, duration, true);
+          } catch (e) {}
+        }, 3000);
+      });
+      player.on('pause', () => { if (vimeoTimerRef.current) { clearInterval(vimeoTimerRef.current); vimeoTimerRef.current = null; } reset(); });
+      player.on('ended', () => { if (vimeoTimerRef.current) { clearInterval(vimeoTimerRef.current); vimeoTimerRef.current = null; } reset(); });
+    };
+    document.head.appendChild(script);
+    return () => {
+      cancelled = true;
+      if (vimeoTimerRef.current) clearInterval(vimeoTimerRef.current);
+    };
+  }, [isVimeo, resourceId, videoData?.resource?.video_url]);
+
   if (loading) {
     return <div className="text-center py-8"><div className="text-4xl animate-bounce">📺</div></div>;
   }
@@ -191,6 +230,8 @@ function VideoResourceViewer({ resourceId, onCompleted }) {
   const required = progress.required_percentage || 90;
   const isComplete = progress.completed || progress.watch_percentage >= required;
   const pct = Math.min(100, Math.round(progress.watch_percentage || 0));
+  // Uploaded videos are stored as `/uploads/...`; resolve against the API origin.
+  const videoSrc = resolveFileUrl(videoData?.resource?.video_url || '');
 
   return (
     <div className="space-y-4">
@@ -198,17 +239,29 @@ function VideoResourceViewer({ resourceId, onCompleted }) {
         {videoData?.resource?.video_url ? (
           isYouTube ? (
             <div id={'yt-player-' + resourceId} className="w-full h-full" />
-          ) : (
+          ) : isVimeo ? (
+            <iframe
+              id={'vimeo-player-' + resourceId}
+              src={'https://player.vimeo.com/video/' + (videoUrl.match(/vimeo\.com\/(?:video\/)?(\d+)/) || [])[1]}
+              className="w-full h-full"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+            />
+          ) : isNative ? (
             <video
               controls
               className="w-full h-full"
-              src={videoData.resource.video_url}
+              src={videoSrc}
               onTimeUpdate={handleNativeTimeUpdate}
               onPause={reset}
               onSeeking={reset}
             >
               Your browser does not support the video tag.
             </video>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white p-4 text-center">
+              <p>This video is hosted externally. Open it to watch; progress tracking is not available for this provider.</p>
+            </div>
           )
         ) : (
           <div className="w-full h-full flex items-center justify-center text-white">
@@ -253,7 +306,6 @@ function VideoResourceViewer({ resourceId, onCompleted }) {
 function MaterialResourceViewer({ resourceId, onCompleted }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [pagesViewed, setPagesViewed] = useState(1);
   const [viewPct, setViewPct] = useState(0);
   const [completed, setCompleted] = useState(false);
   const listenedRef = useRef(0);
@@ -310,14 +362,33 @@ function MaterialResourceViewer({ resourceId, onCompleted }) {
 
   const material = data?.resource || {};
   const type = (material.material_type || material.type || '').toLowerCase();
-  const fileUrl = material.file_url;
-  const totalPages = Math.max(1, Number(material.total_pages) || 5);
+  // Uploaded files are stored as `/uploads/...`, which must be resolved against
+  // the API origin (the frontend dev server does not proxy them).
+  const fileUrl = resolveFileUrl(material.file_url);
   const pct = Math.min(100, Math.round(viewPct));
+
+  // Determine if this is a viewable file type
+  const isViewableInBrowser = ['pdf', 'image', 'audio', 'video'].includes(type);
+  const isDownloadable = ['document', 'presentation', 'other'].includes(type);
 
   return (
     <div className="space-y-4">
       <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border-2 border-green-200">
-        <h3 className="text-xl font-black text-gray-800 mb-3">{material.title}</h3>
+        <h3 className="text-xl font-black text-gray-800 mb-3 flex items-center gap-2">
+          <span className="text-2xl">
+            {type === 'audio' ? '🎵' : 
+             type === 'pdf' ? '📄' : 
+             type === 'image' ? '🖼️' :
+             type === 'video' ? '🎬' :
+             type === 'document' ? '📝' :
+             type === 'presentation' ? '📊' : '📁'}
+          </span>
+          {material.title}
+        </h3>
+
+        {material.description && (
+          <p className="text-sm text-gray-600 font-medium mb-4">{material.description}</p>
+        )}
 
         {type === 'audio' && fileUrl && (
           <audio controls className="w-full" src={fileUrl} onTimeUpdate={handleAudioTime}>
@@ -325,27 +396,79 @@ function MaterialResourceViewer({ resourceId, onCompleted }) {
           </audio>
         )}
 
+        {type === 'video' && fileUrl && (
+          <video controls className="w-full rounded-xl">
+            <source src={fileUrl} />
+            Your browser does not support video.
+          </video>
+        )}
+
         {type === 'pdf' && fileUrl && (
           <div className="space-y-3">
-            <iframe title={material.title} src={fileUrl} className="w-full h-[420px] rounded-xl border" />
-            <div className="text-center text-sm font-bold text-slate-700">Page {pagesViewed} of {totalPages}</div>
+            <iframe title={material.title} src={fileUrl} className="w-full h-[600px] rounded-xl border" />
+            <div className="flex items-center justify-center gap-3">
+      <a href={fileUrl} download target="_blank" rel="noreferrer" className="inline-block px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-full hover:from-green-600 hover:to-emerald-700 shadow transition">
+        Download PDF
+      </a>
+      <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-block px-6 py-2 bg-white border-2 border-green-300 text-green-700 font-bold rounded-full hover:bg-green-50 transition">
+        Open in new tab
+      </a>
+    </div>
           </div>
         )}
 
         {type === 'image' && fileUrl && (
-          <img src={fileUrl} alt={material.title} className="w-full rounded-xl border" />
+          <img src={fileUrl} alt={material.title} className="w-full rounded-xl border shadow-md" />
         )}
 
-        {type === 'document' && fileUrl && (
-          <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-block px-6 py-3 bg-green-600 text-white font-bold rounded-full hover:bg-green-700">
-            📄 Open Document
-          </a>
+        {(type === 'document' || type === 'presentation' || type === 'other') && fileUrl && (
+          <div className="space-y-4">
+            {/* Try to display in iframe for Office documents */}
+            {(type === 'document' || type === 'presentation') && (
+              <div className="border-2 border-gray-300 rounded-xl overflow-hidden">
+                <iframe 
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`}
+                  className="w-full h-[600px]"
+                  frameBorder="0"
+                  title={material.title}
+                >
+                  <p>Your browser does not support iframes.</p>
+                </iframe>
+              </div>
+            )}
+            
+            {/* Always provide download link */}
+            <div className="bg-white border-2 border-green-300 rounded-xl p-6 text-center">
+              <div className="text-5xl mb-4">📥</div>
+              <h4 className="text-lg font-black text-gray-800 mb-2">Download Material</h4>
+              <p className="text-sm text-gray-600 mb-4">
+                {type === 'document' ? 'Word Document' : 
+                 type === 'presentation' ? 'PowerPoint Presentation' : 'File'}
+              </p>
+              <a 
+                href={fileUrl} 
+                download
+                target="_blank" 
+                rel="noreferrer" 
+                className="inline-block px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold text-lg rounded-full hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transition transform hover:scale-105"
+              >
+                📄 Download & Open
+              </a>
+            </div>
+          </div>
+        )}
+
+        {!fileUrl && (
+          <div className="bg-gray-100 border-2 border-gray-300 rounded-xl p-8 text-center">
+            <div className="text-5xl mb-2">⚠️</div>
+            <p className="text-gray-700 font-bold">Material file not available</p>
+          </div>
         )}
       </div>
 
       <div className="bg-white rounded-2xl p-6 border-2 border-gray-200">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-lg font-black text-gray-800">📖 Reading Progress</h4>
+          <h4 className="text-lg font-black text-gray-800">📖 Progress</h4>
           <span className="text-2xl font-black text-green-600">{pct}%</span>
         </div>
         <div className="w-full bg-gray-200 h-4 rounded-full overflow-hidden mb-3">
@@ -361,26 +484,28 @@ function MaterialResourceViewer({ resourceId, onCompleted }) {
         ) : (
           <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center space-y-3">
             {type === 'pdf' ? (
-              <button
-                onClick={() => {
-                  const next = Math.min(totalPages, pagesViewed + 1);
-                  setPagesViewed(next);
-                  report({ pages_viewed: next, total_pages: totalPages });
-                }}
-                disabled={pagesViewed >= totalPages}
-                className="px-6 py-2 bg-green-600 text-white font-bold rounded-full hover:bg-green-700 disabled:opacity-50"
-              >
-                I read this page ✓
-              </button>
-            ) : type === 'audio' ? (
+  <button
+    onClick={() => report({ view_percentage: 100 })}
+    className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-lg rounded-full hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transition transform hover:scale-105"
+  >
+    I have read this PDF
+  </button>
+) : type === 'audio' ? (
               <p className="text-sm font-bold text-green-700">Listen to at least 90% of the audio to finish.</p>
+            ) : type === 'video' ? (
+              <p className="text-sm font-bold text-green-700">Watch the video to continue.</p>
             ) : (
-              <button
-                onClick={() => report({ view_percentage: 100 })}
-                className="px-6 py-2 bg-green-600 text-white font-bold rounded-full hover:bg-green-700"
-              >
-                I finished this ✓
-              </button>
+              <div className="space-y-2">
+                <p className="text-sm font-bold text-green-700">
+                  {isDownloadable ? 'Download and review the material, then mark as complete.' : 'Review the material to continue.'}
+                </p>
+                <button
+                  onClick={() => report({ view_percentage: 100 })}
+                  className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-lg rounded-full hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transition transform hover:scale-105"
+                >
+                  ✓ I Finished This
+                </button>
+              </div>
             )}
           </div>
         )}

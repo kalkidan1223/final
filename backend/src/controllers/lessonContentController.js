@@ -1,6 +1,6 @@
 const { query, pool } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
-const { canReadCourse } = require('../utils/courseAccess');
+const { canReadCourse, canManageCourse, canManageLesson } = require('../utils/courseAccess');
 const { isValidVideoUrl } = require('../utils/videoValidation');
 
 const VALID_STATUSES = ['active', 'inactive', 'archived'];
@@ -17,30 +17,24 @@ function validateVideoSource(sourceType, url) {
 }
 
 async function assertLessonOwnership(req, res, lessonId) {
-  const result = await query(
-    `SELECT c.instructor_id FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = $1`,
-    [lessonId]
-  );
-  if (result.rows.length === 0) {
+  const lessonCheck = await query('SELECT id FROM lessons WHERE id = $1', [lessonId]);
+  if (lessonCheck.rows.length === 0) {
     res.status(404).json({ error: 'Lesson not found' });
     return false;
   }
-  if (req.user.role === 'admin') return true;
-
-  const instructorId = await getInstructorIdForUser(req.user.id);
-  if (!instructorId || instructorId !== result.rows[0].instructor_id) {
+  const allowed = await canManageLesson(req.user, lessonId);
+  if (!allowed) {
     res.status(403).json({ error: 'You do not have permission to modify this lesson' });
     return false;
   }
   return true;
 }
 
-// Loads a row from `table` joined to its lesson's owning course instructor,
-// verifying ownership. Writes error responses itself. Returns the row or null.
+// Loads a row from `table` joined to its lesson/course, verifying management permission.
 async function loadOwnedContent(req, res, table) {
   const { id } = req.params;
   const result = await query(
-    `SELECT ct.*, c.instructor_id AS owner_instructor_id
+    `SELECT ct.*, l.id AS lesson_id, c.id AS course_id
      FROM ${table} ct
      JOIN lessons l ON l.id = ct.lesson_id
      JOIN courses c ON c.id = l.course_id
@@ -51,10 +45,8 @@ async function loadOwnedContent(req, res, table) {
     res.status(404).json({ error: `${table} item not found` });
     return null;
   }
-  if (req.user.role === 'admin') return result.rows[0];
-
-  const instructorId = await getInstructorIdForUser(req.user.id);
-  if (!instructorId || instructorId !== result.rows[0].owner_instructor_id) {
+  const allowed = await canManageLesson(req.user, result.rows[0].lesson_id);
+  if (!allowed) {
     res.status(403).json({ error: 'You do not have permission to modify this content' });
     return null;
   }
@@ -151,7 +143,29 @@ async function createMaterial(req, res, next) {
         instructorId,
       ]
     );
-    res.status(201).json({ material: result.rows[0] });
+    
+    const material = result.rows[0];
+    
+    // Also create a lesson_resources entry so students can see it in their learning journey
+    const resourceOrderRes = await query(
+      'SELECT COALESCE(MAX(display_order), -1) + 1 as next_order FROM lesson_resources WHERE lesson_id = $1',
+      [lessonId]
+    );
+    
+    await query(
+      `INSERT INTO lesson_resources (lesson_id, resource_type, resource_id, display_order, is_required, title, description)
+       VALUES ($1, 'material', $2, $3, true, $4, $5)
+       ON CONFLICT (lesson_id, resource_type, resource_id) DO NOTHING`,
+      [
+        lessonId,
+        material.id,
+        resourceOrderRes.rows[0].next_order,
+        title,
+        description || null
+      ]
+    );
+    
+    res.status(201).json({ material });
   } catch (err) {
     next(err);
   }
@@ -303,8 +317,8 @@ async function createVideo(req, res, next) {
     const ok = await assertLessonOwnership(req, res, lessonId);
     if (!ok) return;
 
-    const { title, video_url, thumbnail_url, duration_seconds, description, source_type = 'youtube' } = req.body;
-    if (!title || !video_url || !['youtube', 'upload'].includes(source_type)) {
+    const { title, video_url, thumbnail_url, duration_seconds, description, source_type = 'youtube', completion_threshold } = req.body;
+    if (!title || !video_url || !['youtube', 'upload', 'vimeo'].includes(source_type)) {
       return res.status(400).json({ error: 'title and video_url are required; source_type must be youtube or upload' });
     }
     const videoCheck = validateVideoSource(source_type, video_url);
@@ -312,11 +326,28 @@ async function createVideo(req, res, next) {
       return res.status(400).json({ error: `Invalid video. ${videoCheck.reason || 'Provide a valid YouTube URL or an uploaded file.'}` });
     }
 
+    // Validate duration when supplied: it must be a positive number of seconds.
+    if (duration_seconds !== undefined && duration_seconds !== null && duration_seconds !== '') {
+      const d = Number(duration_seconds);
+      if (!Number.isFinite(d) || d <= 0) {
+        return res.status(400).json({ error: 'duration_seconds must be a positive number' });
+      }
+    }
+    // Validate completion threshold when supplied: between 50 and 100.
+    let threshold = null;
+    if (completion_threshold !== undefined && completion_threshold !== null && completion_threshold !== '') {
+      const t = Number(completion_threshold);
+      if (!Number.isFinite(t) || t < 50 || t > 100) {
+        return res.status(400).json({ error: 'completion_threshold must be between 50 and 100' });
+      }
+      threshold = t;
+    }
+
     const instructorId = await getInstructorIdForUser(req.user.id);
     const result = await query(
-      `INSERT INTO videos (lesson_id, title, video_url, thumbnail_url, duration_seconds, description, source_type, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [lessonId, title, video_url, thumbnail_url || null, duration_seconds || null, description || null, source_type, instructorId]
+      `INSERT INTO videos (lesson_id, title, video_url, thumbnail_url, duration_seconds, description, source_type, uploaded_by, completion_threshold)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 90)) RETURNING *`,
+      [lessonId, title, video_url, thumbnail_url || null, duration_seconds ? Number(duration_seconds) : null, description || null, source_type, instructorId, threshold]
     );
     res.status(201).json({ video: result.rows[0] });
   } catch (err) {
@@ -332,8 +363,8 @@ async function updateVideo(req, res, next) {
     const video = await loadOwnedContent(req, res, 'videos');
     if (!video) return;
 
-    const { title, video_url, thumbnail_url, duration_seconds, description, source_type } = req.body;
-    if (source_type !== undefined && !['youtube', 'upload'].includes(source_type)) {
+    const { title, video_url, thumbnail_url, duration_seconds, description, source_type, completion_threshold } = req.body;
+    if (source_type !== undefined && !['youtube', 'upload', 'vimeo'].includes(source_type)) {
       return res.status(400).json({ error: 'source_type must be youtube or upload' });
     }
     if (video_url) {
@@ -344,6 +375,25 @@ async function updateVideo(req, res, next) {
       }
     }
 
+    // Validate duration when supplied.
+    if (duration_seconds !== undefined && duration_seconds !== null && duration_seconds !== '') {
+      const d = Number(duration_seconds);
+      if (!Number.isFinite(d) || d <= 0) {
+        return res.status(400).json({ error: 'duration_seconds must be a positive number' });
+      }
+    }
+    // Validate completion threshold when supplied.
+    let threshold = null;
+    let thresholdProvided = false;
+    if (completion_threshold !== undefined && completion_threshold !== null && completion_threshold !== '') {
+      const t = Number(completion_threshold);
+      if (!Number.isFinite(t) || t < 50 || t > 100) {
+        return res.status(400).json({ error: 'completion_threshold must be between 50 and 100' });
+      }
+      threshold = t;
+      thresholdProvided = true;
+    }
+
     const result = await query(
       `UPDATE videos
        SET title = COALESCE($1, title),
@@ -351,10 +401,13 @@ async function updateVideo(req, res, next) {
            thumbnail_url = COALESCE($3, thumbnail_url),
            duration_seconds = COALESCE($4, duration_seconds),
            description = COALESCE($5, description),
-           source_type = COALESCE($6, source_type)
-       WHERE id = $7
+           source_type = COALESCE($6, source_type),
+           completion_threshold = COALESCE($7, completion_threshold)
+       WHERE id = $8
        RETURNING *`,
-      [title || null, video_url || null, thumbnail_url || null, duration_seconds || null, description || null, source_type || null, video.id]
+      [title || null, video_url || null, thumbnail_url || null,
+       duration_seconds !== undefined && duration_seconds !== null && duration_seconds !== '' ? Number(duration_seconds) : null,
+       description || null, source_type || null, thresholdProvided ? threshold : null, video.id]
     );
     res.json({ video: result.rows[0] });
   } catch (err) {

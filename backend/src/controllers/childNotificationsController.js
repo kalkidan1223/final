@@ -90,6 +90,7 @@ async function getChildNotifications(req, res, next) {
         cn.related_activity_id,
         cn.related_quiz_id,
         cn.related_result_id,
+        cn.related_question_id,
         cn.is_read,
         cn.created_at,
         c.title as course_title,

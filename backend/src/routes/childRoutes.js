@@ -1,7 +1,10 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
+const { rateLimit } = require('../middleware/rateLimit');
+const { parseMultipartFile } = require('../middleware/upload');
 const childController = require('../controllers/childController');
+const studentQuestionsController = require('../controllers/studentQuestionsController');
 
 const router = express.Router();
 
@@ -35,7 +38,7 @@ router.post('/materials/:id/listen', ...authChild, childController.listenMateria
 router.get('/activities', ...authChild, childController.listAllActivities);
 router.get('/activities/:activityId', ...authChild, childController.getActivity);
 router.post('/activities/:activityId/start', ...authChild, childController.startActivity);
-router.post('/activities/:activityId/submit', ...authChild, childController.submitActivity);
+router.post('/activities/:activityId/submit', ...authChild, parseMultipartFile('file'), childController.submitActivity);
 
 // Quizzes
 router.get('/quizzes', ...authChild, childController.listAllQuizzes);
@@ -48,5 +51,17 @@ router.get('/progress', ...authChild, childController.getProgress);
 router.get('/achievements', ...authChild, childController.getAchievements);
 router.get('/notifications', ...authChild, childController.getNotifications);
 router.patch('/notifications/:id/read', ...authChild, childController.markNotificationRead);
+
+// Ask My Teacher — Student → Instructor Q&A
+// NOTE: '/questions/pending-count' must be declared before '/questions/:questionId'
+const questionLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  message: 'You are asking very fast! Please wait a moment and try again.',
+});
+router.post('/questions', ...authChild, questionLimiter, studentQuestionsController.submitQuestion);
+router.get('/questions', ...authChild, studentQuestionsController.listMyQuestions);
+router.get('/questions/pending-count', ...authChild, studentQuestionsController.getPendingCount);
+router.get('/questions/:questionId', ...authChild, studentQuestionsController.getMyQuestion);
 
 module.exports = router;

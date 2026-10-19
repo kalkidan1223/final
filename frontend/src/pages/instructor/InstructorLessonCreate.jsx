@@ -23,6 +23,8 @@ export default function InstructorLessonCreate() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [courseTitle, setCourseTitle] = useState('');
+  const [targetCourseId, setTargetCourseId] = useState(courseId || '');
+  const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -38,6 +40,14 @@ export default function InstructorLessonCreate() {
       if (courseId) {
         const { data } = await axiosClient.get(`/instructor/courses/${courseId}`);
         setCourseTitle(data.course?.title || '');
+        setTargetCourseId(courseId);
+      } else if (!isEdit) {
+        const { data } = await axiosClient.get('/instructor/courses');
+        setCourses(data.courses || []);
+        if (data.courses?.length > 0) {
+          setTargetCourseId(data.courses[0].course_id);
+          setCourseTitle(data.courses[0].course_title);
+        }
       }
       if (isEdit) {
         const { data } = await axiosClient.get(`/lessons/${lessonId}`);
@@ -79,13 +89,19 @@ export default function InstructorLessonCreate() {
       };
 
       let lesson;
+      const effectiveCourseId = courseId || targetCourseId;
       if (isEdit) {
         const { data } = await axiosClient.put(`/lessons/${lessonId}`, payload);
         lesson = data.lesson;
       } else {
+        if (!effectiveCourseId) {
+          setError('Please select a course for this lesson');
+          setSaving(false);
+          return;
+        }
         const order =
           form.order_index === '' ? undefined : Number(form.order_index);
-        const { data } = await axiosClient.post(`/courses/${courseId}/lessons`, { ...payload, order_index: order });
+        const { data } = await axiosClient.post(`/courses/${effectiveCourseId}/lessons`, { ...payload, order_index: order });
         lesson = data.lesson;
       }
 
@@ -107,29 +123,53 @@ export default function InstructorLessonCreate() {
     );
   }
 
-  const backTo = courseId ? `/instructor/courses/${courseId}` : '/instructor/courses';
+  const backTo = courseId ? `/instructor/courses/${courseId}` : '/instructor/lessons';
 
   return (
     <InstructorLayout>
-      <div className="mx-auto max-w-2xl">
-        <Link to={backTo} className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:underline">
-          <MdArrowBack /> Back {courseTitle ? `to ${courseTitle}` : 'to Courses'}
+      <div className="mx-auto max-w-2xl pb-12">
+        <Link to={backTo} className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:underline">
+          <MdArrowBack /> Back {courseTitle ? `to ${courseTitle}` : 'to Lessons'}
         </Link>
 
-        <h1 className="mt-3 mb-1 text-2xl font-bold text-slate-800">
+        <h1 className="mt-3 mb-1 text-2xl font-bold text-slate-900">
           {isEdit ? 'Edit Lesson' : 'Create Lesson'}
         </h1>
         <p className="mb-6 text-sm text-slate-500">
           {isEdit
             ? 'Update the lesson details below.'
-            : 'The course, age group, grade, section and academic year are applied automatically from your assignment.'}
+            : 'Plan and structure this lesson for children aged 5–9. Educational materials, interactive tracing, and quizzes can be added inside.'}
         </p>
 
         {error && (
           <div className="mb-4 rounded-xl bg-rose-50 border border-rose-200 p-4 text-sm text-rose-700">{error}</div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl bg-white p-6 shadow-sm border border-slate-200">
+          {!courseId && !isEdit && courses.length > 0 && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Assigned Course <span className="text-rose-500">*</span>
+              </label>
+              <select
+                required
+                value={targetCourseId}
+                onChange={(e) => {
+                  setTargetCourseId(e.target.value);
+                  const sel = courses.find(c => String(c.course_id) === String(e.target.value));
+                  setCourseTitle(sel?.course_title || '');
+                }}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none bg-white font-medium"
+              >
+                {courses.map(c => (
+                  <option key={c.course_id} value={c.course_id}>
+                    {c.course_title} ({c.age_group_name}{c.grade ? ` • Grade ${c.grade}` : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Lesson Title <span className="text-rose-500">*</span>
@@ -138,7 +178,7 @@ export default function InstructorLessonCreate() {
               required
               value={form.title}
               onChange={(e) => update('title', e.target.value)}
-              placeholder="e.g. Introduction to Letters A–F"
+              placeholder="e.g. Introduction to Letters ሀ–ቀ"
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
             />
           </div>

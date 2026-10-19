@@ -1,6 +1,6 @@
 const { query, pool } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
-const { canReadCourse } = require('../utils/courseAccess');
+const { canReadCourse, canManageCourse, canManageLesson } = require('../utils/courseAccess');
 
 const VALID_DIFFICULTIES = ['beginner', 'intermediate', 'advanced'];
 const VALID_LESSON_STATUSES = ['active', 'inactive', 'archived'];
@@ -29,7 +29,7 @@ async function lessonHasEngagement(lessonId) {
 }
 
 // Loads a lesson plus its parent course, and confirms the current user may
-// modify it (owning instructor or admin). Writes error responses itself.
+// modify it (assigned instructor or admin). Writes error responses itself.
 async function loadOwnedLesson(req, res) {
   const { id } = req.params;
   const result = await query(
@@ -45,10 +45,8 @@ async function loadOwnedLesson(req, res) {
   }
   const lesson = result.rows[0];
 
-  if (req.user.role === 'admin') return lesson;
-
-  const instructorId = await getInstructorIdForUser(req.user.id);
-  if (!instructorId || lesson.course_instructor_id !== instructorId) {
+  const allowed = await canManageLesson(req.user, id);
+  if (!allowed) {
     res.status(403).json({ error: 'You do not have permission to modify this lesson' });
     return null;
   }
@@ -56,15 +54,13 @@ async function loadOwnedLesson(req, res) {
 }
 
 async function assertCourseOwnership(req, res, courseId) {
-  const courseResult = await query('SELECT instructor_id FROM courses WHERE id = $1', [courseId]);
+  const courseResult = await query('SELECT id FROM courses WHERE id = $1', [courseId]);
   if (courseResult.rows.length === 0) {
     res.status(404).json({ error: 'Course not found' });
     return false;
   }
-  if (req.user.role === 'admin') return true;
-
-  const instructorId = await getInstructorIdForUser(req.user.id);
-  if (!instructorId || courseResult.rows[0].instructor_id !== instructorId) {
+  const allowed = await canManageCourse(req.user, courseId);
+  if (!allowed) {
     res.status(403).json({ error: 'You do not have permission to modify this course' });
     return false;
   }
