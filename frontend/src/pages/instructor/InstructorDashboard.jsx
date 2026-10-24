@@ -66,7 +66,7 @@ function CourseCard({ course }) {
             </h3>
             <div className="flex flex-wrap gap-1.5 mt-2">
               <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-semibold border border-indigo-100/80">
-                {course.age_group_name}
+                {course.grade_level_name}
               </span>
               {course.grade && (
                 <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-medium">

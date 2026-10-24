@@ -82,7 +82,7 @@ export default function ChildProfile() {
 
   const details = [
     { label: 'Name', value: profile.full_name, icon: '👧' },
-    { label: 'Age Group', value: profile.age_group_name, icon: '🎂' },
+    { label: 'Grade Level', value: profile.grade_level_name, icon: '🎂' },
     { label: 'Date of Birth', value: formatDate(profile.date_of_birth), icon: '📅' },
     { label: 'Grade', value: profile.grade || '—', icon: '🏫' },
     { label: 'Class / Section', value: profile.section || '—', icon: '📚' },
@@ -106,7 +106,7 @@ export default function ChildProfile() {
           />
           <div>
             <h1 className="text-3xl font-bold text-white mb-1">{profile.full_name}</h1>
-            <p className="text-white/90">{profile.age_group_name} • Age Group</p>
+            <p className="text-white/90">{profile.grade_level_name} • Grade Level</p>
           </div>
           <div className="flex justify-center gap-3">
             <span className="px-4 py-2 bg-white/20 text-white rounded-xl font-bold text-sm">{profile.grade || 'Grade —'}</span>

@@ -217,7 +217,7 @@ export default function ParentChildLearningSpace() {
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-extrabold uppercase tracking-wider bg-white/20 px-3 py-0.5 rounded-full">
-                {child.age_group_name || 'Primary'}
+                {child.grade_level_name || 'Primary'}
               </span>
               <span className="text-[11px] font-extrabold bg-emerald-400 text-emerald-950 px-3 py-0.5 rounded-full">
                 Age {age ?? '—'}
@@ -340,7 +340,7 @@ export default function ParentChildLearningSpace() {
           {/* Courses selection pills */}
           {courses.length === 0 ? (
             <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-500">
-              No published courses are currently assigned for this age group.
+              No published courses are currently assigned for this grade level.
             </div>
           ) : (
             <div className="space-y-6">
@@ -357,7 +357,7 @@ export default function ParentChildLearningSpace() {
                           : 'bg-white border-slate-200 hover:border-slate-300'
                       }`}
                     >
-                      <div className="text-xs font-bold text-slate-500">{c.age_group_name}</div>
+                      <div className="text-xs font-bold text-slate-500">{c.grade_level_name}</div>
                       <div className="font-extrabold text-sm text-slate-900 truncate mt-0.5">{c.title}</div>
                       <div className="text-[11px] text-slate-400 mt-1">Instructor: {c.instructor_name}</div>
                       <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">

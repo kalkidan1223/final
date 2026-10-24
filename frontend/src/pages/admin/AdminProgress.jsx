@@ -63,8 +63,8 @@ function DetailModal({ progress, onClose }) {
           {progress.parent_name && (
             <div><p className="text-xs text-slate-400 font-medium mb-0.5">Parent / Guardian</p><p className="text-slate-700">{progress.parent_name}</p></div>
           )}
-          {progress.age_group_name && (
-            <div><p className="text-xs text-slate-400 font-medium mb-0.5">Age Group</p><p className="text-slate-700">{progress.age_group_name}</p></div>
+          {progress.grade_level_name && (
+            <div><p className="text-xs text-slate-400 font-medium mb-0.5">Grade Level</p><p className="text-slate-700">{progress.grade_level_name}</p></div>
           )}
         </div>
       </div>
@@ -192,7 +192,7 @@ export default function AdminProgress() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-slate-800 truncate max-w-[120px]">{r.student_name}</p>
-                          {r.age_group_name && <p className="text-xs text-slate-400">{r.age_group_name}</p>}
+                          {r.grade_level_name && <p className="text-xs text-slate-400">{r.grade_level_name}</p>}
                         </div>
                       </div>
                     </td>

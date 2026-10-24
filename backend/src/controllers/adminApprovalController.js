@@ -346,7 +346,7 @@ async function approveStudentRegistration(req, res, next) {
       }
 
       const ageGroupResult = await client.query(
-        `SELECT id FROM age_groups WHERE min_age <= $1 AND max_age >= $1
+        `SELECT id FROM grade_levels WHERE min_age <= $1 AND max_age >= $1
          LIMIT 1`,
         [reg.age]
       );
@@ -355,7 +355,7 @@ async function approveStudentRegistration(req, res, next) {
       if (!ageGroupId) {
         // Fallback to 10-12 or primary age group
         const fallback = await client.query(
-          "SELECT id FROM age_groups WHERE name = '10-12' OR name = '11-12' LIMIT 1"
+          "SELECT id FROM grade_levels WHERE name = '10-12' OR name = '11-12' LIMIT 1"
         );
         if (fallback.rows.length === 0) {
           await client.query('ROLLBACK');
@@ -364,11 +364,11 @@ async function approveStudentRegistration(req, res, next) {
       }
 
       const assignedAgeGroupId = ageGroupId || (
-        await client.query("SELECT id FROM age_groups WHERE name = '10-12' OR name = '11-12' LIMIT 1")
+        await client.query("SELECT id FROM grade_levels WHERE name = '10-12' OR name = '11-12' LIMIT 1")
       ).rows[0]?.id;
 
       await client.query(
-        `INSERT INTO students (user_id, parent_id, age_group_id, full_name, date_of_birth, gender,
+        `INSERT INTO students (user_id, parent_id, grade_level_id, full_name, date_of_birth, gender,
            grade, section, preferred_language, admission_number, previous_school, academic_year,
            blood_group, medical_condition, learning_disability, profile_image_url)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)

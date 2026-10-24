@@ -87,9 +87,9 @@ function ViewModal({ instructor, onClose }) {
   );
 }
 
-function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
-  const [assignedAgeGroups, setAssignedAgeGroups] = useState(
-    instructor.assigned_age_groups?.map(ag => ag.id) || []
+function EditAssignmentsModal({ instructor, onClose, onSave, gradeLevels }) {
+  const [assignedGradeLevels, setAssignedGradeLevels] = useState(
+    instructor.assigned_grade_levels?.map(gl => gl.id) || []
   );
   const [assignedCourses, setAssignedCourses] = useState(
     instructor.assigned_courses?.map(c => c.id) || []
@@ -99,27 +99,27 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Load available courses when age groups change
+  // Load available courses when grade levels change
   useEffect(() => {
-    async function loadAvailableCoursesForSelectedAgeGroups() {
-      if (assignedAgeGroups.length === 0) {
+    async function loadAvailableCoursesForSelectedGradeLevels() {
+      if (assignedGradeLevels.length === 0) {
         setAvailableCourses([]);
         return;
       }
 
       setLoadingCourses(true);
       try {
-        const coursePromises = assignedAgeGroups.map(ageGroupId =>
-          axiosClient.get(`/admin/age-groups/${ageGroupId}/available-courses`)
+        const coursePromises = assignedGradeLevels.map(gradeLevelId =>
+          axiosClient.get(`/grades/${gradeLevelId}/available-courses`)
         );
         const responses = await Promise.all(coursePromises);
-        
-        const allAvailableCourses = responses.flatMap((res, idx) => 
+
+        const allAvailableCourses = responses.flatMap((res, idx) =>
           (res.data.available_courses || [])
             .filter(c => c.is_active)
             .map(c => ({
-              id: `${assignedAgeGroups[idx]}_${c.id}`,
-              age_group_id: assignedAgeGroups[idx],
+              id: `${assignedGradeLevels[idx]}_${c.id}`,
+              grade_level_id: assignedGradeLevels[idx],
               title: c.course_title,
               description: c.course_description,
               available_course_id: c.id
@@ -133,14 +133,14 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
       }
     }
 
-    loadAvailableCoursesForSelectedAgeGroups();
-  }, [assignedAgeGroups]);
+    loadAvailableCoursesForSelectedGradeLevels();
+  }, [assignedGradeLevels]);
 
   async function handleSave() {
     setSaving(true);
     setError('');
     try {
-      await onSave(instructor.id, { assigned_age_groups: assignedAgeGroups, assigned_courses: assignedCourses });
+      await onSave(instructor.id, { assigned_grade_levels: assignedGradeLevels, assigned_courses: assignedCourses });
       onClose();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update assignments');
@@ -149,11 +149,11 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
     }
   }
 
-  const toggleAgeGroup = (groupId) => {
-    setAssignedAgeGroups(prev => 
-      prev.includes(groupId) 
-        ? prev.filter(id => id !== groupId)
-        : [...prev, groupId]
+  const toggleGradeLevel = (levelId) => {
+    setAssignedGradeLevels(prev =>
+      prev.includes(levelId)
+        ? prev.filter(id => id !== levelId)
+        : [...prev, levelId]
     );
   };
 
@@ -171,7 +171,7 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
             <h3 className="font-semibold text-slate-800">Edit Assignments: {instructor.full_name}</h3>
-            <p className="text-xs text-slate-500">Assign age groups and courses to this instructor</p>
+            <p className="text-xs text-slate-500">Assign grade levels and courses to this instructor</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
         </div>
@@ -183,17 +183,17 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
             </div>
           )}
 
-          {/* Age Groups Selection */}
+          {/* Grade Levels Selection */}
           <div>
-            <h4 className="text-sm font-semibold text-slate-700 mb-3">Assigned Age Groups</h4>
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">Assigned Grade Levels</h4>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {ageGroups?.map(group => {
-                const isSelected = assignedAgeGroups.includes(group.id);
+              {gradeLevels?.map(level => {
+                const isSelected = assignedGradeLevels.includes(level.id);
                 return (
                   <button
-                    key={group.id}
+                    key={level.id}
                     type="button"
-                    onClick={() => toggleAgeGroup(group.id)}
+                    onClick={() => toggleGradeLevel(level.id)}
                     className={`flex items-center gap-2 p-3 rounded-xl border text-left text-sm transition ${
                       isSelected
                         ? 'border-violet-600 bg-violet-50 text-violet-900 font-medium'
@@ -206,7 +206,7 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
                       readOnly
                       className="rounded text-violet-600 focus:ring-violet-500"
                     />
-                    <span className="truncate">{group.name || group.title}</span>
+                    <span className="truncate">{level.name || level.title}</span>
                   </button>
                 );
               })}
@@ -218,13 +218,13 @@ function EditAssignmentsModal({ instructor, onClose, onSave, ageGroups }) {
             <h4 className="text-sm font-semibold text-slate-700 mb-3">
               Available Courses {loadingCourses && <span className="text-xs font-normal text-slate-400">(Loading...)</span>}
             </h4>
-            {assignedAgeGroups.length === 0 ? (
+            {assignedGradeLevels.length === 0 ? (
               <p className="text-sm text-slate-400 bg-slate-50 p-4 rounded-xl text-center">
-                Select one or more age groups to view and assign courses.
+                Select one or more grade levels to view and assign courses.
               </p>
             ) : availableCourses.length === 0 && !loadingCourses ? (
               <p className="text-sm text-slate-400 bg-slate-50 p-4 rounded-xl text-center">
-                No courses found for the selected age groups.
+                No courses found for the selected grade levels.
               </p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -298,7 +298,7 @@ export default function AdminInstructors() {
   const debounce = useRef(null);
   
   // For edit assignments modal
-  const [ageGroups, setAgeGroups] = useState([]);
+  const [gradeLevels, setGradeLevels] = useState([]);
 
   // Load age groups and courses when editing
   useEffect(() => {
@@ -309,11 +309,11 @@ export default function AdminInstructors() {
 
   async function loadOptions() {
     try {
-      const ageGroupsRes = await axiosClient.get('/age-groups');
-      setAgeGroups(ageGroupsRes.data.age_groups || []);
+      const gradeLevelsRes = await axiosClient.get('/grades');
+      setGradeLevels(gradeLevelsRes.data.grade_levels || []);
     } catch (err) {
       console.error('Failed to load options:', err);
-      setError('Failed to load age groups');
+      setError('Failed to load grade levels');
     }
   }
 

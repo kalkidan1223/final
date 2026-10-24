@@ -61,7 +61,7 @@ async function getLessonDetail(req, res, next) {
     const { id } = req.params;
     const lessonResult = await query(
       `SELECT l.*, c.title AS course_title, c.id AS course_id, c.status,
-              c.instructor_id, c.age_group_id
+              c.instructor_id, c.grade_level_id
        FROM lessons l JOIN courses c ON c.id = l.course_id
        WHERE l.id = $1`,
       [id]
@@ -84,8 +84,8 @@ async function getLessonDetail(req, res, next) {
       query(
         `SELECT
            (SELECT COUNT(*) FROM progress WHERE lesson_id = $1 AND status = 'completed')::int AS completed_students,
-           (SELECT COUNT(*) FROM students WHERE age_group_id = $2 AND is_active = TRUE)::int AS total_students`,
-        [id, lessonResult.rows[0].age_group_id]
+           (SELECT COUNT(*) FROM students WHERE grade_level_id = $2 AND is_active = TRUE)::int AS total_students`,
+        [id, lessonResult.rows[0].grade_level_id]
       ),
     ]);
 

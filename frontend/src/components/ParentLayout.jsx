@@ -267,7 +267,7 @@ export default function ParentLayout() {
                               <div className="truncate">
                                 <div className="font-bold truncate">{c.full_name}</div>
                                 <div className="text-[11px] text-slate-400">
-                                  {c.age_group_name || 'Age 5-12'} • {c.user_id ? 'Independent' : 'Parent-Managed'}
+                                  {c.grade_level_name || 'Age 5-12'} • {c.user_id ? 'Independent' : 'Parent-Managed'}
                                 </div>
                               </div>
                             </div>

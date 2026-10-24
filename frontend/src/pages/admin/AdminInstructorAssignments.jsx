@@ -27,11 +27,11 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
   );
 }
 
-function AssignmentFormModal({ existing, instructors, courses, ageGroups, academicYears, onSave, onClose }) {
+function AssignmentFormModal({ existing, instructors, courses, gradeLevels, academicYears, onSave, onClose }) {
   const [form, setForm] = useState({
     instructor_id:    existing?.instructor_id || '',
     course_id:        existing?.course_id || '',
-    age_group_id:     existing?.age_group_id || '',
+    grade_level_id:   existing?.grade_level_id || '',
     academic_year_id: existing?.academic_year_id || '',
     grade:            existing?.grade || '',
     section:          existing?.section || '',
@@ -105,18 +105,18 @@ function AssignmentFormModal({ existing, instructors, courses, ageGroups, academ
             </select>
           </div>
 
-          {/* Age group select */}
+          {/* Grade level select */}
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1.5">Age Group <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-600 mb-1.5">Grade Level <span className="text-red-500">*</span></label>
             <select
               required
-              value={form.age_group_id}
-              onChange={e => update('age_group_id', e.target.value)}
+              value={form.grade_level_id}
+              onChange={e => update('grade_level_id', e.target.value)}
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             >
-              <option value="">Select age group…</option>
-              {ageGroups.map(ag => (
-                <option key={ag.id} value={ag.id}>{ag.name} ({ag.min_age}–{ag.max_age} yrs)</option>
+              <option value="">Select grade level…</option>
+              {gradeLevels.map(gl => (
+                <option key={gl.id} value={gl.id}>{gl.name} ({gl.min_age}–{gl.max_age} yrs)</option>
               ))}
             </select>
           </div>
@@ -202,7 +202,7 @@ export default function AdminInstructorAssignments() {
   // Lookup data
   const [instructors, setInstructors]   = useState([]);
   const [courses, setCourses]           = useState([]);
-  const [ageGroups, setAgeGroups]       = useState([]);
+  const [gradeLevels, setGradeLevels]   = useState([]);
   const [academicYears, setAcademicYears] = useState([]);
 
   useEffect(() => { loadAll(); }, []);
@@ -211,17 +211,17 @@ export default function AdminInstructorAssignments() {
     setLoading(true);
     setError('');
     try {
-      const [aRes, iRes, cRes, agRes, ayRes] = await Promise.all([
+      const [aRes, iRes, cRes, glRes, ayRes] = await Promise.all([
         axiosClient.get('/admin/instructor-assignments'),
         axiosClient.get('/admin/instructors'),
         axiosClient.get('/admin/courses'),
-        axiosClient.get('/admin/age-groups'),
+        axiosClient.get('/grades'),
         axiosClient.get('/admin/academic-years').catch(() => ({ data: { academic_years: [] } })),
       ]);
       setAssignments(aRes.data.assignments || []);
       setInstructors(iRes.data.instructors || []);
       setCourses(cRes.data.courses || []);
-      setAgeGroups(agRes.data.age_groups || []);
+      setGradeLevels(glRes.data.grade_levels || []);
       setAcademicYears(ayRes.data.academic_years || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load data');
@@ -251,7 +251,7 @@ export default function AdminInstructorAssignments() {
     const matchSearch = !search ||
       a.instructor_name?.toLowerCase().includes(search.toLowerCase()) ||
       a.course_title?.toLowerCase().includes(search.toLowerCase()) ||
-      a.age_group_name?.toLowerCase().includes(search.toLowerCase());
+      a.grade_level_name?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'all' || a.status === filterStatus;
     return matchSearch && matchStatus;
   });
@@ -273,7 +273,7 @@ export default function AdminInstructorAssignments() {
               <MdAssignment className="text-indigo-600" /> Instructor Assignments
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              Assign instructors to specific courses, age groups, grades, and sections.
+              Assign instructors to specific courses, grade levels, grades, and sections.
             </p>
           </div>
           <div className="flex gap-2">
@@ -298,7 +298,7 @@ export default function AdminInstructorAssignments() {
           <MdInfoOutline className="text-indigo-500 text-lg flex-shrink-0 mt-0.5" />
           <p>
             Assignments control which instructor can access which course workspace. An instructor
-            only sees students, lessons, and activities within their assigned course, age group,
+            only sees students, lessons, and activities within their assigned course, grade level,
             grade, and section.
           </p>
         </div>
@@ -314,7 +314,7 @@ export default function AdminInstructorAssignments() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search by instructor, course, or age group…"
+              placeholder="Search by instructor, course, or grade level…"
               className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
             />
           </div>
@@ -361,7 +361,7 @@ export default function AdminInstructorAssignments() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    {['Instructor', 'Course', 'Age Group', 'Grade / Sec', 'Academic Year', 'Status', 'Actions'].map(h => (
+                    {['Instructor', 'Course', 'Grade Level', 'Grade / Sec', 'Academic Year', 'Status', 'Actions'].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
@@ -380,7 +380,7 @@ export default function AdminInstructorAssignments() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium border border-indigo-100">
-                          {a.age_group_name}
+                          {a.grade_level_name}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-600">
@@ -426,7 +426,7 @@ export default function AdminInstructorAssignments() {
           existing={editing}
           instructors={instructors}
           courses={courses}
-          ageGroups={ageGroups}
+          gradeLevels={gradeLevels}
           academicYears={academicYears}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}

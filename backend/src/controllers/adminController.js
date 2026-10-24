@@ -26,7 +26,7 @@ function publicUser(row) {
 // ----------------------------------------------------------------------------
 async function createInstructor(req, res, next) {
   try {
-    const { full_name, email, password, phone, bio, qualification, specialty, assigned_age_groups, assigned_courses } = req.body;
+    const { full_name, email, password, phone, bio, qualification, specialty, assigned_grade_levels, assigned_courses } = req.body;
 
     const errors = [];
     if (!full_name || full_name.trim().length < 2) errors.push('Full name is required (at least 2 characters)');
@@ -62,10 +62,10 @@ async function createInstructor(req, res, next) {
       const instructor = instructorResult.rows[0];
 
       // Insert assigned age groups if provided
-      if (assigned_age_groups && Array.isArray(assigned_age_groups) && assigned_age_groups.length > 0) {
-        for (const ageGroupId of assigned_age_groups) {
+      if (assigned_grade_levels && Array.isArray(assigned_grade_levels) && assigned_grade_levels.length > 0) {
+        for (const ageGroupId of assigned_grade_levels) {
           await client.query(
-            `INSERT INTO instructor_age_groups (instructor_id, age_group_id, assigned_by)
+            `INSERT INTO instructor_grade_levels (instructor_id, grade_level_id, assigned_by)
              VALUES ($1, $2, $3)`,
             [instructor.id, ageGroupId, req.user.id]
           );
@@ -84,16 +84,16 @@ async function createInstructor(req, res, next) {
 
           // Auto-create course instance
           const availableCourse = await client.query(
-            'SELECT * FROM age_group_available_courses WHERE id = $1',
+            'SELECT * FROM grade_level_available_courses WHERE id = $1',
             [availableCourseId]
           );
           
           if (availableCourse.rows.length > 0) {
             const ac = availableCourse.rows[0];
             await client.query(
-              `INSERT INTO courses (instructor_id, age_group_id, title, description, available_course_id, status)
+              `INSERT INTO courses (instructor_id, grade_level_id, title, description, available_course_id, status)
                VALUES ($1, $2, $3, $4, $5, 'draft')`,
-              [instructor.id, ac.age_group_id, ac.course_title, ac.course_description, availableCourseId]
+              [instructor.id, ac.grade_level_id, ac.course_title, ac.course_description, availableCourseId]
             );
           }
         }
@@ -108,7 +108,7 @@ async function createInstructor(req, res, next) {
           qualification: instructor.qualification,
           specialty: instructor.specialty,
           created_at: instructor.created_at,
-          assigned_age_groups: assigned_age_groups || [],
+          assigned_grade_levels: assigned_grade_levels || [],
           assigned_courses: assigned_courses || [],
         },
       });
@@ -184,8 +184,8 @@ async function getUser(req, res, next) {
       profile = i.rows[0] || null;
     } else if (user.role === 'student') {
       const s = await query(
-        `SELECT s.*, ag.name AS age_group_name FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+        `SELECT s.*, ag.name AS grade_level_name FROM students s
+         JOIN grade_levels ag ON ag.id = s.grade_level_id
          WHERE s.user_id = $1`,
         [id]
       );
@@ -294,12 +294,12 @@ async function listStudents(req, res, next) {
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
       `SELECT s.*, u.email, u.is_active AS user_is_active, u.full_name AS user_full_name,
-               ag.name AS age_group_name, pu.full_name AS parent_name
+               ag.name AS grade_level_name, pu.full_name AS parent_name
        FROM students s
        LEFT JOIN users u ON u.id = s.user_id
        JOIN parents p ON p.id = s.parent_id
        JOIN users pu ON pu.id = p.user_id
-       JOIN age_groups ag ON ag.id = s.age_group_id
+       JOIN grade_levels ag ON ag.id = s.grade_level_id
        ${where}
        ORDER BY s.created_at DESC
        LIMIT $${params.length + 1}`,
@@ -338,7 +338,7 @@ async function deactivateStudent(req, res, next) {
 async function activateStudent(req, res, next) {
   try {
     const { id } = req.params;
-    const studentResult = await query('SELECT id, user_id, age_group_id FROM students WHERE id = $1', [id]);
+    const studentResult = await query('SELECT id, user_id, grade_level_id FROM students WHERE id = $1', [id]);
     if (studentResult.rows.length === 0) {
       return res.status(404).json({ error: 'Student not found' });
     }
@@ -533,18 +533,18 @@ async function listInstructors(req, res, next) {
     for (const instructor of instructors) {
       const ageGroupsRes = await query(
         `SELECT ag.id, ag.name, ag.min_age, ag.max_age
-         FROM instructor_age_groups iag
-         JOIN age_groups ag ON ag.id = iag.age_group_id
+         FROM instructor_grade_levels iag
+         JOIN grade_levels ag ON ag.id = iag.grade_level_id
          WHERE iag.instructor_id = $1`,
         [instructor.id]
       );
-      instructor.assigned_age_groups = ageGroupsRes.rows;
+      instructor.assigned_grade_levels = ageGroupsRes.rows;
 
       const coursesRes = await query(
         `SELECT agac.id, agac.course_title AS title, agac.course_description AS description, 
-                agac.is_active AS status, agac.age_group_id
+                agac.is_active AS status, agac.grade_level_id
          FROM instructor_courses ic
-         JOIN age_group_available_courses agac ON agac.id = ic.available_course_id
+         JOIN grade_level_available_courses agac ON agac.id = ic.available_course_id
          WHERE ic.instructor_id = $1`,
         [instructor.id]
       );
@@ -599,7 +599,7 @@ async function activateInstructor(req, res, next) {
 async function updateInstructorAssignments(req, res, next) {
   try {
     const { id } = req.params;
-    const { assigned_age_groups, assigned_courses } = req.body;
+    const { assigned_grade_levels, assigned_courses } = req.body;
 
     // Verify instructor exists
     const instructorResult = await query('SELECT id FROM instructors WHERE id = $1', [id]);
@@ -612,13 +612,13 @@ async function updateInstructorAssignments(req, res, next) {
       await client.query('BEGIN');
 
       // Delete existing age group assignments
-      await client.query('DELETE FROM instructor_age_groups WHERE instructor_id = $1', [id]);
+      await client.query('DELETE FROM instructor_grade_levels WHERE instructor_id = $1', [id]);
 
       // Insert new age group assignments
-      if (assigned_age_groups && Array.isArray(assigned_age_groups) && assigned_age_groups.length > 0) {
-        for (const ageGroupId of assigned_age_groups) {
+      if (assigned_grade_levels && Array.isArray(assigned_grade_levels) && assigned_grade_levels.length > 0) {
+        for (const ageGroupId of assigned_grade_levels) {
           await client.query(
-            `INSERT INTO instructor_age_groups (instructor_id, age_group_id, assigned_by)
+            `INSERT INTO instructor_grade_levels (instructor_id, grade_level_id, assigned_by)
              VALUES ($1, $2, $3)`,
             [id, ageGroupId, req.user.id]
           );
@@ -640,30 +640,30 @@ async function updateInstructorAssignments(req, res, next) {
 
           // Check if a course instance already exists for this instructor and available course
           const existingCourse = await client.query(
-            'SELECT id, age_group_id FROM courses WHERE instructor_id = $1 AND available_course_id = $2 LIMIT 1',
+            'SELECT id, grade_level_id FROM courses WHERE instructor_id = $1 AND available_course_id = $2 LIMIT 1',
             [id, availableCourseId]
           );
 
           let courseId = existingCourse.rows[0]?.id;
-          let ageGroupId = existingCourse.rows[0]?.age_group_id;
+          let ageGroupId = existingCourse.rows[0]?.grade_level_id;
 
           // If not, auto-create the course instance
           if (!courseId) {
             const availableCourse = await client.query(
-              'SELECT * FROM age_group_available_courses WHERE id = $1',
+              'SELECT * FROM grade_level_available_courses WHERE id = $1',
               [availableCourseId]
             );
             
             if (availableCourse.rows.length > 0) {
               const ac = availableCourse.rows[0];
               const createdCourse = await client.query(
-                `INSERT INTO courses (instructor_id, age_group_id, title, description, available_course_id, status)
+                `INSERT INTO courses (instructor_id, grade_level_id, title, description, available_course_id, status)
                  VALUES ($1, $2, $3, $4, $5, 'draft')
-                 RETURNING id, age_group_id`,
-                [id, ac.age_group_id, ac.course_title, ac.course_description, availableCourseId]
+                 RETURNING id, grade_level_id`,
+                [id, ac.grade_level_id, ac.course_title, ac.course_description, availableCourseId]
               );
               courseId = createdCourse.rows[0].id;
-              ageGroupId = createdCourse.rows[0].age_group_id;
+              ageGroupId = createdCourse.rows[0].grade_level_id;
             }
           }
 
@@ -676,7 +676,7 @@ async function updateInstructorAssignments(req, res, next) {
             );
             if (existingAssignment.rows.length === 0) {
               await client.query(
-                `INSERT INTO instructor_assignments (instructor_id, course_id, age_group_id, status, assigned_by)
+                `INSERT INTO instructor_assignments (instructor_id, course_id, grade_level_id, status, assigned_by)
                  VALUES ($1, $2, $3, 'active', $4)`,
                 [id, courseId, ageGroupId, req.user.id]
               );
@@ -689,7 +689,7 @@ async function updateInstructorAssignments(req, res, next) {
       res.json({ 
         success: true, 
         message: 'Instructor assignments updated successfully',
-        assigned_age_groups: assigned_age_groups || [],
+        assigned_grade_levels: assigned_grade_levels || [],
         assigned_courses: assigned_courses || []
       });
     } catch (err) {
@@ -710,7 +710,7 @@ async function updateInstructorAssignments(req, res, next) {
 // GET /api/admin/courses  — list all courses with instructor & age group info
 async function listCourses(req, res, next) {
   try {
-    const { status, instructor_id, age_group_id, search, limit } = req.query;
+    const { status, instructor_id, grade_level_id, search, limit } = req.query;
     const conditions = [];
     const params = [];
 
@@ -722,9 +722,9 @@ async function listCourses(req, res, next) {
       params.push(instructor_id);
       conditions.push(`c.instructor_id = $${params.length}`);
     }
-    if (age_group_id) {
-      params.push(age_group_id);
-      conditions.push(`c.age_group_id = $${params.length}`);
+    if (grade_level_id) {
+      params.push(grade_level_id);
+      conditions.push(`c.grade_level_id = $${params.length}`);
     }
     if (search) {
       params.push(`%${search}%`);
@@ -733,11 +733,11 @@ async function listCourses(req, res, next) {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
-      `SELECT c.*, u.full_name AS instructor_name, ag.name AS age_group_name
+      `SELECT c.*, u.full_name AS instructor_name, ag.name AS grade_level_name
        FROM courses c
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
        ${where}
        ORDER BY c.created_at DESC
        LIMIT $${params.length + 1}`,
@@ -809,13 +809,13 @@ async function createAgeGroup(req, res, next) {
     }
 
     const result = await query(
-      `INSERT INTO age_groups (name, min_age, max_age, requires_account)
+      `INSERT INTO grade_levels (name, min_age, max_age, requires_account)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
       [name, min_age, max_age, requires_account ?? (min_age >= 11)]
     );
 
-    res.status(201).json({ age_group: result.rows[0] });
+    res.status(201).json({ grade_level: result.rows[0] });
   } catch (err) {
     next(err);
   }
@@ -827,7 +827,7 @@ async function updateAgeGroup(req, res, next) {
     const { id } = req.params;
     const { name, min_age, max_age, requires_account } = req.body;
 
-    const existing = await query('SELECT * FROM age_groups WHERE id = $1', [id]);
+    const existing = await query('SELECT * FROM grade_levels WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Age group not found' });
     }
@@ -849,11 +849,11 @@ async function updateAgeGroup(req, res, next) {
     updates.push(`updated_at = now()`);
 
     const result = await query(
-      `UPDATE age_groups SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+      `UPDATE grade_levels SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
       values
     );
 
-    res.json({ age_group: result.rows[0] });
+    res.json({ grade_level: result.rows[0] });
   } catch (err) {
     next(err);
   }
@@ -863,12 +863,12 @@ async function updateAgeGroup(req, res, next) {
 async function deleteAgeGroup(req, res, next) {
   try {
     const { id } = req.params;
-    const existing = await query('SELECT * FROM age_groups WHERE id = $1', [id]);
+    const existing = await query('SELECT * FROM grade_levels WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Age group not found' });
     }
 
-    await query('DELETE FROM age_groups WHERE id = $1', [id]);
+    await query('DELETE FROM grade_levels WHERE id = $1', [id]);
     res.status(204).send();
   } catch (err) {
     next(err);

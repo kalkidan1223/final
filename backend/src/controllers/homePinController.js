@@ -7,14 +7,14 @@ const { getInstructorIdForUser } = require('../utils/roleHelpers');
  * The age 5-9 child home is a VIEW over content the instructor has already
  * published. There is no separate "home page builder" an instructor has to
  * design: they publish a course as normal, then pin up to a handful of
- * activities to the home for that age group. The child home renders whatever
+ * activities to the home for that grade level. The child home renders whatever
  * is pinned, in the instructor's order.
  *
  * Why this shape:
  *   - No school wants to lay out a dashboard. They want to say "this week we
  *     do these three things".
  *   - Content can never drift from the course, because it IS the course.
- *   - A child only ever sees published content from their own age group.
+ *   - A child only ever sees published content from their own grade level.
  */
 
 const MAX_HOME_TILES = 6;
@@ -104,7 +104,7 @@ async function loadResource(resourceType, resourceId, instructorId) {
   const params = instructorId === null ? [resourceId] : [resourceId, instructorId];
 
   const result = await query(
-    `SELECT ${columns}, c.age_group_id
+    `SELECT ${columns}, c.grade_level_id
      ${source}
      WHERE ${RESOURCE_KEY[resourceType]}.id = $1
        ${ownership}`,
@@ -114,18 +114,18 @@ async function loadResource(resourceType, resourceId, instructorId) {
 }
 
 // ----------------------------------------------------------------------------
-// GET /api/home/candidates?age_group_id=1
-// Everything the instructor has published in that age group, so they can pin.
+// GET /api/home/candidates?grade_level_id=1
+// Everything the instructor has published in that grade level, so they can pin.
 // ----------------------------------------------------------------------------
 async function listCandidates(req, res, next) {
   try {
-    const ageGroupId = req.query.age_group_id;
-    if (!ageGroupId) {
-      return res.status(400).json({ error: 'age_group_id is required' });
+    const gradeLevelId = req.query.grade_level_id;
+    if (!gradeLevelId) {
+      return res.status(400).json({ error: 'grade_level_id is required' });
     }
     const instructorId = await resolveInstructorId(req);
     const ownership = instructorId === null ? '' : 'AND c.instructor_id = $2';
-    const params = instructorId === null ? [ageGroupId] : [ageGroupId, instructorId];
+    const params = instructorId === null ? [gradeLevelId] : [gradeLevelId, instructorId];
 
     const activities = await query(
       `SELECT a.id, a.title, a.activity_type, a.instructions, a.status,
@@ -137,7 +137,7 @@ async function listCandidates(req, res, next) {
        FROM activities a
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
-       WHERE c.age_group_id = $1 ${ownership}
+       WHERE c.grade_level_id = $1 ${ownership}
        ORDER BY c.title, l.order_index, a.display_order, a.created_at`,
       params
     );
@@ -151,7 +151,7 @@ async function listCandidates(req, res, next) {
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
        LEFT JOIN activities a ON a.lesson_id = l.id
-       WHERE c.age_group_id = $1 ${ownership}
+       WHERE c.grade_level_id = $1 ${ownership}
        GROUP BY l.id, c.id
        ORDER BY c.title, l.order_index`,
       params
@@ -164,31 +164,31 @@ async function listCandidates(req, res, next) {
 }
 
 // ----------------------------------------------------------------------------
-// GET /api/home/pins?age_group_id=1
+// GET /api/home/pins?grade_level_id=1
 // ----------------------------------------------------------------------------
 async function listPins(req, res, next) {
   try {
-    const ageGroupId = req.query.age_group_id;
-    if (!ageGroupId) {
-      return res.status(400).json({ error: 'age_group_id is required' });
+    const gradeLevelId = req.query.grade_level_id;
+    if (!gradeLevelId) {
+      return res.status(400).json({ error: 'grade_level_id is required' });
     }
-    res.json({ pins: await resolvePins(ageGroupId) });
+    res.json({ pins: await resolvePins(gradeLevelId) });
   } catch (err) {
     next(err);
   }
 }
 
 /**
- * Shared: read the ordered pins for an age group, hydrated with the resource.
+ * Shared: read the ordered pins for a grade level, hydrated with the resource.
  * Used by the instructor screen and by the child dashboard.
  */
-async function resolvePins(ageGroupId) {
+async function resolvePins(gradeLevelId) {
   const pinRes = await query(
     `SELECT id, resource_type, resource_id, display_order
      FROM home_pins
-     WHERE age_group_id = $1 AND is_active
+     WHERE grade_level_id = $1 AND is_active
      ORDER BY display_order, id`,
-    [ageGroupId]
+    [gradeLevelId]
   );
 
   const pins = [];
@@ -228,10 +228,10 @@ async function loadResourceForAnyone(resourceType, resourceId) {
 // ----------------------------------------------------------------------------
 async function createPin(req, res, next) {
   try {
-    const { age_group_id, resource_type, resource_id } = req.body;
+    const { grade_level_id, resource_type, resource_id } = req.body;
 
-    if (!age_group_id || !resource_id) {
-      return res.status(400).json({ error: 'age_group_id and resource_id are required' });
+    if (!grade_level_id || !resource_id) {
+      return res.status(400).json({ error: 'grade_level_id and resource_id are required' });
     }
     if (!RESOURCE_COLUMNS[resource_type]) {
       return res.status(400).json({
@@ -244,13 +244,13 @@ async function createPin(req, res, next) {
     if (!resource) {
       return res.status(404).json({ error: 'That content was not found in your courses' });
     }
-    if (String(resource.age_group_id) !== String(age_group_id)) {
-      return res.status(400).json({ error: 'That content belongs to a different age group' });
+    if (String(resource.grade_level_id) !== String(grade_level_id)) {
+      return res.status(400).json({ error: 'That content belongs to a different grade level' });
     }
 
     const countRes = await query(
-      `SELECT COUNT(*)::int AS total FROM home_pins WHERE age_group_id = $1 AND is_active`,
-      [age_group_id]
+      `SELECT COUNT(*)::int AS total FROM home_pins WHERE grade_level_id = $1 AND is_active`,
+      [grade_level_id]
     );
     if (countRes.rows[0].total >= MAX_HOME_TILES) {
       return res.status(409).json({
@@ -260,17 +260,17 @@ async function createPin(req, res, next) {
 
     const orderRes = await query(
       `SELECT COALESCE(MAX(display_order), -1) + 1 AS next FROM home_pins
-       WHERE age_group_id = $1 AND is_active`,
-      [age_group_id]
+       WHERE grade_level_id = $1 AND is_active`,
+      [grade_level_id]
     );
 
     const result = await query(
-      `INSERT INTO home_pins (age_group_id, resource_type, resource_id, display_order, pinned_by)
+      `INSERT INTO home_pins (grade_level_id, resource_type, resource_id, display_order, pinned_by)
        VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (age_group_id, resource_type, resource_id)
+       ON CONFLICT (grade_level_id, resource_type, resource_id)
        DO UPDATE SET is_active = TRUE, updated_at = now()
        RETURNING *`,
-      [age_group_id, resource_type, resource_id, req.body.display_order ?? orderRes.rows[0].next, instructorId]
+      [grade_level_id, resource_type, resource_id, req.body.display_order ?? orderRes.rows[0].next, instructorId]
     );
 
     res.status(201).json({ pin: result.rows[0], resource });

@@ -99,7 +99,7 @@ export default function InstructorStudents() {
               <div className="flex items-center gap-3 text-sm text-slate-500">
                 <span>Course:</span>
                 <span className="font-semibold text-slate-700">{selected.course_title}</span>
-                {selected.age_group_name && <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{selected.age_group_name}</span>}
+                {selected.grade_level_name && <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{selected.grade_level_name}</span>}
                 {selected.grade && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Grade {selected.grade}</span>}
                 {selected.section && <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Section {selected.section}</span>}
                 <span className="ml-auto font-medium">{filtered.length} student{filtered.length !== 1 ? 's' : ''}</span>
@@ -148,7 +148,7 @@ export default function InstructorStudents() {
                           {s.account_type === 'individual' ? '👤 Individual' : '👨‍👩‍👧 Parent-managed'}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-1">{s.age_group_name}</p>
+                      <p className="text-xs text-slate-400 mt-1">{s.grade_level_name}</p>
                     </div>
                     <MdOpenInNew className="text-slate-300 group-hover:text-indigo-500 transition flex-shrink-0" />
                   </Link>

@@ -57,7 +57,7 @@ function validateStudentInvite(body) {
     errors.push('full_name is required');
   }
   if (!body.date_of_birth) errors.push('date_of_birth is required');
-  if (!body.age_group_id) errors.push('age_group_id is required');
+  if (!body.grade_level_id) errors.push('grade_level_id is required');
   return errors;
 }
 

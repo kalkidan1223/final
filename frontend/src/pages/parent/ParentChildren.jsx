@@ -56,8 +56,8 @@ export default function ParentChildren() {
     last_name: '',
     gender: 'female',
     date_of_birth: '',
-    grade_id: '',
-    section_id: '',
+    grade_level_id: '',
+    section: '',
     previous_school: '',
     preferred_language: 'Amharic',
     student_email: '',
@@ -65,11 +65,23 @@ export default function ParentChildren() {
     confirm_password: '',
   });
 
+  const [gradeLevels, setGradeLevels] = useState([]);
+
   const calculatedAge = calculateAge(formData.date_of_birth);
 
   useEffect(() => {
     fetchChildren();
+    fetchGradeLevels();
   }, []);
+
+  async function fetchGradeLevels() {
+    try {
+      const res = await axiosClient.get('/grades');
+      setGradeLevels(res.data.grade_levels || []);
+    } catch (err) {
+      console.error('Failed to fetch grade levels:', err);
+    }
+  }
 
   async function fetchChildren() {
     try {
@@ -109,19 +121,24 @@ export default function ParentChildren() {
       return;
     }
 
+    if (!formData.grade_level_id) {
+      setFormError('Please select a grade level.');
+      return;
+    }
+
     if (calculatedAge === null || calculatedAge < 5 || calculatedAge > 12) {
       setFormError('The Children Learning Hub currently supports children aged 5 to 12.');
       return;
     }
 
-    // Validation for ages 10-12
+    // Validation for Grades 5-6 (ages 10-12)
     if (calculatedAge >= 10) {
       if (!formData.student_email.trim()) {
-        setFormError('Student email is required for children aged 10–12.');
+        setFormError('Student email is required for children in Grades 5-6 (ages 10–12).');
         return;
       }
       if (!formData.password) {
-        setFormError('Student password is required for children aged 10–12.');
+        setFormError('Student password is required for children in Grades 5-6 (ages 10–12).');
         return;
       }
       if (formData.password.length < 8) {
@@ -150,8 +167,8 @@ export default function ParentChildren() {
           last_name: '',
           gender: 'female',
           date_of_birth: '',
-          grade_id: '',
-          section_id: '',
+          grade_level_id: '',
+          section: '',
           previous_school: '',
           preferred_language: 'Amharic',
           student_email: '',
@@ -315,7 +332,7 @@ export default function ParentChildren() {
                       <h3 className="font-extrabold text-lg text-slate-900 truncate">{child.full_name}</h3>
                       <div className="text-xs text-slate-500 mt-0.5">
                         Age: <strong className="text-slate-800">{age ?? '—'}</strong> •{' '}
-                        <span>{child.age_group_name || 'Primary'}</span>
+                        <span>{child.grade_level_name || 'Primary'}</span>
                       </div>
 
                       {child.student_email && (
@@ -420,8 +437,8 @@ export default function ParentChildren() {
                           last_name: child.full_name?.split(' ').slice(2).join(' ') || '',
                           gender: child.gender || 'female',
                           date_of_birth: child.date_of_birth?.split('T')[0] || '',
-                          grade_id: '',
-                          section_id: '',
+                          grade_level_id: '',
+                          section: '',
                           previous_school: '',
                           preferred_language: child.preferred_language || 'Amharic',
                           student_email: child.student_email || '',
@@ -436,7 +453,7 @@ export default function ParentChildren() {
                     </button>
                   ) : (
                     <>
-                      {/* Age 5-9 (Early Explorer): Parent-guided learning action */}
+                      {/* KG1-Grade 4 (Early Explorer): Parent-guided learning action */}
                       {age !== null && age <= 9 ? (
                         <button
                           type="button"
@@ -444,13 +461,13 @@ export default function ParentChildren() {
                           className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2 active:scale-95"
                         >
                           <MdPlayCircleFilled className="text-base text-slate-900" />
-                          <span>Learn with Child (Ages 5–9)</span>
+                          <span>Learn with Child (KG1-Grade 4)</span>
                         </button>
                       ) : (
                         <div className="p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-[11px] text-blue-900 flex items-start gap-2">
                           <MdSchool className="text-base text-blue-600 flex-shrink-0 mt-0.5" />
                           <div>
-                            <strong className="block font-bold">Independent Student (Age 10–12)</strong>
+                            <strong className="block font-bold">Independent Student (Grades 5-6)</strong>
                             <span>Learns independently using their own student credentials. Monitor their progress below.</span>
                           </div>
                         </div>
@@ -586,6 +603,29 @@ export default function ParentChildren() {
                     )}
                   </div>
 
+                  {/* Grade Level Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Grade Level <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="grade_level_id"
+                      value={formData.grade_level_id}
+                      onChange={handleFormChange}
+                      required
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Grade Level</option>
+                      {gradeLevels.map((grade) => (
+                        <option key={grade.id} value={grade.id}>
+                          {grade.name} {grade.min_age && grade.max_age && `(Ages ${grade.min_age}-${grade.max_age})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Gender */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Gender</label>
@@ -598,6 +638,19 @@ export default function ParentChildren() {
                       <option value="female">Female (Girl 👧)</option>
                       <option value="male">Male (Boy 👦)</option>
                     </select>
+                  </div>
+
+                  {/* Section (Optional) */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Section (Optional)</label>
+                    <input
+                      type="text"
+                      name="section"
+                      value={formData.section}
+                      onChange={handleFormChange}
+                      placeholder="e.g., A, B, C"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
                 </div>
 
@@ -631,15 +684,15 @@ export default function ParentChildren() {
                 </div>
               </div>
 
-              {/* Dynamic Account Type Block based on Age */}
+              {/* Dynamic Account Type Block based on Grade Level */}
               {calculatedAge !== null && calculatedAge >= 5 && calculatedAge <= 9 && (
                 <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl space-y-2">
                   <div className="flex items-center gap-2 text-purple-900 font-extrabold text-sm">
                     <MdChildCare className="text-xl text-purple-600" />
-                    <span>Ages 5–9: Parent-Managed Child (Pending Admin Review)</span>
+                    <span>KG1-Grade 4: Parent-Managed Child (Pending Admin Review)</span>
                   </div>
                   <p className="text-xs text-purple-700 leading-relaxed">
-                    Because your child is <strong>{calculatedAge} years old</strong>, no separate login credentials are required. Once submitted, the registration will be placed in <strong>Pending Approval</strong> for administrator review. You will be able to start learning together as soon as it is approved.
+                    Because your child is in <strong>Kindergarten or Primary Grades 1-4</strong>, no separate login credentials are required. Once submitted, the registration will be placed in <strong>Pending Approval</strong> for administrator review. You will be able to start learning together as soon as it is approved.
                   </p>
                 </div>
               )}
@@ -649,10 +702,10 @@ export default function ParentChildren() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-blue-900 font-extrabold text-sm">
                       <MdSchool className="text-xl text-blue-600" />
-                      <span>Ages 10–12: Independent Student Account</span>
+                      <span>Grades 5-6: Independent Student Account</span>
                     </div>
                     <p className="text-xs text-blue-700 leading-relaxed">
-                      Children aged 10–12 can sign in independently. Please provide their login email and password below. After submission, their account will be placed in <strong>Pending Approval</strong> until confirmed by an Administrator.
+                      Children in Grades 5-6 can sign in independently. Please provide their login email and password below. After submission, their account will be placed in <strong>Pending Approval</strong> until confirmed by an Administrator.
                     </p>
                   </div>
 

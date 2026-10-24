@@ -54,7 +54,7 @@ export default function InstructorStudentProfile() {
           </div>
           <div className="flex-1">
             <h1 className="text-xl font-bold text-slate-900">{student?.full_name}</h1>
-            <p className="text-slate-500 text-sm capitalize">{student?.account_type || 'Parent-managed'} • {student?.age_group_name}</p>
+            <p className="text-slate-500 text-sm capitalize">{student?.account_type || 'Parent-managed'} • {student?.grade_level_name}</p>
           </div>
           <div className="text-right">
             <div className="text-2xl font-extrabold text-indigo-600">{avg_score ?? 0}%</div>

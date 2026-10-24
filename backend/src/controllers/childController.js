@@ -1,7 +1,7 @@
 const { query } = require('../config/db');
 const { resolvePins } = require('./homePinController');
 const { getLessonAccess, getResourceAccess } = require('../utils/learningAccess');
-const { gradeAnswer, correctAnswerText, formatMatchingAnswer } = require('../utils/quizGrading');
+const { gradeAnswer, correctAnswerText, formatMatchingAnswer, matchingScore } = require('../utils/quizGrading');
 
 /**
  * Helper: Resolve the active student record based on whether the logged in user
@@ -10,12 +10,12 @@ const { gradeAnswer, correctAnswerText, formatMatchingAnswer } = require('../uti
 async function resolveChild(req) {
   if (req.user.role === 'student') {
     const res = await query(
-      `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
+      `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
               u.email, u.full_name as user_full_name,
               p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
               COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 10)::int as age
        FROM students s
-       JOIN age_groups ag ON ag.id = s.age_group_id
+       JOIN grade_levels gl ON gl.id = s.grade_level_id
        JOIN users u ON u.id = s.user_id
        LEFT JOIN parents p ON p.id = s.parent_id
        LEFT JOIN users pu ON pu.id = p.user_id
@@ -37,12 +37,12 @@ async function resolveChild(req) {
     let child = null;
     if (requestedChildId) {
       const res = await query(
-        `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
          FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
          LEFT JOIN parents p ON p.id = s.parent_id
          LEFT JOIN users pu ON pu.id = p.user_id
          WHERE s.id = $1 AND s.parent_id = $2 AND s.is_active = TRUE`,
@@ -58,12 +58,12 @@ async function resolveChild(req) {
     // automatically find the parent's first early learner child (age <= 9)
     if (!child) {
       const res = await query(
-        `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
          FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
          LEFT JOIN parents p ON p.id = s.parent_id
          LEFT JOIN users pu ON pu.id = p.user_id
          WHERE s.parent_id = $1 AND s.is_active = TRUE
@@ -109,18 +109,20 @@ async function getProfile(req, res, next) {
     if (req.user.role === 'parent' && child.parent_db_id) {
       const sibRes = await query(
         `SELECT id, full_name, profile_image_url, grade, section, date_of_birth,
+                gl.name as grade_level_name, gl.code as grade_code,
                 COALESCE(EXTRACT(YEAR FROM age(date_of_birth)), 7)::int as age
-         FROM students 
-         WHERE parent_id = $1 AND is_active = TRUE 
-           AND COALESCE(EXTRACT(YEAR FROM age(date_of_birth)), 7) <= 9
-         ORDER BY created_at ASC`,
+         FROM students s
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
+         WHERE s.parent_id = $1 AND s.is_active = TRUE
+           AND COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7) <= 9
+         ORDER BY s.created_at ASC`,
         [child.parent_db_id]
       );
       siblingChildren = sibRes.rows;
     }
 
-    const age = child.age !== undefined 
-      ? child.age 
+    const age = child.age !== undefined
+      ? child.age
       : (child.date_of_birth ? Math.floor((new Date() - new Date(child.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000)) : 7);
 
     res.json({
@@ -133,8 +135,9 @@ async function getProfile(req, res, next) {
         section: child.section,
         age,
         is_early_learner: age <= 9,
-        age_group_id: child.age_group_id,
-        age_group_name: child.age_group_name,
+        grade_level_id: child.grade_level_id,
+        grade_level_name: child.grade_level_name,
+        grade_code: child.grade_code,
         preferred_language: child.preferred_language,
         profile_image_url: child.profile_image_url,
         admission_number: child.admission_number,
@@ -163,11 +166,11 @@ async function getDashboard(req, res, next) {
       `SELECT
         (SELECT COUNT(DISTINCT c.id)::int
          FROM courses c
-         WHERE c.age_group_id = $2 AND c.status = 'published') as total_courses,
+         WHERE c.grade_level_id = $2 AND c.status = 'published') as total_courses,
         (SELECT COUNT(DISTINCT l.id)::int
          FROM lessons l
          JOIN courses c ON c.id = l.course_id
-         WHERE c.age_group_id = $2 AND c.status = 'published') as total_lessons,
+         WHERE c.grade_level_id = $2 AND c.status = 'published') as total_lessons,
         (SELECT COUNT(DISTINCT asub.activity_id)::int
          FROM activity_submissions asub
          WHERE asub.student_id = $1) as completed_activities,
@@ -177,33 +180,33 @@ async function getDashboard(req, res, next) {
         (SELECT COUNT(*)::int
          FROM video_watches
          WHERE student_id = $1) as watched_videos`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     // 2. Continue Learning: Find last accessed incomplete lesson or first available lesson
     const continueRes = await query(
       `SELECT l.id, l.title, l.description, l.order_index,
               c.id as course_id, c.title as course_title, c.thumbnail_url,
-              ag.name as age_group_name,
+              gl.name as grade_level_name,
               u.full_name as instructor_name,
               COALESCE(p.completion_percentage, 0)::int as lesson_progress
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN progress p ON p.lesson_id = l.id AND p.student_id = $1
-       WHERE c.age_group_id = $2 AND c.status = 'published'
+       WHERE c.grade_level_id = $2 AND c.status = 'published'
          AND (p.status IS NULL OR p.status != 'completed')
        ORDER BY p.last_accessed_at DESC NULLS LAST, l.order_index ASC, l.created_at ASC
        LIMIT 1`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     // 3. Child's assigned courses with progress
     const coursesRes = await query(
       `SELECT c.id, c.title, c.description, c.thumbnail_url,
-              ag.name as age_group_name, u.full_name as instructor_name,
+              gl.name as grade_level_name, u.full_name as instructor_name,
               COUNT(DISTINCT l.id)::int as total_lessons,
               COUNT(DISTINCT a.id)::int as total_activities,
               COUNT(DISTINCT q.id)::int as total_quizzes,
@@ -213,18 +216,18 @@ async function getDashboard(req, res, next) {
                 ), 0
               )::int as overall_progress
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN activities a ON a.lesson_id = l.id AND a.status IN ('active', 'published')
        LEFT JOIN quizzes q ON q.lesson_id = l.id
        LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id = l.id
-       WHERE c.age_group_id = $2 AND c.status = 'published'
-       GROUP BY c.id, ag.name, u.full_name
+       WHERE c.grade_level_id = $2 AND c.status = 'published'
+       GROUP BY c.id, gl.name, u.full_name
        ORDER BY c.created_at DESC
        LIMIT 6`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     // 4. Today's recommended activities (assigned activities not yet submitted)
@@ -237,11 +240,11 @@ async function getDashboard(req, res, next) {
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $1
-       WHERE c.age_group_id = $2 AND c.status = 'published' AND a.status IN ('active', 'published')
+       WHERE c.grade_level_id = $2 AND c.status = 'published' AND a.status IN ('active', 'published')
          AND asub.id IS NULL
        ORDER BY l.order_index ASC, a.created_at ASC
        LIMIT 5`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     // 5. Learning streak (days with activity in last 14 days)
@@ -262,11 +265,11 @@ async function getDashboard(req, res, next) {
     // 6. Real achievements unlocked
     const achievements = await computeAchievements(child.id);
 
-    // 6b. What the instructor has pinned to the child home for this age group.
+    // 6b. What the instructor has pinned to the child home for this grade level.
     //     This is the ONLY source of the home screen's content - there is no
     //     hardcoded curriculum on the child side.
     const [homePins, praiseRes] = await Promise.all([
-      resolvePins(child.age_group_id),
+      resolvePins(child.grade_level_id),
       query(
         `SELECT id, text, english, emoji FROM encouragement_phrases
          WHERE is_active ORDER BY id`
@@ -298,7 +301,8 @@ async function getDashboard(req, res, next) {
         is_early_learner: age <= 9,
         is_parent_managed: !child.user_id,
         is_parent_session: req.user.role === 'parent',
-        age_group_name: child.age_group_name,
+        grade_level_name: child.grade_level_name,
+        grade_code: child.grade_code,
         grade: child.grade,
         section: child.section,
         profile_image_url: child.profile_image_url,
@@ -326,10 +330,10 @@ async function listCourses(req, res, next) {
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
-    // Show only published courses assigned to child's age group & class
+    // Show only published courses assigned to child's grade level
     const result = await query(
       `SELECT c.id, c.title, c.description, c.thumbnail_url, c.status,
-              ag.name as age_group_name, u.full_name as instructor_name,
+              gl.name as grade_level_name, u.full_name as instructor_name,
               COUNT(DISTINCT l.id)::int as total_lessons,
               COUNT(DISTINCT a.id)::int as total_activities,
               COUNT(DISTINCT q.id)::int as total_quizzes,
@@ -339,17 +343,17 @@ async function listCourses(req, res, next) {
                 ), 0
               )::int as overall_progress
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN activities a ON a.lesson_id = l.id AND a.status = 'active'
        LEFT JOIN quizzes q ON q.lesson_id = l.id
        LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id = l.id
-       WHERE c.age_group_id = $2 AND c.status = 'published'
-       GROUP BY c.id, ag.name, u.full_name
+       WHERE c.grade_level_id = $2 AND c.status = 'published'
+       GROUP BY c.id, gl.name, u.full_name
        ORDER BY c.created_at DESC`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     res.json({ courses: result.rows });
@@ -365,17 +369,17 @@ async function getCourse(req, res, next) {
     const child = await resolveChild(req);
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
-    // Verify course belongs to student's age group
+    // Verify course belongs to student's grade level
     const courseRes = await query(
-      `SELECT c.*, ag.name as age_group_name, u.full_name as instructor_name,
+      `SELECT c.*, gl.name as grade_level_name, u.full_name as instructor_name,
               ia.grade as assigned_grade, ia.section as assigned_section
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN instructor_assignments ia ON ia.course_id = c.id AND ia.instructor_id = i.id
-       WHERE c.id = $1 AND c.age_group_id = $2 AND c.status = 'published'`,
-      [courseId, child.age_group_id]
+       WHERE c.id = $1 AND c.grade_level_id = $2 AND c.status = 'published'`,
+      [courseId, child.grade_level_id]
     );
 
     if (courseRes.rows.length === 0) {
@@ -456,11 +460,11 @@ async function getLesson(req, res, next) {
 
     // Validate lesson and verify child belongs to the course
     const lessonRes = await query(
-      `SELECT l.*, c.title as course_title, c.id as course_id, c.age_group_id,
-              ag.name as age_group_name, u.full_name as instructor_name
+      `SELECT l.*, c.title as course_title, c.id as course_id, c.grade_level_id,
+              gl.name as grade_level_name, u.full_name as instructor_name
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        WHERE l.id = $1 AND c.status = 'published'`,
@@ -472,7 +476,7 @@ async function getLesson(req, res, next) {
     }
 
     const lesson = lessonRes.rows[0];
-    if (lesson.age_group_id !== child.age_group_id) {
+    if (lesson.grade_level_id !== child.grade_level_id) {
       return res.status(403).json({ error: 'Access denied to this lesson' });
     }
 
@@ -630,7 +634,7 @@ async function getActivity(req, res, next) {
 
     const result = await query(
       `SELECT a.*, l.id as lesson_id, l.title as lesson_title,
-              c.id as course_id, c.title as course_title, c.age_group_id,
+              c.id as course_id, c.title as course_title, c.grade_level_id,
               asub.id as submission_id, asub.status as submission_status,
               asub.submission_text, asub.submission_url, asub.score, asub.feedback,
               asub.submitted_at, asub.reviewed_at as graded_at,
@@ -650,7 +654,7 @@ async function getActivity(req, res, next) {
     }
 
     const activity = result.rows[0];
-    if (activity.age_group_id !== child.age_group_id) {
+    if (activity.grade_level_id !== child.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -683,7 +687,7 @@ async function submitActivity(req, res, next) {
 
     // Validate activity and access
     const actRes = await query(
-      `SELECT a.*, l.id as lesson_id, c.id as course_id, c.age_group_id
+      `SELECT a.*, l.id as lesson_id, c.id as course_id, c.grade_level_id
        FROM activities a
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -696,7 +700,7 @@ async function submitActivity(req, res, next) {
     }
 
     const activity = actRes.rows[0];
-    if (activity.age_group_id !== child.age_group_id) {
+    if (activity.grade_level_id !== child.grade_level_id) {
       return res.status(403).json({ error: 'Access denied to this activity' });
     }
 
@@ -802,7 +806,7 @@ async function getQuiz(req, res, next) {
 
     const quizRes = await query(
       `SELECT q.*, l.id as lesson_id, l.title as lesson_title,
-              c.id as course_id, c.title as course_title, c.age_group_id
+              c.id as course_id, c.title as course_title, c.grade_level_id
        FROM quizzes q
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -815,7 +819,7 @@ async function getQuiz(req, res, next) {
     }
 
     const quiz = quizRes.rows[0];
-    if (quiz.age_group_id !== child.age_group_id) {
+    if (quiz.grade_level_id !== child.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -876,7 +880,7 @@ async function submitQuiz(req, res, next) {
 
     // Validate quiz and fetch questions with correct answers
     const questionsRes = await query(
-      `SELECT qq.*, q.lesson_id, c.id as course_id, c.age_group_id, q.show_result_immediately, q.passing_score
+      `SELECT qq.*, q.lesson_id, c.id as course_id, c.grade_level_id, q.show_result_immediately, q.passing_score
        FROM quiz_questions qq
        JOIN quizzes q ON q.id = qq.quiz_id
        JOIN lessons l ON l.id = q.lesson_id
@@ -891,7 +895,7 @@ async function submitQuiz(req, res, next) {
     }
 
     const first = questionsRes.rows[0];
-    if (first.age_group_id !== child.age_group_id) {
+    if (first.grade_level_id !== child.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -911,9 +915,18 @@ async function submitQuiz(req, res, next) {
       const qPoints = Number(q.points) || 1;
       totalPoints += qPoints;
       const given = answers ? answers[q.id] : undefined;
-      const isCorrect = gradeAnswer(q, given);
+      let isCorrect = false;
+      let questionScore = 0;
+      if (q.question_type === 'matching') {
+        const ms = matchingScore(q, given);
+        questionScore = ms.fraction * qPoints;
+        isCorrect = ms.correct === ms.total && ms.total > 0;
+      } else {
+        isCorrect = gradeAnswer(q, given);
+        if (isCorrect) questionScore = qPoints;
+      }
 
-      if (isCorrect) score += qPoints;
+      if (isCorrect || questionScore > 0) score += questionScore;
 
       questionReview.push({
         id: q.id,
@@ -934,10 +947,10 @@ async function submitQuiz(req, res, next) {
 
     // Store in quiz_results
     const resultRes = await query(
-      `INSERT INTO quiz_results (quiz_id, student_id, score, total_points, answers, submitted_at)
-       VALUES ($1, $2, $3, $4, $5, now())
+      `INSERT INTO quiz_results (quiz_id, student_id, score, total_points, answers, percentage, is_passed, passing_score, submitted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
        RETURNING *`,
-      [quizId, child.id, score, totalPoints, JSON.stringify(answers || {})]
+      [quizId, child.id, score, totalPoints, JSON.stringify(answers || {}), percentage, isPassed, first.passing_score ? Number(first.passing_score) : null]
     );
 
     // Update active in_progress attempt or insert new attempt if none found
@@ -1115,7 +1128,7 @@ async function updateVideoProgress(req, res, next) {
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
     const vidRes = await query(
-      `SELECT v.id, v.lesson_id, v.duration_seconds, c.id as course_id, c.age_group_id
+      `SELECT v.id, v.lesson_id, v.duration_seconds, c.id as course_id, c.grade_level_id
        FROM videos v
        JOIN lessons l ON l.id = v.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -1125,7 +1138,7 @@ async function updateVideoProgress(req, res, next) {
 
     if (vidRes.rows.length === 0) return res.status(404).json({ error: 'Video not found' });
     const vid = vidRes.rows[0];
-    if (vid.age_group_id !== child.age_group_id) return res.status(403).json({ error: 'Access denied' });
+    if (vid.grade_level_id !== child.grade_level_id) return res.status(403).json({ error: 'Access denied' });
 
     const effectiveDuration = Math.max(1, Number(duration) || Number(vid.duration_seconds) || 60);
 
@@ -1232,7 +1245,7 @@ async function updateMaterialProgress(req, res, next) {
     if (!child) return res.status(404).json({ error: 'Child profile not found' });
 
     const matRes = await query(
-      `SELECT lm.id, lm.lesson_id, lm.material_type, c.id as course_id, c.age_group_id
+      `SELECT lm.id, lm.lesson_id, lm.material_type, c.id as course_id, c.grade_level_id
        FROM learning_materials lm
        JOIN lessons l ON l.id = lm.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -1242,7 +1255,7 @@ async function updateMaterialProgress(req, res, next) {
 
     if (matRes.rows.length === 0) return res.status(404).json({ error: 'Material not found' });
     const mat = matRes.rows[0];
-    if (mat.age_group_id !== child.age_group_id) return res.status(403).json({ error: 'Access denied' });
+    if (mat.grade_level_id !== child.grade_level_id) return res.status(403).json({ error: 'Access denied' });
 
     let progressPct = 0;
     let isCompleted = false;
@@ -1748,10 +1761,10 @@ async function getProgress(req, res, next) {
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id IS NOT NULL
        LEFT JOIN progress cp ON cp.course_id = c.id AND cp.student_id = $1 AND cp.lesson_id IS NULL
-       WHERE c.age_group_id = $2 AND c.status = 'published'
+       WHERE c.grade_level_id = $2 AND c.status = 'published'
        GROUP BY c.id, cp.completion_percentage, cp.status
        ORDER BY c.created_at DESC`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     const sessionRes = await query(
@@ -1889,9 +1902,9 @@ async function listAllActivities(req, res, next) {
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $1
-       WHERE c.age_group_id = $2 AND c.status = 'published' AND a.status IN ('active', 'published')
+       WHERE c.grade_level_id = $2 AND c.status = 'published' AND a.status IN ('active', 'published')
        ORDER BY c.created_at DESC, l.order_index ASC, a.display_order ASC, a.created_at ASC`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     const activities = await annotateLocks(child.id, result.rows, 'activity');
@@ -1918,9 +1931,9 @@ async function listAllQuizzes(req, res, next) {
        FROM quizzes q
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
-       WHERE c.age_group_id = $2 AND c.status = 'published' AND (q.status IN ('active', 'published') OR q.status IS NULL)
+       WHERE c.grade_level_id = $2 AND c.status = 'published' AND (q.status IN ('active', 'published') OR q.status IS NULL)
        ORDER BY q.id, c.created_at DESC, l.order_index ASC, q.created_at ASC`,
-      [child.id, child.age_group_id]
+      [child.id, child.grade_level_id]
     );
 
     const quizzes = await annotateLocks(child.id, result.rows, 'quiz');

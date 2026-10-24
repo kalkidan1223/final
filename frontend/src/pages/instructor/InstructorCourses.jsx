@@ -103,7 +103,7 @@ export default function InstructorCourses() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
                     <span className="inline-flex items-center gap-1.5">
                       <MdSchool className="text-lg text-slate-400" />
-                      <span className="font-medium text-violet-600">{course.age_group_name}</span>
+                      <span className="font-medium text-violet-600">{course.grade_level_name}</span>
                     </span>
                     {course.grade && (
                       <span className="inline-flex items-center gap-1.5">

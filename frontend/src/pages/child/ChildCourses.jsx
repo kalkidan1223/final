@@ -144,7 +144,7 @@ function CourseCard({ course, index }) {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
           <div className="absolute top-3 right-3 bg-white/95 text-green-800 text-xs font-black px-3 py-1 rounded-full shadow-sm animate-bounce">
-            {course.age_group_name || 'All Learners'}
+            {course.grade_level_name || 'All Learners'}
           </div>
           <div className="absolute bottom-3 left-4 right-4 text-white">
             <span className="text-xs font-bold text-green-200">Instructor: {course.instructor_name || 'Teacher'}</span>

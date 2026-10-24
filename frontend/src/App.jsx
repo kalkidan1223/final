@@ -16,7 +16,8 @@ import AdminStudents from './pages/admin/AdminStudents';
 import AdminParents from './pages/admin/AdminParents';
 import AdminInstructors from './pages/admin/AdminInstructors';
 import AdminCourses from './pages/admin/AdminCourses';
-import AdminAgeGroups from './pages/admin/AdminAgeGroups';
+import AdminGradeLevels from './pages/admin/AdminGradeLevels';
+import AdminSubjects from './pages/admin/AdminSubjects';
 import AdminReports from './pages/admin/AdminReports';
 import AdminNotifications from './pages/admin/AdminNotifications';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
@@ -165,10 +166,18 @@ export default function App() {
         }
       />
       <Route
-        path="/admin/age-groups"
+        path="/admin/grade-levels"
         element={
           <ProtectedRoute roles={['admin']}>
-            <AdminAgeGroups />
+            <AdminGradeLevels />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/subjects"
+        element={
+          <ProtectedRoute roles={['admin']}>
+            <AdminSubjects />
           </ProtectedRoute>
         }
       />

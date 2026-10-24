@@ -31,9 +31,10 @@ const NAV_GROUPS = [
   {
     label: 'Academic',
     items: [
-      { to: '/admin/age-groups', label: 'Age Groups', icon: MdClass },
+      { to: '/admin/grade-levels', label: 'Grade Levels', icon: MdClass },
+      { to: '/admin/subjects', label: 'Subjects', icon: MdMenuBook },
       { to: '/admin/courses', label: 'Courses', icon: MdBook },
-      { to: '/admin/lessons', label: 'Lessons', icon: MdMenuBook },
+      { to: '/admin/lessons', label: 'Lessons', icon: MdAssignment },
       { to: '/admin/reference', label: 'Early Childhood Data', icon: MdTranslate },
     ],
   },

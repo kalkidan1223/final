@@ -259,7 +259,7 @@ export default function InstructorProgress() {
                             {item.course_title}
                           </span>
                           <span className="text-[10px] text-slate-400">
-                            {item.age_group_name}
+                            {item.grade_level_name}
                           </span>
                         </td>
 

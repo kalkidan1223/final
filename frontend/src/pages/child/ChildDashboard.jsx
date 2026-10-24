@@ -169,6 +169,16 @@ export default function ChildDashboard() {
         </div>
       </div>
 
+      {/* Results shortcut */}
+      <div className="flex justify-end">
+        <Link
+          to="/child/results"
+          className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black rounded-xl text-center shadow-md hover:shadow-lg transition flex items-center gap-2"
+        >
+          <span>🏆</span> My Results
+        </Link>
+      </div>
+
       {/* 2. Continue Learning - Simpler Card Like Reference */}
       {continueLearning && (
         <div className="bg-white rounded-2xl shadow-lg border-2 border-purple-100 p-6">

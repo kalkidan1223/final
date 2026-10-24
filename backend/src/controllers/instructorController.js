@@ -16,11 +16,11 @@ async function getInstructorId(userId) {
 // Verify this course is currently assigned to this instructor.
 async function verifyCourseOwnership(courseId, instructorId) {
   const r = await query(
-    `SELECT ia.*, c.title AS course_title, ag.name AS age_group_name,
+    `SELECT ia.*, c.title AS course_title, gl.name AS grade_level_name,
             ay.label AS academic_year
      FROM instructor_assignments ia
      JOIN courses c ON c.id = ia.course_id
-     JOIN age_groups ag ON ag.id = ia.age_group_id
+     JOIN grade_levels gl ON gl.id = ia.grade_level_id
      LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
      WHERE ia.course_id = $1 AND ia.instructor_id = $2 AND ia.status = 'active'
      LIMIT 1`,
@@ -46,7 +46,7 @@ async function getDashboard(req, res, next) {
          c.description AS course_description,
          c.thumbnail_url,
          c.status AS course_status,
-         ag.name AS age_group_name,
+         gl.name AS grade_level_name,
          ay.label AS academic_year,
          ia.grade,
          ia.section,
@@ -60,17 +60,17 @@ async function getDashboard(req, res, next) {
          COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending')::int AS pending_count
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
-       JOIN age_groups ag ON ag.id = ia.age_group_id
+       JOIN grade_levels gl ON gl.id = ia.grade_level_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN learning_materials m ON m.lesson_id = l.id
        LEFT JOIN activities a ON a.lesson_id = l.id
        LEFT JOIN quizzes q ON q.lesson_id = l.id
-       LEFT JOIN students s ON s.age_group_id = ia.age_group_id AND s.is_active = TRUE
+       LEFT JOIN students s ON s.grade_level_id = ia.grade_level_id AND s.is_active = TRUE
        LEFT JOIN activity_submissions sub ON sub.activity_id = a.id AND sub.student_id = s.id
        WHERE ia.instructor_id = $1 AND ia.status = 'active'
        GROUP BY c.id, c.title, c.description, c.thumbnail_url, c.status,
-                ag.name, ay.label, ia.grade, ia.section, ia.id
+                gl.name, ay.label, ia.grade, ia.section, ia.id
        ORDER BY ia.created_at DESC`,
       [instructorId]
     );
@@ -116,7 +116,7 @@ async function getDashboard(req, res, next) {
            COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending')::int AS pending_submissions
          FROM instructor_assignments ia
          JOIN courses c ON c.id = ia.course_id
-         LEFT JOIN students s ON s.age_group_id = ia.age_group_id AND s.is_active = TRUE
+         LEFT JOIN students s ON s.grade_level_id = ia.grade_level_id AND s.is_active = TRUE
          LEFT JOIN lessons l ON l.course_id = ia.course_id
          LEFT JOIN learning_materials m ON m.lesson_id = l.id
          LEFT JOIN activities a ON a.lesson_id = l.id
@@ -231,23 +231,23 @@ async function getCourseStudents(req, res, next) {
 
     const { rows } = await query(
       `SELECT s.id, s.full_name, s.date_of_birth, s.gender, s.grade, s.section,
-              ag.name AS age_group_name,
+              gl.name AS grade_level_name,
               CASE WHEN s.user_id IS NULL THEN 'parent-managed' ELSE 'individual' END AS account_type
        FROM students s
-       JOIN age_groups ag ON ag.id = s.age_group_id
-       WHERE s.age_group_id = $1
+       JOIN grade_levels gl ON gl.id = s.grade_level_id
+       WHERE s.grade_level_id = $1
          AND s.is_active = TRUE
          AND ($2::varchar IS NULL OR s.grade = $2)
          AND ($3::varchar IS NULL OR s.section = $3)
        ORDER BY s.full_name`,
-      [ia.age_group_id, ia.grade || null, ia.section || null]
+      [ia.grade_level_id, ia.grade || null, ia.section || null]
     );
 
     res.json({
       course: {
         course_id: id,
         course_title: ia.course_title,
-        age_group_name: ia.age_group_name,
+        grade_level_name: ia.grade_level_name,
         grade: ia.grade,
         section: ia.section,
       },
@@ -266,7 +266,7 @@ async function getStudentProfile(req, res, next) {
     // Verify this student belongs to at least one of the instructor's courses
     const accessCheck = await query(
       `SELECT s.id FROM students s
-       JOIN instructor_assignments ia ON ia.instructor_id = $1 AND ia.age_group_id = s.age_group_id
+       JOIN instructor_assignments ia ON ia.instructor_id = $1 AND ia.grade_level_id = s.grade_level_id
        WHERE s.id = $2 LIMIT 1`,
       [instructorId, studentId]
     );
@@ -275,10 +275,10 @@ async function getStudentProfile(req, res, next) {
     const [studentRes, submissionsRes, feedbackRes] = await Promise.all([
       query(
         `SELECT s.id, s.full_name, s.date_of_birth, s.gender,
-                ag.name AS age_group_name,
+                gl.name AS grade_level_name,
                 CASE WHEN s.user_id IS NULL THEN 'parent-managed' ELSE 'individual' END AS account_type
          FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
          WHERE s.id = $1`,
         [studentId]
       ),
@@ -377,10 +377,10 @@ async function getProfile(req, res, next) {
     const instructorId = await getInstructorId(req.user.id);
     const coursesRes = await query(
       `SELECT ia.id AS assignment_id, c.id AS course_id, c.title AS course_title,
-              ag.name AS age_group_name, ia.grade
+              gl.name AS grade_level_name, ia.grade
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
-       JOIN age_groups ag ON ag.id = ia.age_group_id
+       JOIN grade_levels gl ON gl.id = ia.grade_level_id
        WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
       [instructorId]
     );
@@ -503,8 +503,8 @@ async function listCourses(req, res, next) {
          c.thumbnail_url,
          c.status AS course_status,
          c.created_at,
-         c.age_group_id,
-         ag.name AS age_group_name,
+         c.grade_level_id,
+         gl.name AS grade_level_name,
          ay.label AS academic_year,
          ia.grade,
          ia.section,
@@ -516,15 +516,15 @@ async function listCourses(req, res, next) {
          COUNT(DISTINCT s.id)::int AS student_count
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
-       JOIN age_groups ag ON ag.id = ia.age_group_id
+       JOIN grade_levels gl ON gl.id = ia.grade_level_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN learning_materials m ON m.lesson_id = l.id
        LEFT JOIN videos v ON v.lesson_id = l.id
-       LEFT JOIN students s ON s.age_group_id = ia.age_group_id
+       LEFT JOIN students s ON s.grade_level_id = ia.grade_level_id
        WHERE ia.instructor_id = $1 AND ia.status = 'active'
        GROUP BY c.id, c.title, c.description, c.thumbnail_url, c.status,
-                c.created_at, c.age_group_id, ag.name, ay.label, ia.grade, ia.section,
+                c.created_at, c.grade_level_id, gl.name, ay.label, ia.grade, ia.section,
                 ia.status, ia.id
        ORDER BY ia.created_at DESC`,
       [instructorId]
@@ -549,10 +549,10 @@ async function getCourse(req, res, next) {
     const courseRes = await query(
       `SELECT ia.id AS assignment_id, ia.grade, ia.section, ia.academic_year_id,
               ia.status AS assignment_status,
-              c.*, ag.name AS age_group_name, ay.label AS academic_year
+              c.*, gl.name AS grade_level_name, ay.label AS academic_year
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
-       JOIN age_groups ag ON ag.id = ia.age_group_id
+       JOIN grade_levels gl ON gl.id = ia.grade_level_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        WHERE c.id = $1 AND ia.instructor_id = $2 AND ia.status = 'active'
        LIMIT 1`,
@@ -583,10 +583,10 @@ async function getCourse(req, res, next) {
       query(
         `SELECT COUNT(DISTINCT s.id)::int AS student_count
          FROM students s
-         WHERE s.age_group_id = $1
+         WHERE s.grade_level_id = $1
            AND ($2::varchar IS NULL OR s.grade = $2)
            AND ($3::varchar IS NULL OR s.section = $3)`,
-        [course.age_group_id, course.grade || null, course.section || null]
+        [course.grade_level_id, course.grade || null, course.section || null]
       ),
     ]);
 
@@ -618,14 +618,14 @@ async function listLessons(req, res, next) {
          l.updated_at,
          c.title AS course_title,
          c.thumbnail_url AS course_thumbnail,
-         ag.name AS age_group_name,
+         gl.name AS grade_level_name,
          COUNT(DISTINCT m.id)::int AS material_count,
          COUNT(DISTINCT a.id)::int AS activity_count,
          COUNT(DISTINCT q.id)::int AS quiz_count,
          COUNT(DISTINCT v.id)::int AS video_count
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        LEFT JOIN learning_materials m ON m.lesson_id = l.id
        LEFT JOIN activities a ON a.lesson_id = l.id
        LEFT JOIN quizzes q ON q.lesson_id = l.id
@@ -639,7 +639,7 @@ async function listLessons(req, res, next) {
          AND ($4::varchar IS NULL OR l.title ILIKE '%' || $4 || '%' OR l.description ILIKE '%' || $4 || '%')
        GROUP BY l.id, l.course_id, l.title, l.description, l.order_index, l.status,
                 l.difficulty_level, l.estimated_duration_minutes, l.created_at, l.updated_at,
-                c.title, c.thumbnail_url, ag.name
+                c.title, c.thumbnail_url, gl.name
        ORDER BY c.title ASC, l.order_index ASC, l.id ASC`,
       [instructorId, course_id ? parseInt(course_id) : null, status || null, search ? search.trim() : null]
     );
@@ -672,11 +672,11 @@ async function listMaterials(req, res, next) {
          l.title AS lesson_title,
          c.id AS course_id,
          c.title AS course_title,
-         ag.name AS age_group_name
+         gl.name AS grade_level_name
        FROM learning_materials m
        JOIN lessons l ON l.id = m.lesson_id
        JOIN courses c ON c.id = l.course_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        WHERE c.id IN (
          SELECT course_id FROM instructor_assignments
          WHERE instructor_id = $1 AND status = 'active'
@@ -724,14 +724,14 @@ async function listActivities(req, res, next) {
          l.title AS lesson_title,
          c.id AS course_id,
          c.title AS course_title,
-         ag.name AS age_group_name,
+         gl.name AS grade_level_name,
          COUNT(DISTINCT sub.id)::int AS submission_count,
          COUNT(DISTINCT sub.id) FILTER (WHERE sub.status = 'pending')::int AS pending_submissions,
          COALESCE(AVG(sub.percentage) FILTER (WHERE sub.status IN ('reviewed', 'graded')), 0)::numeric(5,1) AS avg_score
        FROM activities a
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        LEFT JOIN activity_submissions sub ON sub.activity_id = a.id
        WHERE c.id IN (
          SELECT course_id FROM instructor_assignments
@@ -743,7 +743,7 @@ async function listActivities(req, res, next) {
          AND ($5::varchar IS NULL OR a.title ILIKE '%' || $5 || '%' OR a.instructions ILIKE '%' || $5 || '%')
        GROUP BY a.id, a.lesson_id, a.title, a.instructions, a.activity_type, a.max_score,
                 a.display_order, a.status, a.difficulty, a.created_at, a.activity_config,
-                l.title, c.id, c.title, ag.name
+                l.title, c.id, c.title, gl.name
        ORDER BY a.created_at DESC`,
       [
         instructorId,
@@ -782,7 +782,7 @@ async function listQuizzes(req, res, next) {
          l.title AS lesson_title,
          c.id AS course_id,
          c.title AS course_title,
-         ag.name AS age_group_name,
+         gl.name AS grade_level_name,
          COUNT(DISTINCT qq.id)::int AS question_count,
          COUNT(DISTINCT qr.id)::int AS attempt_count,
          COUNT(DISTINCT qr.id) FILTER (WHERE qr.percentage >= COALESCE(q.passing_score, 70))::int AS passed_count,
@@ -790,7 +790,7 @@ async function listQuizzes(req, res, next) {
        FROM quizzes q
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        LEFT JOIN quiz_questions qq ON qq.quiz_id = q.id
        LEFT JOIN quiz_results qr ON qr.quiz_id = q.id
        WHERE c.id IN (
@@ -802,7 +802,7 @@ async function listQuizzes(req, res, next) {
          AND ($4::varchar IS NULL OR q.title ILIKE '%' || $4 || '%' OR q.description ILIKE '%' || $4 || '%')
        GROUP BY q.id, q.lesson_id, q.title, q.description, q.instructions, q.passing_score,
                 q.max_score, q.status, q.time_limit_seconds, q.created_at,
-                l.title, c.id, c.title, ag.name
+                l.title, c.id, c.title, gl.name
        ORDER BY q.created_at DESC`,
       [
         instructorId,
@@ -832,7 +832,7 @@ async function getStudentProgress(req, res, next) {
          s.gender,
          s.grade,
          s.section,
-         ag.name AS age_group_name,
+         gl.name AS grade_level_name,
          c.id AS course_id,
          c.title AS course_title,
          COALESCE(p.status, 'not_started') AS progress_status,
@@ -843,13 +843,13 @@ async function getStudentProgress(req, res, next) {
          COALESCE(AVG(qr.percentage), 0)::numeric(5,1) AS avg_quiz_score,
          COALESCE(AVG(sub.percentage) FILTER (WHERE sub.status IN ('reviewed', 'graded')), 0)::numeric(5,1) AS avg_activity_score
        FROM (
-         SELECT DISTINCT ia.course_id, ia.age_group_id
+         SELECT DISTINCT ia.course_id, ia.grade_level_id
          FROM instructor_assignments ia
          WHERE ia.instructor_id = $1 AND ia.status = 'active'
        ) my_courses
        JOIN courses c ON c.id = my_courses.course_id
-       JOIN age_groups ag ON ag.id = my_courses.age_group_id
-       JOIN students s ON s.age_group_id = my_courses.age_group_id AND s.is_active = TRUE
+       JOIN grade_levels gl ON gl.id = my_courses.grade_level_id
+       JOIN students s ON s.grade_level_id = my_courses.grade_level_id AND s.is_active = TRUE
        LEFT JOIN progress p ON p.student_id = s.id AND p.course_id = c.id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN activities a ON a.lesson_id = l.id
@@ -860,7 +860,7 @@ async function getStudentProgress(req, res, next) {
          AND ($3::varchar IS NULL OR s.grade = $3)
          AND ($4::varchar IS NULL OR s.section = $4)
          AND ($5::varchar IS NULL OR s.full_name ILIKE '%' || $5 || '%')
-       GROUP BY s.id, s.full_name, s.gender, s.grade, s.section, ag.name, c.id, c.title,
+       GROUP BY s.id, s.full_name, s.gender, s.grade, s.section, gl.name, c.id, c.title,
                 p.status, p.completion_percentage, p.last_accessed_at
        ORDER BY c.title ASC, s.full_name ASC`,
       [

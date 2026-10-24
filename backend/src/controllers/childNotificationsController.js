@@ -6,12 +6,12 @@ const { query } = require('../config/db');
 async function resolveChild(req) {
   if (req.user.role === 'student') {
     const res = await query(
-      `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
+      `SELECT s.*, gl.name as grade_level_name, gl.min_age, gl.max_age,
               u.email, u.full_name as user_full_name,
               p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
               COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 10)::int as age
        FROM students s
-       JOIN age_groups ag ON ag.id = s.age_group_id
+       JOIN grade_levels gl ON gl.id = s.grade_level_id
        JOIN users u ON u.id = s.user_id
        LEFT JOIN parents p ON p.id = s.parent_id
        LEFT JOIN users pu ON pu.id = p.user_id
@@ -31,12 +31,12 @@ async function resolveChild(req) {
     let child = null;
     if (requestedChildId) {
       const res = await query(
-        `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.min_age, gl.max_age,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
          FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
          LEFT JOIN parents p ON p.id = s.parent_id
          LEFT JOIN users pu ON pu.id = p.user_id
          WHERE s.id = $1 AND s.parent_id = $2 AND s.is_active = TRUE`,
@@ -49,12 +49,12 @@ async function resolveChild(req) {
 
     if (!child) {
       const res = await query(
-        `SELECT s.*, ag.name as age_group_name, ag.min_age, ag.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.min_age, gl.max_age,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
          FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
          LEFT JOIN parents p ON p.id = s.parent_id
          LEFT JOIN users pu ON pu.id = p.user_id
          WHERE s.parent_id = $1 AND s.is_active = TRUE

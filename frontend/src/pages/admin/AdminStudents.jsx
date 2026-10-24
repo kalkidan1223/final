@@ -29,7 +29,7 @@ function ViewModal({ student, onClose }) {
             <div className="h-10 w-10 rounded-full bg-sky-100 flex items-center justify-center text-sky-700 font-bold text-lg">{student.full_name?.[0] || 'S'}</div>
             <div>
               <h3 className="font-semibold text-slate-800">{student.full_name}</h3>
-              <p className="text-xs text-slate-500">{student.age_group_name}</p>
+              <p className="text-xs text-slate-500">{student.grade_level_name}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
@@ -42,7 +42,7 @@ function ViewModal({ student, onClose }) {
                 ['Full Name', student.full_name],
                 ['Date of Birth', student.date_of_birth ? new Date(student.date_of_birth).toLocaleDateString() : '—'],
                 ['Gender', student.gender || '—'],
-                ['Age Group', student.age_group_name],
+                ['Grade Level', student.grade_level_name],
                 ['Grade', student.grade || '—'],
                 ['Section', student.section || '—'],
                 ['Account Type', <AccountTypeBadge key="at" hasLogin={!!student.user_id} />],
@@ -201,7 +201,7 @@ export default function AdminStudents() {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>{['', 'Student', 'Age Group', 'Grade / Section', 'Account Type', 'Parent', 'Status', 'Actions'].map(h => (
+                <tr>{['', 'Student', 'Grade Level', 'Grade / Section', 'Account Type', 'Parent', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}</tr>
               </thead>
@@ -219,7 +219,7 @@ export default function AdminStudents() {
                       <p className="text-sm font-medium text-slate-800">{s.full_name}</p>
                       <p className="text-xs text-slate-400">{s.date_of_birth ? new Date(s.date_of_birth).toLocaleDateString() : ''}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{s.age_group_name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{s.grade_level_name}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{s.grade || '—'} {s.section ? `· ${s.section}` : ''}</td>
                     <td className="px-4 py-3"><AccountTypeBadge hasLogin={!!s.user_id} /></td>
                     <td className="px-4 py-3 text-sm text-slate-600">{s.parent_name || '—'}</td>

@@ -30,8 +30,8 @@ async function canReadCourse(user, course) {
 
   if (user.role === 'student') {
     const result = await query(
-      'SELECT 1 FROM students WHERE user_id = $1 AND age_group_id = $2 AND is_active = TRUE',
-      [user.id, course.age_group_id]
+      'SELECT 1 FROM students WHERE user_id = $1 AND grade_level_id = $2 AND is_active = TRUE',
+      [user.id, course.grade_level_id]
     );
     return result.rows.length > 0;
   }
@@ -40,8 +40,8 @@ async function canReadCourse(user, course) {
     const result = await query(
       `SELECT 1 FROM students s
        JOIN parents p ON p.id = s.parent_id
-       WHERE p.user_id = $1 AND s.age_group_id = $2 AND s.is_active = TRUE`,
-      [user.id, course.age_group_id]
+       WHERE p.user_id = $1 AND s.grade_level_id = $2 AND s.is_active = TRUE`,
+      [user.id, course.grade_level_id]
     );
     return result.rows.length > 0;
   }

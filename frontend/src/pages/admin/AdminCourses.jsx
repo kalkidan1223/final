@@ -28,7 +28,7 @@ function ViewModal({ course, onClose }) {
               ['Title', course.title],
               ['Status', <StatusBadge key="s" status={course.status} />],
               ['Instructor', course.instructor_name],
-              ['Age Group', course.age_group_name],
+              ['Grade Level', course.grade_level_name],
               ['Created', new Date(course.created_at).toLocaleDateString()],
               ['Updated', new Date(course.updated_at).toLocaleDateString()],
             ].map(([label, val]) => (
@@ -66,18 +66,18 @@ export default function AdminCourses() {
   const [success, setSuccess] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [ageFilter, setAgeFilter] = useState('');
-  const [ageGroups, setAgeGroups] = useState([]);
+  const [gradeFilter, setGradeFilter] = useState('');
+  const [gradeLevels, setGradeLevels] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [viewCourse, setViewCourse] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const debounce = useRef(null);
 
-  const loadAgeGroups = useCallback(async () => {
+  const loadGradeLevels = useCallback(async () => {
     try {
-      const { data } = await axiosClient.get('/admin/age-groups');
-      setAgeGroups(data.age_groups || []);
+      const { data } = await axiosClient.get('/grades');
+      setGradeLevels(data.grade_levels || []);
     } catch { /* silent */ }
   }, []);
 
@@ -87,13 +87,13 @@ export default function AdminCourses() {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
-      if (ageFilter) params.set('age_group_id', ageFilter);
+      if (gradeFilter) params.set('grade_level_id', gradeFilter);
       params.set('limit', '300');
       const { data } = await axiosClient.get(`/admin/courses?${params}`);
       let all = data.courses || [];
       if (search) {
         const q = search.toLowerCase();
-        all = all.filter(c => c.title?.toLowerCase().includes(q) || c.instructor_name?.toLowerCase().includes(q) || c.age_group_name?.toLowerCase().includes(q));
+        all = all.filter(c => c.title?.toLowerCase().includes(q) || c.instructor_name?.toLowerCase().includes(q) || c.grade_level_name?.toLowerCase().includes(q));
       }
       setTotal(all.length);
       setCourses(all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
@@ -103,15 +103,15 @@ export default function AdminCourses() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [statusFilter, ageFilter, search, page]);
+  }, [statusFilter, gradeFilter, search, page]);
 
-  useEffect(() => { loadAgeGroups(); }, [loadAgeGroups]);
+  useEffect(() => { loadGradeLevels(); }, [loadGradeLevels]);
 
   useEffect(() => {
     clearTimeout(debounce.current);
     debounce.current = setTimeout(() => { setPage(1); loadCourses(); }, 350);
     return () => clearTimeout(debounce.current);
-  }, [search, statusFilter, ageFilter]);
+  }, [search, statusFilter, gradeFilter]);
 
   useEffect(() => { loadCourses(); }, [page]);
 
@@ -160,7 +160,7 @@ export default function AdminCourses() {
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
           <div className="relative">
             <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" placeholder="Search by title, instructor, age group…" value={search} onChange={e => setSearch(e.target.value)}
+            <input type="text" placeholder="Search by title, instructor, grade level…" value={search} onChange={e => setSearch(e.target.value)}
               className="w-full rounded-xl border border-slate-200 pl-9 pr-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -171,12 +171,12 @@ export default function AdminCourses() {
                 {o.l}
               </button>
             ))}
-            {ageGroups.length > 0 && (
+            {gradeLevels.length > 0 && (
               <>
-                <span className="text-xs text-slate-400 self-center ml-3 mr-1">Age Group:</span>
-                <select value={ageFilter} onChange={e => { setAgeFilter(e.target.value); setPage(1); }} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm bg-white focus:border-indigo-400 focus:outline-none">
-                  <option value="">All Ages</option>
-                  {ageGroups.map(ag => <option key={ag.id} value={ag.id}>{ag.name}</option>)}
+                <span className="text-xs text-slate-400 self-center ml-3 mr-1">Grade Level:</span>
+                <select value={gradeFilter} onChange={e => { setGradeFilter(e.target.value); setPage(1); }} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm bg-white focus:border-indigo-400 focus:outline-none">
+                  <option value="">All Grades</option>
+                  {gradeLevels.map(gl => <option key={gl.id} value={gl.id}>{gl.name}</option>)}
                 </select>
               </>
             )}
@@ -189,7 +189,7 @@ export default function AdminCourses() {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>{['Title', 'Instructor', 'Age Group', 'Status', 'Created', 'Actions'].map(h => (
+                <tr>{['Title', 'Instructor', 'Grade Level', 'Status', 'Created', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}</tr>
               </thead>
@@ -204,7 +204,7 @@ export default function AdminCourses() {
                       <p className="text-sm font-medium text-slate-800 max-w-[200px] truncate">{c.title}</p>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600">{c.instructor_name}</td>
-                    <td className="px-4 py-3 text-sm text-slate-500">{c.age_group_name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-500">{c.grade_level_name}</td>
                     <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                     <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{new Date(c.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">

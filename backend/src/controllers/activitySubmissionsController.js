@@ -22,7 +22,7 @@ async function createSubmission(req, res, next) {
     const { id: activityId } = req.params;
     const activity = await loadActivityWithContext(activityId);
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
-    if (!(await canReadCourse(req.user, { ...activity, age_group_id: activity.course_age_group_id }))) {
+    if (!(await canReadCourse(req.user, { ...activity, grade_level_id: activity.course_grade_level_id }))) {
       return res.status(404).json({ error: 'Activity not found' });
     }
 
@@ -45,8 +45,8 @@ async function createSubmission(req, res, next) {
       }
       const parentId = await getParentIdForUser(req.user.id);
       const ownsChild = await query(
-        'SELECT 1 FROM students WHERE id = $1 AND parent_id = $2 AND age_group_id = $3 AND is_active = TRUE',
-        [student_id, parentId, activity.course_age_group_id]
+        'SELECT 1 FROM students WHERE id = $1 AND parent_id = $2 AND grade_level_id = $3 AND is_active = TRUE',
+        [student_id, parentId, activity.course_grade_level_id]
       );
       if (ownsChild.rows.length === 0) {
         return res.status(403).json({ error: 'This student is not linked to your account' });
@@ -58,8 +58,8 @@ async function createSubmission(req, res, next) {
     }
 
     const eligibleStudent = await query(
-      'SELECT 1 FROM students WHERE id = $1 AND age_group_id = $2 AND is_active = TRUE',
-      [studentId, activity.course_age_group_id]
+      'SELECT 1 FROM students WHERE id = $1 AND grade_level_id = $2 AND is_active = TRUE',
+      [studentId, activity.course_grade_level_id]
     );
     if (eligibleStudent.rows.length === 0) {
       return res.status(403).json({ error: 'This activity is not available for this student' });
@@ -88,7 +88,7 @@ async function listSubmissionsForActivity(req, res, next) {
     const { id: activityId } = req.params;
     const activity = await loadActivityWithContext(activityId);
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
-    if (!(await canReadCourse(req.user, { ...activity, age_group_id: activity.course_age_group_id }))) {
+    if (!(await canReadCourse(req.user, { ...activity, grade_level_id: activity.course_grade_level_id }))) {
       return res.status(404).json({ error: 'Activity not found' });
     }
 

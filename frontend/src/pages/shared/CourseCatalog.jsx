@@ -27,7 +27,7 @@ export default function CourseCatalog() {
                 <Link to={`/courses/${c.id}`} className="flex items-center justify-between rounded-2xl bg-white p-5 shadow-sm hover:shadow-md">
                   <div>
                     <p className="font-medium text-slate-800">{c.title}</p>
-                    <p className="text-sm text-slate-500">{c.age_group_name} · by {c.instructor_name}</p>
+                    <p className="text-sm text-slate-500">{c.grade_level_name} · by {c.instructor_name}</p>
                   </div>
                   <span className="text-sky-600">Open →</span>
                 </Link>

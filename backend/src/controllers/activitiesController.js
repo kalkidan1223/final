@@ -38,7 +38,7 @@ async function loadActivityWithContext(activityId) {
             c.instructor_id AS owner_instructor_id,
             c.instructor_id AS instructor_id,
             c.status AS course_status,
-            c.age_group_id AS course_age_group_id
+            c.grade_level_id AS course_grade_level_id
      FROM activities a
      JOIN lessons l ON l.id = a.lesson_id
      JOIN courses c ON c.id = l.course_id
@@ -72,7 +72,7 @@ async function createActivity(req, res, next) {
     if (!ok) return;
 
     const {
-      title, activity_type, instructions, age_group_id,
+      title, activity_type, instructions, grade_level_id,
       resource_url, max_score, requires_upload, auto_gradable,
       difficulty, estimated_time_minutes, start_date, due_date,
       display_order, allow_resubmission, activity_config, status,
@@ -90,24 +90,24 @@ async function createActivity(req, res, next) {
       return res.status(400).json({ error: `status must be one of ${VALID_ACTIVITY_STATUSES.join(', ')}` });
     }
 
-    // The activity inherits its course/lesson age group automatically —
+    // The activity inherits its course/lesson grade level automatically —
     // the instructor never has to pick it again.
-    const lessonAgeGroup = await query(
-      `SELECT c.age_group_id FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = $1`,
+    const lessonGradeLevel = await query(
+      `SELECT c.grade_level_id FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = $1`,
       [lessonId]
     );
-    if (!lessonAgeGroup.rows[0]?.age_group_id) {
-      return res.status(400).json({ error: 'Lesson is not linked to an age group' });
+    if (!lessonGradeLevel.rows[0]?.grade_level_id) {
+      return res.status(400).json({ error: 'Lesson is not linked to a grade level' });
     }
-    const resolvedAgeGroupId = String(lessonAgeGroup.rows[0].age_group_id);
-    if (age_group_id && String(age_group_id) !== resolvedAgeGroupId) {
-      return res.status(400).json({ error: 'Activity age group must match the course age group' });
+    const resolvedGradeLevelId = String(lessonGradeLevel.rows[0].grade_level_id);
+    if (grade_level_id && String(grade_level_id) !== resolvedGradeLevelId) {
+      return res.status(400).json({ error: 'Activity grade level must match the course grade level' });
     }
 
     const instructorId = await getInstructorIdForUser(req.user.id);
     const result = await query(
       `INSERT INTO activities
-         (lesson_id, instructor_id, age_group_id, title, activity_type, instructions,
+         (lesson_id, instructor_id, grade_level_id, title, activity_type, instructions,
           resource_url, max_score, requires_upload, auto_gradable,
           difficulty, estimated_time_minutes, start_date, due_date,
           display_order, allow_resubmission, activity_config, status)
@@ -116,7 +116,7 @@ async function createActivity(req, res, next) {
       [
         lessonId,
         req.user.role === 'admin' ? (await getLessonOwnerInstructorId(lessonId)) : instructorId,
-        resolvedAgeGroupId,
+        resolvedGradeLevelId,
         title,
         activity_type,
         instructions,
@@ -171,7 +171,7 @@ async function getActivity(req, res, next) {
   try {
     const activity = await loadActivityWithContext(req.params.id);
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
-    if (!(await canReadCourse(req.user, { ...activity, age_group_id: activity.course_age_group_id }))) {
+    if (!(await canReadCourse(req.user, { ...activity, grade_level_id: activity.course_grade_level_id }))) {
       return res.status(404).json({ error: 'Activity not found' });
     }
     delete activity.owner_instructor_id;

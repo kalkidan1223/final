@@ -40,13 +40,13 @@ async function listLessons(req, res, next) {
          c.title  AS course_title,
          c.status AS course_status,
          u.full_name AS instructor_name,
-         ag.name  AS age_group_name,
+         ag.name  AS grade_level_name,
          (c.status = 'published') AS is_published
        FROM lessons l
        JOIN courses c  ON c.id = l.course_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u    ON u.id = i.user_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
        ${where}
        ORDER BY c.title, l.order_index
        LIMIT $${params.length + 1}`,
@@ -121,13 +121,13 @@ async function listProgress(req, res, next) {
          s.full_name  AS student_name,
          c.title      AS course_title,
          l.title      AS lesson_title,
-         ag.name      AS age_group_name,
+         ag.name      AS grade_level_name,
          pu.full_name AS parent_name
        FROM progress p
        JOIN students s ON s.id = p.student_id
        JOIN courses  c ON c.id = p.course_id
        LEFT JOIN lessons l ON l.id = p.lesson_id
-       JOIN age_groups ag ON ag.id = s.age_group_id
+       JOIN grade_levels ag ON ag.id = s.grade_level_id
        JOIN parents pa ON pa.id = s.parent_id
        JOIN users pu   ON pu.id = pa.user_id
        ${where}
@@ -441,14 +441,14 @@ async function generateReport(req, res, next) {
       }
       case 'course_summary': {
         const r = await query(
-          `SELECT c.id, c.title, c.status, ag.name AS age_group,
+          `SELECT c.id, c.title, c.status, ag.name AS grade_level,
                   u.full_name AS instructor,
                   COUNT(DISTINCT l.id)::int AS lesson_count,
                   COUNT(DISTINCT p.student_id)::int AS enrolled_students
            FROM courses c
            JOIN instructors i ON i.id = c.instructor_id
            JOIN users u ON u.id = i.user_id
-           JOIN age_groups ag ON ag.id = c.age_group_id
+           JOIN grade_levels ag ON ag.id = c.grade_level_id
            LEFT JOIN lessons l ON l.course_id = c.id
            LEFT JOIN progress p ON p.course_id = c.id
            GROUP BY c.id, c.title, c.status, ag.name, u.full_name

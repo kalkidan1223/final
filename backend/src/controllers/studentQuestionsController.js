@@ -34,11 +34,11 @@ const MAX_ANSWER_LENGTH = 2000;
 async function resolveChild(req) {
   if (req.user.role === 'student') {
     const res = await query(
-      `SELECT s.*, ag.name AS age_group_name, ag.min_age, ag.max_age,
+      `SELECT s.*, gl.name AS grade_level_name, gl.min_age, gl.max_age,
               u.email, u.full_name AS user_full_name,
               COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 10)::int AS age
        FROM students s
-       JOIN age_groups ag ON ag.id = s.age_group_id
+       JOIN grade_levels gl ON gl.id = s.grade_level_id
        JOIN users u ON u.id = s.user_id
        WHERE s.user_id = $1 AND s.is_active = TRUE`,
       [req.user.id]
@@ -56,11 +56,11 @@ async function resolveChild(req) {
     let child = null;
     if (requestedChildId) {
       const res = await query(
-        `SELECT s.*, ag.name AS age_group_name, ag.min_age, ag.max_age,
+        `SELECT s.*, gl.name AS grade_level_name, gl.min_age, gl.max_age,
                 s.full_name AS user_full_name,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int AS age
          FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
          WHERE s.id = $1 AND s.parent_id = $2 AND s.is_active = TRUE`,
         [requestedChildId, parentId]
       );
@@ -69,11 +69,11 @@ async function resolveChild(req) {
 
     if (!child) {
       const res = await query(
-        `SELECT s.*, ag.name AS age_group_name,
+        `SELECT s.*, gl.name AS grade_level_name,
                 s.full_name AS user_full_name,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int AS age
          FROM students s
-         JOIN age_groups ag ON ag.id = s.age_group_id
+         JOIN grade_levels gl ON gl.id = s.grade_level_id
          WHERE s.parent_id = $1 AND s.is_active = TRUE
          ORDER BY s.created_at ASC
          LIMIT 1`,
@@ -143,7 +143,7 @@ async function resolveQuestionContext(child, { course_id, lesson_id, resource_ty
   if (lesson_id) {
     const r = await query(
       `SELECT l.id AS lesson_id, l.title AS lesson_title,
-              c.id AS course_id, c.title AS course_title, c.age_group_id,
+              c.id AS course_id, c.title AS course_title, c.grade_level_id,
               c.status, c.instructor_id
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
@@ -157,7 +157,7 @@ async function resolveQuestionContext(child, { course_id, lesson_id, resource_ty
     courseRow = r.rows[0];
   } else if (course_id) {
     const r = await query(
-      `SELECT c.id AS course_id, c.title AS course_title, c.age_group_id,
+      `SELECT c.id AS course_id, c.title AS course_title, c.grade_level_id,
               c.status, c.instructor_id
        FROM courses c
        WHERE c.id = $1`,
@@ -171,7 +171,7 @@ async function resolveQuestionContext(child, { course_id, lesson_id, resource_ty
     throw Object.assign(new Error('Please choose a course or lesson to ask about'), { statusCode: 400 });
   }
 
-  if (Number(courseRow.age_group_id) !== Number(child.age_group_id)) {
+  if (Number(courseRow.grade_level_id) !== Number(child.grade_level_id)) {
     throw Object.assign(new Error('That course is not part of your learning group'), { statusCode: 403 });
   }
   if (courseRow.status && courseRow.status !== 'published') {

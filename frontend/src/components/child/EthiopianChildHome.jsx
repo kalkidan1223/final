@@ -490,6 +490,11 @@ function PrimaryLessonCard({ lesson, onSpeak }) {
           <span className="text-3xl">🚀</span>
         </Link>
       </div>
+      <div className="mt-4 text-center">
+        <Link to="/child/results" className="inline-flex items-center gap-2 text-purple-700 hover:text-purple-800 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-md border-2 border-purple-100 transition hover:scale-105">
+          <span>🏆</span> My Results
+        </Link>
+      </div>
     </div>
   );
 }

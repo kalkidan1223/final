@@ -10,13 +10,13 @@ async function listInstructorAssignments(req, res, next) {
       `SELECT ia.id, ia.status, ia.grade, ia.section, ia.created_at,
               u.full_name AS instructor_name, u.email AS instructor_email,
               c.title AS course_title,
-              ag.name AS age_group_name,
+              ag.name AS grade_level_name,
               ay.label AS academic_year
        FROM instructor_assignments ia
        JOIN instructors i ON i.id = ia.instructor_id
        JOIN users u ON u.id = i.user_id
        JOIN courses c ON c.id = ia.course_id
-       JOIN age_groups ag ON ag.id = ia.age_group_id
+       JOIN grade_levels ag ON ag.id = ia.grade_level_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        ORDER BY ia.created_at DESC`
     );
@@ -28,17 +28,17 @@ async function listInstructorAssignments(req, res, next) {
 
 async function createInstructorAssignment(req, res, next) {
   try {
-    const { instructor_id, course_id, age_group_id, grade, section, academic_year_id, status } = req.body;
-    if (!instructor_id || !course_id || !age_group_id) {
-      return res.status(400).json({ error: 'instructor_id, course_id, and age_group_id are required' });
+    const { instructor_id, course_id, grade_level_id, grade, section, academic_year_id, status } = req.body;
+    if (!instructor_id || !course_id || !grade_level_id) {
+      return res.status(400).json({ error: 'instructor_id, course_id, and grade_level_id are required' });
     }
 
     const { rows } = await query(
       `INSERT INTO instructor_assignments
-         (instructor_id, course_id, age_group_id, grade, section, academic_year_id, status, assigned_by)
+         (instructor_id, course_id, grade_level_id, grade, section, academic_year_id, status, assigned_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [instructor_id, course_id, age_group_id, grade || null, section || null,
+      [instructor_id, course_id, grade_level_id, grade || null, section || null,
        academic_year_id || null, status || 'active', req.user.id]
     );
 

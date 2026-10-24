@@ -25,7 +25,7 @@ async function loadQuizWithOwner(quizId) {
             c.instructor_id AS owner_instructor_id,
             c.instructor_id AS instructor_id,
             c.status AS course_status,
-            c.age_group_id,
+            c.grade_level_id,
             l.course_id
      FROM quizzes q
      JOIN lessons l ON l.id = q.lesson_id

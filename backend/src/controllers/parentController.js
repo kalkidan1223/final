@@ -18,7 +18,7 @@ const bcrypt = require('bcrypt');
 async function verifyParentChild(userId, childId) {
   try {
     const result = await query(
-      `SELECT s.id, s.parent_id, s.user_id, s.age_group_id, s.full_name
+      `SELECT s.id, s.parent_id, s.user_id, s.grade_level_id, s.full_name
        FROM students s
        JOIN parents p ON p.id = s.parent_id
        WHERE s.id = $1 AND p.user_id = $2`,
@@ -208,7 +208,7 @@ async function getChildren(req, res, next) {
 
     const [approvedResult, pendingResult] = await Promise.all([
       query(
-        `SELECT 
+        `SELECT
           s.*,
           s.id::text as id,
           s.profile_image_url as profile_picture,
@@ -216,18 +216,18 @@ async function getChildren(req, res, next) {
           s.section as section_name,
           u.email as student_email,
           u.is_active as student_is_active,
-          ag.name as age_group_name,
-          ag.min_age, ag.max_age, ag.requires_account,
+          gl.name as grade_level_name,
+          gl.min_age, gl.max_age, gl.requires_account,
           'approved' as account_status,
           NULL as account_rejection_reason,
           (
             SELECT COUNT(DISTINCT c.id)::int
             FROM courses c
-            WHERE c.age_group_id = s.age_group_id AND c.status = 'published'
+            WHERE c.grade_level_id = s.grade_level_id AND c.status = 'published'
           ) as total_assigned_courses,
           (
-            SELECT COUNT(*)::int 
-            FROM progress pr 
+            SELECT COUNT(*)::int
+            FROM progress pr
             WHERE pr.student_id = s.id AND pr.status = 'completed' AND pr.lesson_id IS NOT NULL
           ) as completed_lessons,
           (
@@ -259,7 +259,7 @@ async function getChildren(req, res, next) {
           FALSE as is_pending_request
          FROM students s
          LEFT JOIN users u ON u.id = s.user_id
-         LEFT JOIN age_groups ag ON ag.id = s.age_group_id
+         LEFT JOIN grade_levels gl ON gl.id = s.grade_level_id
          WHERE s.parent_id = $1
          ORDER BY s.date_of_birth DESC`,
         [parentId]
@@ -278,7 +278,7 @@ async function getChildren(req, res, next) {
           sr.student_email,
           (CASE WHEN sr.student_email IS NOT NULL THEN 'pending_account' ELSE NULL END) as user_id,
           FALSE as student_is_active,
-          (CASE WHEN sr.age BETWEEN 5 AND 7 THEN '5-7' WHEN sr.age BETWEEN 8 AND 9 THEN '8-9' ELSE '10-12' END) as age_group_name,
+          (CASE WHEN sr.age BETWEEN 5 AND 7 THEN '5-7' WHEN sr.age BETWEEN 8 AND 9 THEN '8-9' ELSE '10-12' END) as grade_level_name,
           sr.status as account_status,
           sr.rejection_reason as account_rejection_reason,
           0 as total_assigned_courses,
@@ -322,7 +322,7 @@ async function getChildById(req, res, next) {
     const parentId = parentResult.rows[0].id;
 
     const result = await query(
-      `SELECT 
+      `SELECT
         s.*,
         s.profile_image_url as profile_picture,
         s.grade as grade_name,
@@ -330,8 +330,8 @@ async function getChildById(req, res, next) {
         u.email as student_email,
         u.full_name as student_full_name,
         u.is_active as student_is_active,
-        ag.name as age_group_name,
-        ag.min_age, ag.max_age, ag.requires_account,
+        gl.name as grade_level_name,
+        gl.min_age, gl.max_age, gl.requires_account,
         CASE
           WHEN s.user_id IS NULL THEN 'active'
           WHEN u.is_active = TRUE THEN 'approved'
@@ -349,7 +349,7 @@ async function getChildById(req, res, next) {
         srr.reviewed_at
        FROM students s
        LEFT JOIN users u ON u.id = s.user_id
-       LEFT JOIN age_groups ag ON ag.id = s.age_group_id
+       LEFT JOIN grade_levels gl ON gl.id = s.grade_level_id
        LEFT JOIN student_registration_requests srr ON srr.student_email = u.email
        WHERE s.id = $1 AND s.parent_id = $2`,
       [id, parentId]
@@ -388,8 +388,8 @@ async function getChildById(req, res, next) {
         [id]
       ),
       query(
-        `SELECT COUNT(*)::int as count FROM courses WHERE age_group_id = $1 AND status = 'published'`,
-        [child.age_group_id]
+        `SELECT COUNT(*)::int as count FROM courses WHERE grade_level_id = $1 AND status = 'published'`,
+        [child.grade_level_id]
       ),
     ]);
 
@@ -456,13 +456,17 @@ async function registerChild(req, res, next) {
     const {
       first_name, middle_name, last_name, gender, date_of_birth,
       profile_picture, preferred_language, blood_group,
-      grade, section, admission_number, academic_year,
+      grade_level_id, section, admission_number, academic_year,
       previous_school, medical_condition, learning_disability,
       student_email, password,
     } = req.body;
 
     if (!first_name || !date_of_birth) {
       return res.status(400).json({ error: 'First name and date of birth are required' });
+    }
+
+    if (!grade_level_id) {
+      return res.status(400).json({ error: 'Grade level is required' });
     }
 
     const parentResult = await query(
@@ -475,6 +479,18 @@ async function registerChild(req, res, next) {
     }
 
     const parentId = parentResult.rows[0].id;
+
+    // Verify grade level exists and is active
+    const gradeResult = await query(
+      `SELECT * FROM grade_levels WHERE id = $1 AND is_active = TRUE`,
+      [grade_level_id]
+    );
+
+    if (gradeResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid grade level selected' });
+    }
+
+    const gradeLevel = gradeResult.rows[0];
 
     // Calculate age from Date of Birth
     const birthDate = new Date(date_of_birth);
@@ -489,15 +505,15 @@ async function registerChild(req, res, next) {
       age--;
     }
 
-    // Validate age range (5-12)
-    if (age < 5) {
+    // Validate age against grade level (optional but helpful)
+    if (gradeLevel.min_age && age < gradeLevel.min_age) {
       return res.status(400).json({
-        error: 'Children below 5 years old are outside the current learning hub program.',
+        error: `Child's age (${age}) is below the minimum age for ${gradeLevel.name} (${gradeLevel.min_age})`,
       });
     }
-    if (age > 12) {
+    if (gradeLevel.max_age && age > gradeLevel.max_age) {
       return res.status(400).json({
-        error: 'The Children Learning Hub currently supports children aged 5 to 12.',
+        error: `Child's age (${age}) is above the maximum age for ${gradeLevel.name} (${gradeLevel.max_age})`,
       });
     }
 
@@ -506,11 +522,12 @@ async function registerChild(req, res, next) {
     let cleanEmail = null;
     let hashedPassword = null;
 
-    // Credentials required for Ages 10-12
-    if (age >= 10) {
+    // Credentials required for Grades 5-6 (ages 10-12)
+    // Category 2 students (with user accounts)
+    if (gradeLevel.code === 'GRADE_5' || gradeLevel.code === 'GRADE_6' || age >= 10) {
       if (!student_email || !password) {
         return res.status(400).json({
-          error: 'Children aged 10–12 require a student email and login password.',
+          error: 'Children in Grades 5-6 (ages 10-12) require a student email and login password.',
         });
       }
 
@@ -564,8 +581,7 @@ async function registerChild(req, res, next) {
         const updateRes = await query(
           `UPDATE student_registration_requests SET
             gender = $1,
-            grade = $2,
-            current_grade = $2,
+            grade_level_id = $2,
             section = $3,
             preferred_language = $4,
             student_photo_url = $5,
@@ -586,7 +602,7 @@ async function registerChild(req, res, next) {
            RETURNING id`,
           [
             gender || 'other',
-            grade || null,
+            grade_level_id,
             section || null,
             preferred_language || 'Amharic',
             profile_picture || null,
@@ -610,14 +626,14 @@ async function registerChild(req, res, next) {
       const insertRes = await query(
         `INSERT INTO student_registration_requests (
           parent_id, student_full_name, date_of_birth, gender,
-          grade, current_grade, section, preferred_language,
+          grade_level_id, section, preferred_language,
           student_photo_url, admission_number, previous_school, academic_year,
           blood_group, medical_condition, learning_disability,
           student_email, password_hash, username,
           age, status, submitted_at
         ) VALUES (
           $1, $2, $3, $4,
-          $5, $5, $6, $7,
+          $5, $6, $7,
           $8, $9, $10, $11,
           $12, $13, $14,
           $15, $16, $17,
@@ -625,7 +641,7 @@ async function registerChild(req, res, next) {
         ) RETURNING id`,
         [
           parentId, full_name, date_of_birth, gender || 'female',
-          grade || null, section || null, preferred_language || 'Amharic',
+          grade_level_id, section || null, preferred_language || 'Amharic',
           profile_picture || null, admission_number || null, previous_school || null, academic_year || '2026',
           blood_group || null, medical_condition || null, learning_disability || null,
           cleanEmail, hashedPassword, cleanEmail || full_name,
@@ -689,9 +705,9 @@ async function getChildCourses(req, res, next) {
     const child = verification.child;
 
     const result = await query(
-      `SELECT 
+      `SELECT
         c.*,
-        ag.name as age_group_name,
+        gl.name as grade_level_name,
         u.full_name as instructor_name,
         u.email as instructor_email,
         p.status as enrollment_status,
@@ -702,13 +718,13 @@ async function getChildCourses(req, res, next) {
         (SELECT COUNT(DISTINCT a.id)::int FROM activities a JOIN lessons l ON l.id = a.lesson_id WHERE l.course_id = c.id AND a.status = 'active') as total_activities,
         (SELECT COUNT(DISTINCT q.id)::int FROM quizzes q JOIN lessons l ON l.id = q.lesson_id WHERE l.course_id = c.id) as total_quizzes
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id IS NULL
-       WHERE c.status = 'published' AND c.age_group_id = $2
+       WHERE c.status = 'published' AND c.grade_level_id = $2
        ORDER BY p.last_accessed_at DESC NULLS LAST, c.created_at DESC`,
-      [id, child.age_group_id]
+      [id, child.grade_level_id]
     );
 
     res.json({ courses: result.rows });
@@ -1055,19 +1071,19 @@ async function getChildProgress(req, res, next) {
 
     // 1. Overall progress & summary stats
     const overallResult = await query(
-      `SELECT 
-        (SELECT COUNT(*)::int FROM courses WHERE age_group_id = $2 AND status = 'published') as total_courses,
+      `SELECT
+        (SELECT COUNT(*)::int FROM courses WHERE grade_level_id = $2 AND status = 'published') as total_courses,
         (SELECT COUNT(*)::int FROM progress WHERE student_id = $1 AND lesson_id IS NULL AND status = 'completed') as completed_courses,
         (SELECT COUNT(*)::int FROM progress WHERE student_id = $1 AND lesson_id IS NOT NULL AND status = 'completed') as completed_lessons,
         (SELECT COALESCE(ROUND(AVG(completion_percentage)), 0)::int FROM progress WHERE student_id = $1) as avg_completion`,
-      [id, child.age_group_id]
+      [id, child.grade_level_id]
     );
 
     // 2. Course-wise progress
     const courseProgress = await query(
-      `SELECT 
+      `SELECT
         c.id, c.title, c.description, c.thumbnail_url,
-        ag.name as age_group_name,
+        gl.name as grade_level_name,
         u.full_name as instructor_name,
         COALESCE(p.status, 'not_started') as status,
         COALESCE(p.completion_percentage, 0)::int as completion_percentage,
@@ -1075,13 +1091,13 @@ async function getChildProgress(req, res, next) {
         (SELECT COUNT(*)::int FROM lessons WHERE course_id = c.id) as total_lessons,
         (SELECT COUNT(*)::int FROM progress pr WHERE pr.student_id = $1 AND pr.course_id = c.id AND pr.lesson_id IS NOT NULL AND pr.status = 'completed') as completed_lessons
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels gl ON gl.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN progress p ON p.course_id = c.id AND p.student_id = $1 AND p.lesson_id IS NULL
-       WHERE c.age_group_id = $2 AND c.status = 'published'
+       WHERE c.grade_level_id = $2 AND c.status = 'published'
        ORDER BY p.last_accessed_at DESC NULLS LAST, c.created_at DESC`,
-      [id, child.age_group_id]
+      [id, child.grade_level_id]
     );
 
     // 3. Activity Performance
@@ -1394,20 +1410,20 @@ async function getDashboardStats(req, res, next) {
     // Children overview cards (approved students + pending registration requests)
     const [approvedSummary, pendingSummary] = await Promise.all([
       query(
-        `SELECT 
+        `SELECT
           s.id::text as id, s.full_name, s.profile_image_url as profile_picture, s.date_of_birth, s.user_id,
-          ag.name as age_group_name,
+          gl.name as grade_level_name,
           'approved' as account_status,
-          (SELECT COUNT(DISTINCT c.id)::int FROM courses c WHERE c.age_group_id = s.age_group_id AND c.status = 'published') as courses_count,
+          (SELECT COUNT(DISTINCT c.id)::int FROM courses c WHERE c.grade_level_id = s.grade_level_id AND c.status = 'published') as courses_count,
           (SELECT COUNT(*)::int FROM progress pr WHERE pr.student_id = s.id AND pr.status = 'completed' AND pr.lesson_id IS NOT NULL) as completed_lessons,
           COALESCE(ROUND(AVG(p.completion_percentage)), 0)::int as avg_progress,
           (SELECT MAX(last_accessed_at) FROM progress WHERE student_id = s.id) as last_activity
          FROM students s
          LEFT JOIN users u ON u.id = s.user_id
-         LEFT JOIN age_groups ag ON ag.id = s.age_group_id
+         LEFT JOIN grade_levels gl ON gl.id = s.grade_level_id
          LEFT JOIN progress p ON p.student_id = s.id
          WHERE s.parent_id = $1
-         GROUP BY s.id, s.full_name, s.profile_image_url, s.date_of_birth, s.user_id, ag.name, u.is_active
+         GROUP BY s.id, s.full_name, s.profile_image_url, s.date_of_birth, s.user_id, gl.name, u.is_active
          ORDER BY s.date_of_birth DESC`,
         [parentId]
       ),
@@ -1418,7 +1434,7 @@ async function getDashboardStats(req, res, next) {
           sr.student_photo_url as profile_picture,
           sr.date_of_birth,
           (CASE WHEN sr.student_email IS NOT NULL THEN 'pending_account' ELSE NULL END) as user_id,
-          (CASE WHEN sr.age BETWEEN 5 AND 7 THEN '5-7' WHEN sr.age BETWEEN 8 AND 9 THEN '8-9' ELSE '10-12' END) as age_group_name,
+          (CASE WHEN sr.age BETWEEN 5 AND 7 THEN '5-7' WHEN sr.age BETWEEN 8 AND 9 THEN '8-9' ELSE '10-12' END) as grade_level_name,
           sr.status as account_status,
           0 as courses_count,
           0 as completed_lessons,
@@ -1524,7 +1540,7 @@ async function getInstructorsForParent(req, res, next) {
         s.id as student_id,
         s.full_name as student_name
        FROM students s
-       JOIN courses c ON c.age_group_id = s.age_group_id AND c.status = 'published'
+       JOIN courses c ON c.grade_level_id = s.grade_level_id AND c.status = 'published'
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        WHERE s.parent_id = $1 AND s.is_active = TRUE

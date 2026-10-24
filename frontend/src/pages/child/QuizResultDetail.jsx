@@ -55,7 +55,9 @@ export default function QuizResultDetail() {
 
   if (!result) return null;
 
-  const answers = result.answers ? JSON.parse(result.answers) : {};
+  const answers = typeof result.answers === 'string'
+    ? (result.answers ? JSON.parse(result.answers) : {})
+    : (result.answers || {});
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -136,7 +138,21 @@ export default function QuizResultDetail() {
         <div className="space-y-4">
           {questions.map((q, idx) => {
             const userAnswer = answers[q.id];
-            const isCorrect = userAnswer === q.correct_answer;
+            const isMatching = q.question_type === 'matching';
+            let isCorrect = false;
+            let matchingPairs = [];
+            let picked = {};
+            if (isMatching) {
+              try { picked = userAnswer ? JSON.parse(userAnswer) : {}; } catch { picked = {}; }
+              const opts = q.options && Array.isArray(q.options.pairs) ? q.options.pairs : [];
+              matchingPairs = opts;
+              isCorrect = opts.length > 0 && opts.every((p, i) => {
+                const sel = picked[i] ?? picked[String(i)];
+                return sel !== undefined && sel !== null && sel !== '' && String(sel).trim().toLowerCase() === String(p.answer).trim().toLowerCase();
+              });
+            } else {
+              isCorrect = String(userAnswer ?? '').trim().toLowerCase() === String(q.correct_answer ?? '').trim().toLowerCase();
+            }
 
             return (
               <div
@@ -152,14 +168,30 @@ export default function QuizResultDetail() {
                   <div className="flex-1">
                     <p className="font-bold text-gray-800 mb-2">{q.question_text}</p>
                     <div className="flex items-center gap-4 text-sm">
-                      <div>
-                        <span className="font-bold text-gray-500">Your Answer:</span>
-                        <span className="ml-2 font-medium text-gray-800">{userAnswer || 'Not answered'}</span>
-                      </div>
-                      <div>
-                        <span className="font-bold text-gray-500">Correct Answer:</span>
-                        <span className="ml-2 font-medium text-gray-800">{q.correct_answer}</span>
-                      </div>
+                      {isMatching ? (
+                        <div className="space-y-1">
+                          {matchingPairs.map((p, i) => {
+                            const sel = picked[i] ?? picked[String(i)] ?? '';
+                            const ok = sel !== '' && String(sel).trim().toLowerCase() === String(p.answer).trim().toLowerCase();
+                            return (
+                              <div key={i} className={`text-sm ${ok ? 'text-green-700' : 'text-rose-700'}`}>
+                                {i + 1}. {p.question} → {sel || '—'} {ok ? '✓' : `(correct: ${p.answer})`}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <span className="font-bold text-gray-500">Your Answer:</span>
+                            <span className="ml-2 font-medium text-gray-800">{userAnswer || 'Not answered'}</span>
+                          </div>
+                          <div>
+                            <span className="font-bold text-gray-500">Correct Answer:</span>
+                            <span className="ml-2 font-medium text-gray-800">{q.correct_answer}</span>
+                          </div>
+                        </>
+                      )}
                       <div className={`ml-auto px-3 py-1 rounded-full text-xs font-bold ${
                         isCorrect ? 'bg-green-600 text-white' : 'bg-rose-600 text-white'
                       }`}>

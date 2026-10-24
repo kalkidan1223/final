@@ -13,6 +13,7 @@ function InstructorResults() {
   const [activitySubmissions, setActivitySubmissions] = useState([]);
   const [quizResults, setQuizResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filters, setFilters] = useState({
     status: '',
     course_id: '',
@@ -45,10 +46,12 @@ function InstructorResults() {
 
   async function fetchOverview() {
     try {
+      setError('');
       const res = await axiosClient.get('/instructor/results/overview');
       setOverview(res.data);
     } catch (err) {
       console.error('Failed to fetch overview:', err);
+      setError(err.response?.data?.error || 'Failed to load results & analytics');
     }
   }
 
@@ -157,7 +160,9 @@ function InstructorResults() {
     return (
       <InstructorLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="text-slate-500 font-medium">Loading results & analytics...</div>
+          <div className="text-slate-500 font-medium">
+            {error || 'Loading results & analytics...'}
+          </div>
         </div>
       </InstructorLayout>
     );

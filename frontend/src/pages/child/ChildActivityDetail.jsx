@@ -80,6 +80,9 @@ export default function ChildActivityDetail() {
         >
           <span className="text-xl">←</span> <span>Back</span>
         </button>
+        <Link to="/child/results" className="inline-flex items-center gap-2 text-purple-700 hover:text-purple-800 font-black text-sm bg-white px-4 py-2 rounded-full shadow-md border-2 border-purple-100 transition hover:scale-105 ml-2">
+          <span className="text-xl">🏆</span> <span>My Results</span>
+        </Link>
       </div>
 
       {/* Activity Header */}

@@ -16,7 +16,7 @@ import { tileMetaFor } from '../../utils/practiceContent';
  *
  * This keeps two things true that matter in a real school:
  *   - the child only ever sees content their own teacher published, from their
- *     own age group
+ *     own grade level
  *   - the home can never drift out of sync with the course, because it IS the
  *     course
  */
@@ -28,16 +28,16 @@ const KIND_LABEL = {
 };
 
 export default function InstructorChildHome() {
-  const [ageGroups, setAgeGroups] = useState([]);
-  const [ageGroupId, setAgeGroupId] = useState('');
+  const [gradeLevels, setGradeLevels] = useState([]);
+  const [gradeLevelId, setGradeLevelId] = useState('');
   const [pins, setPins] = useState([]);
   const [candidates, setCandidates] = useState({ activities: [], lessons: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // Which age groups this instructor actually teaches, so the selector only
-  // offers groups they have published content for.
+  // Which grade levels this instructor actually teaches, so the selector only
+  // offers levels they have published content for.
   useEffect(() => {
     let alive = true;
     axiosClient
@@ -47,16 +47,16 @@ export default function InstructorChildHome() {
         const courses = data.courses || [];
         const seen = new Map();
         for (const course of courses) {
-          if (course.age_group_id && !seen.has(course.age_group_id)) {
-            seen.set(course.age_group_id, {
-              id: course.age_group_id,
-              name: course.age_group_name || `Age group ${course.age_group_id}`,
+          if (course.grade_level_id && !seen.has(course.grade_level_id)) {
+            seen.set(course.grade_level_id, {
+              id: course.grade_level_id,
+              name: course.grade_level_name || `Grade level ${course.grade_level_id}`,
             });
           }
         }
-        const groups = [...seen.values()];
-        setAgeGroups(groups);
-        if (groups.length > 0) setAgeGroupId(String(groups[0].id));
+        const levels = [...seen.values()];
+        setGradeLevels(levels);
+        if (levels.length > 0) setGradeLevelId(String(levels[0].id));
         else setLoading(false);
       })
       .catch((err) => {
@@ -70,13 +70,13 @@ export default function InstructorChildHome() {
   }, []);
 
   const load = useCallback(async () => {
-    if (!ageGroupId) return;
+    if (!gradeLevelId) return;
     setLoading(true);
     setError('');
     try {
       const [pinRes, candRes] = await Promise.all([
-        axiosClient.get('/home/pins', { params: { age_group_id: ageGroupId } }),
-        axiosClient.get('/home/candidates', { params: { age_group_id: ageGroupId } }),
+        axiosClient.get('/home/pins', { params: { grade_level_id: gradeLevelId } }),
+        axiosClient.get('/home/candidates', { params: { grade_level_id: gradeLevelId } }),
       ]);
       setPins(pinRes.data.pins || []);
       setCandidates(candRes.data);
@@ -85,7 +85,7 @@ export default function InstructorChildHome() {
     } finally {
       setLoading(false);
     }
-  }, [ageGroupId]);
+  }, [gradeLevelId]);
 
   useEffect(() => {
     load();
@@ -96,7 +96,7 @@ export default function InstructorChildHome() {
     setError('');
     try {
       await axiosClient.post('/home/pins', {
-        age_group_id: ageGroupId,
+        grade_level_id: gradeLevelId,
         resource_type: resourceType,
         resource_id: resourceId,
       });
@@ -141,7 +141,7 @@ export default function InstructorChildHome() {
   }
 
   const available = candidates.activities.filter((a) => !a.is_pinned);
-  const selected = ageGroups.find((g) => String(g.id) === ageGroupId);
+  const selected = gradeLevels.find((g) => String(g.id) === gradeLevelId);
 
   return (
     <InstructorLayout>
@@ -157,7 +157,7 @@ export default function InstructorChildHome() {
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
             Choose what your young learners see first on their home screen. These are
             drawn from activities you have already published — children aged 5 to 9
-            only ever see their own age group, and the home screen never shows
+            only ever see their own grade level, and the home screen never shows
             anything you have not chosen.
           </p>
         </div>
@@ -168,7 +168,7 @@ export default function InstructorChildHome() {
           </div>
         )}
 
-        {ageGroups.length === 0 && !loading && (
+        {gradeLevels.length === 0 && !loading && (
           <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center">
             <p className="text-sm text-slate-600">
               You have not published a course yet, so there is nothing to put on a
@@ -183,19 +183,19 @@ export default function InstructorChildHome() {
           </div>
         )}
 
-        {ageGroups.length > 0 && (
+        {gradeLevels.length > 0 && (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="text-sm font-medium text-slate-600" htmlFor="age-group">
-                Age group
+              <label className="text-sm font-medium text-slate-600" htmlFor="grade-level">
+                Grade Level
               </label>
               <select
-                id="age-group"
-                value={ageGroupId}
-                onChange={(e) => setAgeGroupId(e.target.value)}
+                id="grade-level"
+                value={gradeLevelId}
+                onChange={(e) => setGradeLevelId(e.target.value)}
                 className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
               >
-                {ageGroups.map((g) => (
+                {gradeLevels.map((g) => (
                   <option key={g.id} value={g.id}>
                     {g.name}
                   </option>

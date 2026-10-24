@@ -242,14 +242,14 @@ async function createStudentInvite(req, res, next) {
     const errors = validateStudentInvite(req.body);
     if (errors.length) return res.status(400).json({ errors });
 
-    const { full_name, date_of_birth, age_group_id } = req.body;
+    const { full_name, date_of_birth, grade_level_id } = req.body;
 
     const ageGroupResult = await query(
-      'SELECT requires_account FROM age_groups WHERE id = $1',
-      [age_group_id]
+      'SELECT requires_account FROM grade_levels WHERE id = $1',
+      [grade_level_id]
     );
     if (ageGroupResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Unknown age_group_id' });
+      return res.status(400).json({ error: 'Unknown grade_level_id' });
     }
     if (!ageGroupResult.rows[0].requires_account) {
       return res.status(400).json({
@@ -267,9 +267,9 @@ async function createStudentInvite(req, res, next) {
     const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days
 
     await query(
-      `INSERT INTO student_invites (parent_id, age_group_id, full_name, date_of_birth, invite_code, expires_at)
+      `INSERT INTO student_invites (parent_id, grade_level_id, full_name, date_of_birth, invite_code, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [parentId, age_group_id, full_name, date_of_birth, inviteCode, expiresAt]
+      [parentId, grade_level_id, full_name, date_of_birth, inviteCode, expiresAt]
     );
 
     res.status(201).json({ invite_code: inviteCode, expires_at: expiresAt });
@@ -314,9 +314,9 @@ async function registerStudentWithInvite(req, res, next) {
       const user = userResult.rows[0];
 
       await client.query(
-        `INSERT INTO students (user_id, parent_id, age_group_id, full_name, date_of_birth)
+        `INSERT INTO students (user_id, parent_id, grade_level_id, full_name, date_of_birth)
          VALUES ($1, $2, $3, $4, $5)`,
-        [user.id, invite.parent_id, invite.age_group_id, invite.full_name, invite.date_of_birth]
+        [user.id, invite.parent_id, invite.grade_level_id, invite.full_name, invite.date_of_birth]
       );
 
       await client.query('UPDATE student_invites SET used = TRUE WHERE id = $1', [invite.id]);

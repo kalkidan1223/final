@@ -294,6 +294,15 @@ export default function ChildQuizTake() {
           >
             📋 ሁሉም ፈተናዎች / All Quizzes
           </Link>
+
+          {result?.id && (
+            <Link
+              to={'/child/results/quizzes/' + result.id}
+              className="w-full sm:w-auto px-5 py-3.5 bg-white border border-green-200 hover:bg-green-50 text-green-700 font-bold rounded-2xl text-center transition"
+            >
+              🏆 View My Result
+            </Link>
+          )}
         </div>
 
         {/* Main Quiz Hero Card */}
@@ -527,7 +536,26 @@ export default function ChildQuizTake() {
     return answers[q.id] !== undefined && answers[q.id] !== '';
   };
   const answeredCount = questions.filter(isQuestionAnswered).length;
-  const progressPercent = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
+  const itemCount = (q) => (q.question_type === 'matching' ? Math.max(1, matchingPairs(q).length) : 1);
+  const itemStarts = [];
+  let _cursor = 0;
+  questions.forEach((q) => { itemStarts.push(_cursor); _cursor += itemCount(q); });
+  const totalItems = _cursor;
+  const answeredItems = questions.reduce((acc, q) => {
+    if (q.question_type === 'matching') {
+      const pairs = matchingPairs(q);
+      const picked = parseMatchingSelections(answers[q.id]);
+      return acc + pairs.filter((_, idx) => picked[idx]).length;
+    }
+    return acc + (answers[q.id] !== undefined && answers[q.id] !== '' ? 1 : 0);
+  }, 0);
+  const currentItemStart = itemStarts[currentQuestion] || 0;
+  const currentItemEnd = currentItemStart + itemCount(currentQ);
+  const currentQuestionLabel = currentQ && currentQ.question_type === 'matching' && itemCount(currentQ) > 1
+    ? 'Questions ' + (currentItemStart + 1) + '-' + currentItemEnd + ' of ' + totalItems
+    : 'Question ' + (currentItemStart + 1) + ' of ' + totalItems;
+
+  const progressPercent = totalItems > 0 ? (answeredItems / totalItems) * 100 : 0;
 
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto pb-16">
@@ -559,7 +587,7 @@ export default function ChildQuizTake() {
             <span className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center text-xs">
               {currentQuestion + 1}
             </span>
-            <span>ጥያቄ {currentQuestion + 1} ከ {questions.length}</span>
+            <span>{currentQuestionLabel}</span>
           </div>
           <span className="text-slate-500">{answeredCount} ተመልሷል / {questions.length}</span>
         </div>

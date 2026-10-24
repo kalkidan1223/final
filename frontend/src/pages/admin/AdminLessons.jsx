@@ -24,7 +24,7 @@ function LessonModal({ lesson, onClose }) {
             <div><p className="text-xs text-slate-400 font-medium uppercase mb-0.5">Title</p><p className="text-slate-700 font-medium">{lesson.title}</p></div>
             <div><p className="text-xs text-slate-400 font-medium uppercase mb-0.5">Course</p><p className="text-slate-700">{lesson.course_title}</p></div>
             <div><p className="text-xs text-slate-400 font-medium uppercase mb-0.5">Instructor</p><p className="text-slate-700">{lesson.instructor_name}</p></div>
-            <div><p className="text-xs text-slate-400 font-medium uppercase mb-0.5">Age Group</p><p className="text-slate-700">{lesson.age_group_name}</p></div>
+            <div><p className="text-xs text-slate-400 font-medium uppercase mb-0.5">Grade Level</p><p className="text-slate-700">{lesson.grade_level_name}</p></div>
             <div><p className="text-xs text-slate-400 font-medium uppercase mb-0.5">Order</p><p className="text-slate-700">#{lesson.order_index + 1}</p></div>
             <div><p className="text-xs text-slate-400 font-medium uppercase mb-0.5">Created</p><p className="text-slate-700">{new Date(lesson.created_at).toLocaleDateString()}</p></div>
           </div>
@@ -156,7 +156,7 @@ export default function AdminLessons() {
             <table className="w-full text-left">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  {['#', 'Title', 'Course', 'Instructor', 'Age Group', 'Status', 'Created', 'Actions'].map(h => (
+                  {['#', 'Title', 'Course', 'Instructor', 'Grade Level', 'Status', 'Created', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -178,7 +178,7 @@ export default function AdminLessons() {
                       <p className="truncate">{lesson.course_title}</p>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">{lesson.instructor_name}</td>
-                    <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{lesson.age_group_name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{lesson.grade_level_name}</td>
                     <td className="px-4 py-3"><StatusBadge published={lesson.is_published} /></td>
                     <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{new Date(lesson.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">

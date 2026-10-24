@@ -38,17 +38,17 @@ async function createCourse(req, res, next) {
       });
     }
 
-    const { title, description, age_group_id, thumbnail_url, available_course_id } = req.body;
-    if (!title || !age_group_id) {
-      return res.status(400).json({ error: 'title and age_group_id are required' });
+    const { title, description, grade_level_id, thumbnail_url, available_course_id } = req.body;
+    if (!title || !grade_level_id) {
+      return res.status(400).json({ error: 'title and grade_level_id are required' });
     }
 
     // Admin creating a course manually
     const result = await query(
-      `INSERT INTO courses (instructor_id, age_group_id, title, description, thumbnail_url, available_course_id, status)
+      `INSERT INTO courses (instructor_id, grade_level_id, title, description, thumbnail_url, available_course_id, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'draft')
        RETURNING *`,
-      [null, age_group_id, title, description || null, thumbnail_url || null, available_course_id || null]
+      [null, grade_level_id, title, description || null, thumbnail_url || null, available_course_id || null]
     );
 
     res.status(201).json({ course: result.rows[0] });
@@ -67,15 +67,15 @@ async function getMyInstructorDashboard(req, res, next) {
         `SELECT
           (SELECT COUNT(*)::int FROM courses WHERE instructor_id = $1) AS assigned_courses,
           (SELECT COUNT(*)::int FROM lessons l JOIN courses c ON c.id = l.course_id WHERE c.instructor_id = $1) AS total_lessons,
-          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.age_group_id = s.age_group_id WHERE c.instructor_id = $1 AND s.is_active = TRUE) AS total_students,
-          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.age_group_id = s.age_group_id WHERE c.instructor_id = $1 AND s.user_id IS NULL AND s.is_active = TRUE) AS parent_managed_children,
+          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.grade_level_id = s.grade_level_id WHERE c.instructor_id = $1 AND s.is_active = TRUE) AS total_students,
+          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.grade_level_id = s.grade_level_id WHERE c.instructor_id = $1 AND s.user_id IS NULL AND s.is_active = TRUE) AS parent_managed_children,
           (SELECT COUNT(*)::int FROM activity_submissions sub JOIN activities a ON a.id = sub.activity_id JOIN lessons l ON l.id = a.lesson_id JOIN courses c ON c.id = l.course_id WHERE c.instructor_id = $1 AND sub.status = 'pending') AS pending_activities,
           (SELECT COUNT(*)::int FROM notifications WHERE user_id = $2 AND is_read = FALSE) AS unread_notifications`,
         [instructorId, req.user.id]
       ),
       query(
-        `SELECT c.id, c.title, c.status, ag.name AS age_group_name, COUNT(l.id)::int AS lesson_count
-         FROM courses c JOIN age_groups ag ON ag.id = c.age_group_id
+        `SELECT c.id, c.title, c.status, ag.name AS grade_level_name, COUNT(l.id)::int AS lesson_count
+         FROM courses c JOIN grade_levels ag ON ag.id = c.grade_level_id
          LEFT JOIN lessons l ON l.course_id = c.id
          WHERE c.instructor_id = $1
          GROUP BY c.id, ag.name ORDER BY c.updated_at DESC LIMIT 5`,
@@ -89,31 +89,31 @@ async function getMyInstructorDashboard(req, res, next) {
 }
 
 // ----------------------------------------------------------------------------
-// GET /api/courses  — list, filterable by age_group_id / status / instructor
+// GET /api/courses  — list, filterable by grade_level_id / status / instructor
 // Students and parents only ever see published courses; instructors/admins
 // can additionally see drafts they own (or all drafts, for admins).
 // ----------------------------------------------------------------------------
 async function listCourses(req, res, next) {
   try {
-    const { age_group_id, status } = req.query;
+    const { grade_level_id, status } = req.query;
     const conditions = [];
     const params = [];
 
-    if (age_group_id) {
-      params.push(age_group_id);
-      conditions.push(`c.age_group_id = $${params.length}`);
+    if (grade_level_id) {
+      params.push(grade_level_id);
+      conditions.push(`c.grade_level_id = $${params.length}`);
     }
 
     if (req.user.role === 'student') {
       conditions.push(`c.status = 'published'`);
       params.push(req.user.id);
-      conditions.push(`EXISTS (SELECT 1 FROM students s WHERE s.user_id = $${params.length} AND s.age_group_id = c.age_group_id AND s.is_active = TRUE)`);
+      conditions.push(`EXISTS (SELECT 1 FROM students s WHERE s.user_id = $${params.length} AND s.grade_level_id = c.grade_level_id AND s.is_active = TRUE)`);
     } else if (req.user.role === 'parent') {
       conditions.push(`c.status = 'published'`);
       params.push(req.user.id);
       conditions.push(`EXISTS (
         SELECT 1 FROM students s JOIN parents p ON p.id = s.parent_id
-        WHERE p.user_id = $${params.length} AND s.age_group_id = c.age_group_id AND s.is_active = TRUE
+        WHERE p.user_id = $${params.length} AND s.grade_level_id = c.grade_level_id AND s.is_active = TRUE
       )`);
     } else if (status && VALID_STATUSES.includes(status)) {
       params.push(status);
@@ -128,11 +128,11 @@ async function listCourses(req, res, next) {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
-      `SELECT c.*, u.full_name AS instructor_name, ag.name AS age_group_name
+      `SELECT c.*, u.full_name AS instructor_name, ag.name AS grade_level_name
        FROM courses c
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
        ${where}
        ORDER BY c.created_at DESC`,
       params
@@ -151,11 +151,11 @@ async function getCourse(req, res, next) {
   try {
     const { id } = req.params;
     const courseResult = await query(
-      `SELECT c.*, u.full_name AS instructor_name, ag.name AS age_group_name
+      `SELECT c.*, u.full_name AS instructor_name, ag.name AS grade_level_name
        FROM courses c
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
        WHERE c.id = $1`,
       [id]
     );
@@ -187,17 +187,17 @@ async function updateCourse(req, res, next) {
     const course = await loadOwnedCourse(req, res);
     if (!course) return;
 
-    const { title, description, age_group_id, thumbnail_url } = req.body;
+    const { title, description, grade_level_id, thumbnail_url } = req.body;
     const result = await query(
       `UPDATE courses
        SET title = COALESCE($1, title),
            description = COALESCE($2, description),
-           age_group_id = COALESCE($3, age_group_id),
+           grade_level_id = COALESCE($3, grade_level_id),
            thumbnail_url = COALESCE($4, thumbnail_url),
            updated_at = now()
        WHERE id = $5
        RETURNING *`,
-      [title, description, age_group_id, thumbnail_url, course.id]
+      [title, description, grade_level_id, thumbnail_url, course.id]
     );
 
     res.json({ course: result.rows[0] });

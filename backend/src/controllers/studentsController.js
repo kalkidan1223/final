@@ -16,11 +16,11 @@ async function getProfile(req, res, next) {
     }
 
     const result = await query(
-      `SELECT s.*, u.email, u.full_name, u.phone, ag.name as age_group_name, 
+      `SELECT s.*, u.email, u.full_name, u.phone, ag.name as grade_level_name, 
               ag.min_age, ag.max_age, p.user_id as parent_user_id, pu.full_name as parent_name
        FROM students s
        JOIN users u ON u.id = s.user_id
-       JOIN age_groups ag ON ag.id = s.age_group_id
+       JOIN grade_levels ag ON ag.id = s.grade_level_id
        LEFT JOIN parents p ON p.id = s.parent_id
        LEFT JOIN users pu ON pu.id = p.user_id
        WHERE s.id = $1`,
@@ -46,11 +46,11 @@ async function getDashboard(req, res, next) {
       `SELECT 
         (SELECT COUNT(DISTINCT c.id)::int 
          FROM courses c 
-         WHERE c.age_group_id = $2 AND c.status = 'published') as total_courses,
+         WHERE c.grade_level_id = $2 AND c.status = 'published') as total_courses,
         (SELECT COUNT(DISTINCT l.id)::int 
          FROM lessons l 
          JOIN courses c ON c.id = l.course_id 
-         WHERE c.age_group_id = $2 AND c.status = 'published') as total_lessons,
+         WHERE c.grade_level_id = $2 AND c.status = 'published') as total_lessons,
         (SELECT COUNT(*)::int 
          FROM activity_submissions 
          WHERE student_id = $1) as completed_activities,
@@ -63,37 +63,37 @@ async function getDashboard(req, res, next) {
         (SELECT COUNT(*)::int 
          FROM notifications 
          WHERE user_id = $3 AND is_read = FALSE) as unread_notifications`,
-      [student.id, student.age_group_id, req.user.id]
+      [student.id, student.grade_level_id, req.user.id]
     );
 
     // Get continue learning (last accessed incomplete lesson)
     const continueLearning = await query(
       `SELECT l.id, l.title, l.description, c.id as course_id, c.title as course_title,
-              c.thumbnail_url, ag.name as age_group_name
+              c.thumbnail_url, ag.name as grade_level_name
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
-       JOIN age_groups ag ON ag.id = c.age_group_id
-       WHERE c.age_group_id = $1 AND c.status = 'published'
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
+       WHERE c.grade_level_id = $1 AND c.status = 'published'
        ORDER BY l.created_at DESC
        LIMIT 1`,
-      [student.age_group_id]
+      [student.grade_level_id]
     );
 
     // Get recent courses
     const recentCourses = await query(
       `SELECT c.id, c.title, c.description, c.thumbnail_url, c.status,
-              ag.name as age_group_name, u.full_name as instructor_name,
+              ag.name as grade_level_name, u.full_name as instructor_name,
               COUNT(DISTINCT l.id)::int as lesson_count
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN lessons l ON l.course_id = c.id
-       WHERE c.age_group_id = $1 AND c.status = 'published'
+       WHERE c.grade_level_id = $1 AND c.status = 'published'
        GROUP BY c.id, ag.name, u.full_name
        ORDER BY c.created_at DESC
        LIMIT 6`,
-      [student.age_group_id]
+      [student.grade_level_id]
     );
 
     // Get learning streak
@@ -131,21 +131,21 @@ async function listCourses(req, res, next) {
 
     const result = await query(
       `SELECT c.id, c.title, c.description, c.thumbnail_url, c.status,
-              ag.name as age_group_name, u.full_name as instructor_name,
+              ag.name as grade_level_name, u.full_name as instructor_name,
               COUNT(DISTINCT l.id)::int as lesson_count,
               COUNT(DISTINCT a.id)::int as activity_count,
               COUNT(DISTINCT q.id)::int as quiz_count
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN activities a ON a.lesson_id = l.id
        LEFT JOIN quizzes q ON q.lesson_id = l.id
-       WHERE c.age_group_id = $1 AND c.status = 'published'
+       WHERE c.grade_level_id = $1 AND c.status = 'published'
        GROUP BY c.id, ag.name, u.full_name
        ORDER BY c.created_at DESC`,
-      [student.age_group_id]
+      [student.grade_level_id]
     );
 
     res.json({ courses: result.rows });
@@ -165,13 +165,13 @@ async function getCourse(req, res, next) {
 
     // Get course details
     const courseResult = await query(
-      `SELECT c.*, ag.name as age_group_name, u.full_name as instructor_name
+      `SELECT c.*, ag.name as grade_level_name, u.full_name as instructor_name
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
-       WHERE c.id = $1 AND c.age_group_id = $2 AND c.status = 'published'`,
-      [id, student.age_group_id]
+       WHERE c.id = $1 AND c.grade_level_id = $2 AND c.status = 'published'`,
+      [id, student.grade_level_id]
     );
 
     if (courseResult.rows.length === 0) {
@@ -214,7 +214,7 @@ async function getLesson(req, res, next) {
 
     // Get lesson with course info for validation
     const lessonResult = await query(
-      `SELECT l.*, c.age_group_id, c.title as course_title, c.id as course_id
+      `SELECT l.*, c.grade_level_id, c.title as course_title, c.id as course_id
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
        WHERE l.id = $1`,
@@ -228,7 +228,7 @@ async function getLesson(req, res, next) {
     const lesson = lessonResult.rows[0];
 
     // Verify student has access (same age group)
-    if (lesson.age_group_id !== student.age_group_id) {
+    if (lesson.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'You do not have access to this lesson' });
     }
 
@@ -296,9 +296,9 @@ async function listAllQuizzes(req, res, next) {
        FROM quizzes q
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
-       WHERE c.age_group_id = $2 AND c.status = 'published'
+       WHERE c.grade_level_id = $2 AND c.status = 'published'
        ORDER BY c.created_at DESC, l.order_index, q.created_at`,
-      [student.id, student.age_group_id]
+      [student.id, student.grade_level_id]
     );
 
     res.json({ quizzes: result.rows });
@@ -317,7 +317,7 @@ async function getMaterial(req, res, next) {
     }
 
     const result = await query(
-      `SELECT lm.*, l.course_id, c.age_group_id,
+      `SELECT lm.*, l.course_id, c.grade_level_id,
               (EXISTS (SELECT 1 FROM material_listens ml WHERE ml.material_id = lm.id AND ml.student_id = $2)) as listened
        FROM learning_materials lm
        JOIN lessons l ON l.id = lm.lesson_id
@@ -332,7 +332,7 @@ async function getMaterial(req, res, next) {
 
     const material = result.rows[0];
 
-    if (material.age_group_id !== student.age_group_id) {
+    if (material.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -352,7 +352,7 @@ async function listenMaterial(req, res, next) {
     }
 
     const result = await query(
-      `SELECT lm.id, c.age_group_id
+      `SELECT lm.id, c.grade_level_id
        FROM learning_materials lm
        JOIN lessons l ON l.id = lm.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -364,7 +364,7 @@ async function listenMaterial(req, res, next) {
       return res.status(404).json({ error: 'Material not found' });
     }
 
-    if (result.rows[0].age_group_id !== student.age_group_id) {
+    if (result.rows[0].grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -391,7 +391,7 @@ async function getVideo(req, res, next) {
     }
 
     const result = await query(
-      `SELECT v.*, l.course_id, c.age_group_id,
+      `SELECT v.*, l.course_id, c.grade_level_id,
               (EXISTS (SELECT 1 FROM video_watches vw WHERE vw.video_id = v.id AND vw.student_id = $2)) as watched
        FROM videos v
        JOIN lessons l ON l.id = v.lesson_id
@@ -406,7 +406,7 @@ async function getVideo(req, res, next) {
 
     const video = result.rows[0];
 
-    if (video.age_group_id !== student.age_group_id) {
+    if (video.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -426,7 +426,7 @@ async function watchVideo(req, res, next) {
     }
 
     const result = await query(
-      `SELECT v.id, c.age_group_id
+      `SELECT v.id, c.grade_level_id
        FROM videos v
        JOIN lessons l ON l.id = v.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -438,7 +438,7 @@ async function watchVideo(req, res, next) {
       return res.status(404).json({ error: 'Video not found' });
     }
 
-    if (result.rows[0].age_group_id !== student.age_group_id) {
+    if (result.rows[0].grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -466,7 +466,7 @@ async function getActivity(req, res, next) {
 
     const result = await query(
       `SELECT a.*, l.title as lesson_title, c.title as course_title,
-              c.age_group_id, asub.id as submission_id, asub.status as submission_status,
+              c.grade_level_id, asub.id as submission_id, asub.status as submission_status,
               asub.submission_text, asub.submission_url, asub.score, asub.feedback,
               asub.submitted_at, asub.reviewed_at as graded_at
        FROM activities a
@@ -484,7 +484,7 @@ async function getActivity(req, res, next) {
     const activity = result.rows[0];
 
     // Verify access
-    if (activity.age_group_id !== student.age_group_id) {
+    if (activity.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -507,7 +507,7 @@ async function submitActivity(req, res, next) {
 
     // Verify activity exists and student has access
     const activityCheck = await query(
-      `SELECT a.id, c.age_group_id
+      `SELECT a.id, c.grade_level_id
        FROM activities a
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -519,7 +519,7 @@ async function submitActivity(req, res, next) {
       return res.status(404).json({ error: 'Activity not found' });
     }
 
-    if (activityCheck.rows[0].age_group_id !== student.age_group_id) {
+    if (activityCheck.rows[0].grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -570,7 +570,7 @@ async function getQuiz(req, res, next) {
 
     // Get quiz details
     const quizResult = await query(
-      `SELECT q.*, l.title as lesson_title, c.title as course_title, c.age_group_id
+      `SELECT q.*, l.title as lesson_title, c.title as course_title, c.grade_level_id
        FROM quizzes q
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
@@ -585,7 +585,7 @@ async function getQuiz(req, res, next) {
     const quiz = quizResult.rows[0];
 
     // Verify access
-    if (quiz.age_group_id !== student.age_group_id) {
+    if (quiz.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -624,7 +624,7 @@ async function submitQuiz(req, res, next) {
 
     // Verify quiz exists and get questions
     const questions = await query(
-      `SELECT qq.*, q.lesson_id, c.age_group_id
+      `SELECT qq.*, q.lesson_id, c.grade_level_id
        FROM quiz_questions qq
        JOIN quizzes q ON q.id = qq.quiz_id
        JOIN lessons l ON l.id = q.lesson_id
@@ -637,7 +637,7 @@ async function submitQuiz(req, res, next) {
       return res.status(404).json({ error: 'Quiz not found' });
     }
 
-    if (questions.rows[0].age_group_id !== student.age_group_id) {
+    if (questions.rows[0].grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -695,10 +695,10 @@ async function getProgress(req, res, next) {
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $1
        LEFT JOIN quizzes q ON q.lesson_id = l.id
        LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $1
-       WHERE c.age_group_id = $2 AND c.status = 'published'
+       WHERE c.grade_level_id = $2 AND c.status = 'published'
        GROUP BY c.id
        ORDER BY c.created_at`,
-      [student.id, student.age_group_id]
+      [student.id, student.grade_level_id]
     );
 
     res.json({ course_progress: courseProgress.rows });
@@ -747,7 +747,7 @@ async function markNotificationRead(req, res, next) {
 // POST /api/students/registration-requests - Parent creates child registration request
 async function createChildRegistrationRequest(req, res, next) {
   try {
-    const { full_name, date_of_birth, age_group_id, grade_level, school_name, notes } = req.body;
+    const { full_name, date_of_birth, grade_level_id, grade_level, school_name, notes } = req.body;
     
     // Get parent record
     const parentResult = await query('SELECT * FROM parents WHERE user_id = $1', [req.user.id]);
@@ -759,10 +759,10 @@ async function createChildRegistrationRequest(req, res, next) {
     // Create registration request
     const result = await query(
       `INSERT INTO child_registration_requests 
-       (parent_id, full_name, date_of_birth, age_group_id, grade_level, school_name, notes, status)
+       (parent_id, full_name, date_of_birth, grade_level_id, grade_level, school_name, notes, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
        RETURNING *`,
-      [parent.id, full_name, date_of_birth, age_group_id, grade_level || null, school_name || null, notes || null]
+      [parent.id, full_name, date_of_birth, grade_level_id, grade_level || null, school_name || null, notes || null]
     );
 
     res.status(201).json({ 
@@ -785,9 +785,9 @@ async function listMyChildRegistrationRequests(req, res, next) {
     const parent = parentResult.rows[0];
 
     const result = await query(
-      `SELECT crr.*, ag.name as age_group_name
+      `SELECT crr.*, ag.name as grade_level_name
        FROM child_registration_requests crr
-       LEFT JOIN age_groups ag ON ag.id = crr.age_group_id
+       LEFT JOIN grade_levels ag ON ag.id = crr.grade_level_id
        WHERE crr.parent_id = $1
        ORDER BY crr.created_at DESC`,
       [parent.id]
@@ -809,11 +809,11 @@ async function listMyChildren(req, res, next) {
     const parent = parentResult.rows[0];
 
     const result = await query(
-      `SELECT s.*, u.email, u.full_name, u.phone, ag.name as age_group_name,
+      `SELECT s.*, u.email, u.full_name, u.phone, ag.name as grade_level_name,
               ag.min_age, ag.max_age
        FROM students s
        JOIN users u ON u.id = s.user_id
-       JOIN age_groups ag ON ag.id = s.age_group_id
+       JOIN grade_levels ag ON ag.id = s.grade_level_id
        WHERE s.parent_id = $1
        ORDER BY s.created_at DESC`,
       [parent.id]
@@ -886,12 +886,12 @@ async function getChildLearningSpace(req, res, next) {
 
     // Get enrolled courses
     const courses = await query(
-      `SELECT DISTINCT c.*, ag.name as age_group_name
+      `SELECT DISTINCT c.*, ag.name as grade_level_name
        FROM courses c
-       JOIN age_groups ag ON ag.id = c.age_group_id
-       WHERE c.age_group_id = $1 AND c.status = 'published'
+       JOIN grade_levels ag ON ag.id = c.grade_level_id
+       WHERE c.grade_level_id = $1 AND c.status = 'published'
        ORDER BY c.created_at DESC`,
-      [student.age_group_id]
+      [student.grade_level_id]
     );
 
     res.json({

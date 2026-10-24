@@ -120,7 +120,7 @@ export default function InstructorCourseDetail() {
   }
 
   const stats = [
-    { label: 'Age Group', value: course.age_group_name },
+    { label: 'Grade Level', value: course.grade_level_name },
     { label: 'Grade / Class', value: course.grade || '—' },
     { label: 'Section', value: course.section || '—' },
     { label: 'Academic Year', value: course.academic_year || '—' },

@@ -299,7 +299,7 @@ export default function ParentDashboard() {
 
                         <div className="text-xs text-slate-500 mt-0.5">
                           Age: <strong className="text-slate-700">{age ?? '—'}</strong> •{' '}
-                          <span>{child.age_group_name || 'Primary'}</span>
+                          <span>{child.grade_level_name || 'Primary'}</span>
                         </div>
 
                         {/* Account Type & Status Badges */}

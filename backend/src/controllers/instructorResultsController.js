@@ -1,27 +1,40 @@
 const { query } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
 
+// Resolves the instructor id for the request. Admins are treated as
+// "all instructors" (sentinel -1) so they can review every course's results.
+async function resolveInstructorId(req) {
+  if (req.user.role === 'admin') return -1;
+  return getInstructorIdForUser(req.user.id);
+}
+
+async function instructorCourseIds(instructorId) {
+  if (instructorId === -1) {
+    const r = await query('SELECT id FROM courses');
+    return r.rows.map((x) => x.id);
+  }
+  const r = await query(
+    `SELECT DISTINCT c.id
+     FROM courses c
+     JOIN instructor_assignments ia ON ia.course_id = c.id
+     WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
+    [instructorId]
+  );
+  return r.rows.map((x) => x.id);
+}
+
 // ----------------------------------------------------------------------------
 // GET /api/instructor/results/overview
 // Get aggregated statistics for instructor's students
 // ----------------------------------------------------------------------------
 async function getResultsOverview(req, res, next) {
   try {
-    const instructorId = await getInstructorIdForUser(req.user.id);
-    if (!instructorId) {
+    const instructorId = await resolveInstructorId(req);
+    if (instructorId === null) {
       return res.status(403).json({ error: 'Not an instructor' });
     }
 
-    // Get courses taught by this instructor
-    const coursesRes = await query(
-      `SELECT DISTINCT c.id 
-       FROM courses c
-       JOIN instructor_assignments ia ON ia.course_id = c.id
-       WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
-      [instructorId]
-    );
-    
-    const courseIds = coursesRes.rows.map(r => r.id);
+    const courseIds = await instructorCourseIds(instructorId);
     if (courseIds.length === 0) {
       return res.json({
         total_students: 0,
@@ -114,8 +127,8 @@ async function getResultsOverview(req, res, next) {
 // ----------------------------------------------------------------------------
 async function getActivitySubmissions(req, res, next) {
   try {
-    const instructorId = await getInstructorIdForUser(req.user.id);
-    if (!instructorId) {
+    const instructorId = await resolveInstructorId(req);
+    if (instructorId === null) {
       return res.status(403).json({ error: 'Not an instructor' });
     }
 
@@ -145,7 +158,7 @@ async function getActivitySubmissions(req, res, next) {
       JOIN students s ON s.id = asub.student_id
       JOIN lessons l ON l.id = a.lesson_id
       JOIN courses c ON c.id = l.course_id
-      WHERE (a.instructor_id = $1 OR c.id IN (SELECT course_id FROM instructor_assignments WHERE instructor_id = $1 AND status = 'active'))
+      WHERE ($1 = -1 OR a.instructor_id = $1 OR c.id IN (SELECT course_id FROM instructor_assignments WHERE instructor_id = $1 AND status = 'active'))
     `;
     
     const params = [instructorId];
@@ -210,23 +223,14 @@ async function getActivitySubmissions(req, res, next) {
 // ----------------------------------------------------------------------------
 async function getQuizResults(req, res, next) {
   try {
-    const instructorId = await getInstructorIdForUser(req.user.id);
-    if (!instructorId) {
+    const instructorId = await resolveInstructorId(req);
+    if (instructorId === null) {
       return res.status(403).json({ error: 'Not an instructor' });
     }
 
     const { course_id, quiz_id, limit = 50, offset = 0 } = req.query;
     
-    // Get courses taught by this instructor
-    const coursesRes = await query(
-      `SELECT DISTINCT c.id 
-       FROM courses c
-       JOIN instructor_assignments ia ON ia.course_id = c.id
-       WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
-      [instructorId]
-    );
-    
-    const courseIds = coursesRes.rows.map(r => r.id);
+    const courseIds = await instructorCourseIds(instructorId);
     if (courseIds.length === 0) {
       return res.json({ results: [], total: 0, limit: parseInt(limit), offset: parseInt(offset) });
     }
@@ -318,14 +322,15 @@ async function getQuizResults(req, res, next) {
 // ----------------------------------------------------------------------------
 async function getStudentResults(req, res, next) {
   try {
-    const instructorId = await getInstructorIdForUser(req.user.id);
-    if (!instructorId) {
+    const instructorId = await resolveInstructorId(req);
+    if (instructorId === null) {
       return res.status(403).json({ error: 'Not an instructor' });
     }
 
     const { studentId } = req.params;
     
-    // Verify instructor teaches this student
+    // Verify instructor teaches this student (admins bypass)
+  if (instructorId !== -1) {
     const accessCheck = await query(
       `SELECT 1 
        FROM students s
@@ -340,10 +345,11 @@ async function getStudentResults(req, res, next) {
     if (accessCheck.rows.length === 0) {
       return res.status(403).json({ error: 'You do not teach this student' });
     }
+  }
 
     // Get student info
     const studentRes = await query(
-      'SELECT id, full_name, age_group_id FROM students WHERE id = $1',
+      'SELECT id, full_name, grade_level_id FROM students WHERE id = $1',
       [studentId]
     );
     
@@ -384,7 +390,7 @@ async function getStudentResults(req, res, next) {
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
        JOIN instructor_assignments ia ON ia.course_id = c.id
-       WHERE qr.student_id = $1 AND ia.instructor_id = $2 AND ia.status = 'active'
+       WHERE qr.student_id = $1 AND ($2 = -1 OR ia.instructor_id = $2) AND ia.status = 'active'
        ORDER BY qr.submitted_at DESC`,
       [studentId, instructorId]
     );

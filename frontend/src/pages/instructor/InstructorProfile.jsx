@@ -188,7 +188,7 @@ export default function InstructorProfile() {
               {profile.courses.map(c => (
                 <div key={c.course_id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                   <span className="text-sm font-medium text-slate-800">{c.course_title}</span>
-                  <span className="text-xs text-slate-400">{c.age_group_name} {c.grade && `· Grade ${c.grade}`}</span>
+                  <span className="text-xs text-slate-400">{c.grade_level_name} {c.grade && `· Grade ${c.grade}`}</span>
                 </div>
               ))}
             </div>

@@ -196,11 +196,11 @@ async function getCourseOverview(req, res, next) {
     // Get course info
     const courseResult = await query(
       `SELECT c.*, i.user_id as instructor_user_id, u.full_name as instructor_name,
-              ag.name as age_group_name
+              gl.name as grade_level_name
        FROM courses c
        JOIN instructors i ON c.instructor_id = i.id
        JOIN users u ON i.user_id = u.id
-       LEFT JOIN age_groups ag ON c.age_group_id = ag.id
+       LEFT JOIN grade_levels gl ON c.grade_level_id = gl.id
        WHERE c.id = $1 AND c.status = 'published'`,
       [courseId]
     );
@@ -255,7 +255,7 @@ async function getCourseOverview(req, res, next) {
         description: course.description,
         thumbnail_url: course.thumbnail_url,
         instructor_name: course.instructor_name,
-        age_group_name: course.age_group_name,
+        grade_level_name: course.grade_level_name,
         sequential_learning: course.sequential_learning,
         certificate_enabled: course.certificate_enabled
       },

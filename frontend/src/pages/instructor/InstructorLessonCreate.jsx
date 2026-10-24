@@ -163,7 +163,7 @@ export default function InstructorLessonCreate() {
               >
                 {courses.map(c => (
                   <option key={c.course_id} value={c.course_id}>
-                    {c.course_title} ({c.age_group_name}{c.grade ? ` • Grade ${c.grade}` : ''})
+                    {c.course_title} ({c.grade_level_name}{c.grade ? ` • Grade ${c.grade}` : ''})
                   </option>
                 ))}
               </select>
