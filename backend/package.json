@@ -11,7 +11,9 @@
     "seed:basic": "node seeds/seed_basic_curriculum.js",
     "sync:materials": "node scripts/sync-materials-to-resources.js",
     "migrate:resources": "node scripts/migrate-lesson-resources.js",
-    "check:activities": "node scripts/check-empty-activities.js"
+    "check:activities": "node scripts/check-empty-activities.js",
+    "test": "node tests/fidel_learning.test.js",
+    "test:fidel": "node tests/fidel_learning.test.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -21,6 +23,7 @@
     "express": "^4.19.2",
     "express-session": "^1.19.0",
     "jsonwebtoken": "^9.0.2",
+    "msedge-tts": "^2.1.1",
     "multer": "^2.3.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",

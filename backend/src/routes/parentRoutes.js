@@ -50,6 +50,7 @@ router.get('/children/:id/achievements', parentController.getChildAchievements);
 // NOTIFICATIONS & INSTRUCTORS
 // ============================================================================
 router.get('/notifications', parentController.getNotifications);
+router.patch('/notifications/read-all', parentController.markAllNotificationsRead);
 router.patch('/notifications/:id/read', parentController.markNotificationRead);
 router.get('/instructors', parentController.getInstructorsForParent);
 

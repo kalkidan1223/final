@@ -244,18 +244,11 @@ async function createStudentInvite(req, res, next) {
 
     const { full_name, date_of_birth, grade_level_id } = req.body;
 
-    const ageGroupResult = await query(
-      'SELECT requires_account FROM grade_levels WHERE id = $1',
+    const gradeResult = await query(
+      'SELECT id FROM grade_levels WHERE id = $1 AND is_active = TRUE',
       [grade_level_id]
     );
-    if (ageGroupResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Unknown grade_level_id' });
-    }
-    if (!ageGroupResult.rows[0].requires_account) {
-      return res.status(400).json({
-        error: 'This age group does not create accounts — use POST /api/students/children instead',
-      });
-    }
+    if (gradeResult.rows.length === 0) return res.status(400).json({ error: 'Choose an active grade level' });
 
     const parentResult = await query('SELECT id FROM parents WHERE user_id = $1', [req.user.id]);
     if (parentResult.rows.length === 0) {
@@ -303,6 +296,15 @@ async function registerStudentWithInvite(req, res, next) {
         return res.status(400).json({ error: 'Invite code is invalid, used, or expired' });
       }
       const invite = inviteResult.rows[0];
+
+      const grade = await client.query(
+        'SELECT id FROM grade_levels WHERE id = $1 AND is_active = TRUE',
+        [invite.grade_level_id]
+      );
+      if (!grade.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'This invitation has no active grade level. Ask your parent to create a new invitation.' });
+      }
 
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
       const userResult = await client.query(

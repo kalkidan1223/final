@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import axiosClient from '../../api/axiosClient';
 
@@ -29,6 +29,10 @@ export default function AdminAnalytics() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
 
   const totalRegistrations = analytics?.daily_registrations?.reduce((sum, d) => sum + d.count, 0) || 0;
 

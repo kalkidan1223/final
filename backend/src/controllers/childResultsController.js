@@ -7,7 +7,7 @@ const { query } = require('../config/db');
 async function resolveChild(req) {
   if (req.user.role === 'student') {
     const res = await query(
-      `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
+      `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code,
               u.email, u.full_name as user_full_name,
               p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
               COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 10)::int as age
@@ -32,7 +32,7 @@ async function resolveChild(req) {
     let child = null;
     if (requestedChildId) {
       const res = await query(
-        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
@@ -50,7 +50,7 @@ async function resolveChild(req) {
 
     if (!child) {
       const res = await query(
-        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age

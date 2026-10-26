@@ -345,27 +345,14 @@ async function approveStudentRegistration(req, res, next) {
         return res.status(400).json({ error: 'Parent account not found — approve the parent registration first' });
       }
 
-      const ageGroupResult = await client.query(
-        `SELECT id FROM grade_levels WHERE min_age <= $1 AND max_age >= $1
-         LIMIT 1`,
-        [reg.age]
+      const selectedGrade = await client.query(
+        'SELECT id FROM grade_levels WHERE id = $1 AND is_active = TRUE',
+        [reg.grade_level_id]
       );
-      const ageGroupId = ageGroupResult.rows[0]?.id;
-
-      if (!ageGroupId) {
-        // Fallback to 10-12 or primary age group
-        const fallback = await client.query(
-          "SELECT id FROM grade_levels WHERE name = '10-12' OR name = '11-12' LIMIT 1"
-        );
-        if (fallback.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(500).json({ error: 'Required age group not found in database' });
-        }
+      if (!selectedGrade.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Assign an active grade level to this registration before approval' });
       }
-
-      const assignedAgeGroupId = ageGroupId || (
-        await client.query("SELECT id FROM grade_levels WHERE name = '10-12' OR name = '11-12' LIMIT 1")
-      ).rows[0]?.id;
 
       await client.query(
         `INSERT INTO students (user_id, parent_id, grade_level_id, full_name, date_of_birth, gender,
@@ -373,7 +360,7 @@ async function approveStudentRegistration(req, res, next) {
            blood_group, medical_condition, learning_disability, profile_image_url)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING id`,
-        [user?.id || null, parentRow.id, assignedAgeGroupId,
+        [user?.id || null, parentRow.id, selectedGrade.rows[0].id,
          reg.student_full_name, reg.date_of_birth, reg.gender, reg.current_grade || reg.grade || null,
          reg.section || null, reg.preferred_language || null, reg.admission_number || null,
          reg.previous_school || null, reg.academic_year || null, reg.blood_group || null,

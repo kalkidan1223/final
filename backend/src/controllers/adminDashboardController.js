@@ -29,9 +29,8 @@ async function getDashboardStats(req, res, next) {
         `SELECT COUNT(*) FILTER (WHERE s.is_active = TRUE)::int AS total_children,
                 COUNT(*) FILTER (WHERE s.is_active = TRUE AND s.user_id IS NULL)::int AS parent_managed_children,
                 COUNT(*) FILTER (WHERE s.is_active = TRUE AND s.user_id IS NOT NULL)::int AS student_accounts,
-                COUNT(*) FILTER (WHERE s.is_active = TRUE AND ag.requires_account = FALSE)::int AS ages_5_to_9,
-                COUNT(*) FILTER (WHERE s.is_active = TRUE AND ag.requires_account = TRUE)::int AS ages_10_to_12
-         FROM students s JOIN grade_levels ag ON ag.id = s.grade_level_id`
+                COUNT(*) FILTER (WHERE s.is_active = TRUE AND s.grade_level_id IS NULL)::int AS without_grade_level
+         FROM students s`
       ),
       query(
         `SELECT (SELECT COUNT(*)::int FROM parents p WHERE p.guardian_relationship = 'parent') AS total_parents,

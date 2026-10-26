@@ -17,6 +17,7 @@ import {
   MdAdd,
   MdInfo,
   MdLightbulb,
+  MdCampaign,
 } from 'react-icons/md';
 
 function calculateAge(dateOfBirth) {
@@ -89,6 +90,7 @@ export default function ParentDashboard() {
   const stats = statsData?.stats || {};
   const children = statsData?.children_summary || [];
   const recentFeedback = statsData?.recent_feedback || [];
+  const announcements = statsData?.announcements || [];
 
   const totalChildren = stats.children?.total_children || children.length;
   const parentManagedCount = stats.children?.parent_managed || 0;
@@ -160,6 +162,62 @@ export default function ParentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* ── School Announcements ── */}
+      {announcements.length > 0 && (
+        <section aria-label="School Announcements" className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <span className="p-1.5 rounded-xl bg-amber-100 text-amber-700 text-lg">
+              <MdCampaign />
+            </span>
+            <div>
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                School Announcements
+              </h2>
+              <p className="text-xs text-slate-500">Official notices from school administration</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {announcements.map((ann) => (
+              <div
+                key={ann.id}
+                className={`bg-white rounded-2xl border p-5 shadow-sm transition hover:shadow-md flex flex-col justify-between ${
+                  ann.priority === 'urgent'
+                    ? 'border-rose-200 bg-rose-50/30'
+                    : ann.priority === 'important'
+                    ? 'border-amber-200 bg-amber-50/30'
+                    : 'border-slate-200'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span
+                      className={`text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                        ann.priority === 'urgent'
+                          ? 'bg-rose-100 text-rose-700'
+                          : ann.priority === 'important'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {ann.priority === 'urgent' ? 'Urgent Notice' : ann.priority === 'important' ? 'Important' : 'Announcement'}
+                    </span>
+                    <span className="text-xs text-slate-400 font-medium">
+                      {new Date(ann.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 leading-snug">
+                    {ann.title}
+                  </h3>
+                  <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                    {ann.message || ann.content}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── KPI Summary Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-4">

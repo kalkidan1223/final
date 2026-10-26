@@ -22,6 +22,17 @@ CREATE TABLE IF NOT EXISTS grade_levels (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+INSERT INTO grade_levels (code, name, level_type, sequence_order) VALUES
+    ('KG1', 'Kindergarten 1', 'kindergarten', 1),
+    ('KG2', 'Kindergarten 2', 'kindergarten', 2),
+    ('GRADE_1', 'Grade 1', 'primary', 3),
+    ('GRADE_2', 'Grade 2', 'primary', 4),
+    ('GRADE_3', 'Grade 3', 'primary', 5),
+    ('GRADE_4', 'Grade 4', 'primary', 6),
+    ('GRADE_5', 'Grade 5', 'primary', 7),
+    ('GRADE_6', 'Grade 6', 'primary', 8)
+ON CONFLICT (code) DO NOTHING;
+
 -- ----------------------------------------------------------------------------
 -- STEP 2: Create subjects table
 -- ----------------------------------------------------------------------------

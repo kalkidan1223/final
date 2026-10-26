@@ -37,8 +37,8 @@ router.get('/submissions', guard, ctrl.listSubmissions);
 
 // ── Notifications ──────────────────────────────────────────────────────────
 router.get('/notifications', guard, ctrl.getNotifications);
-router.patch('/notifications/:id/read', guard, ctrl.markNotificationRead);
 router.patch('/notifications/read-all', guard, ctrl.markAllNotificationsRead);
+router.patch('/notifications/:id/read', guard, ctrl.markNotificationRead);
 
 // ── Student Questions (Ask My Teacher inbox) ──────────────────────────────
 // NOTE: '/questions/summary' must be declared before '/questions/:questionId'

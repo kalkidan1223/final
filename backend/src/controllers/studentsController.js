@@ -16,8 +16,8 @@ async function getProfile(req, res, next) {
     }
 
     const result = await query(
-      `SELECT s.*, u.email, u.full_name, u.phone, ag.name as grade_level_name, 
-              ag.min_age, ag.max_age, p.user_id as parent_user_id, pu.full_name as parent_name
+       `SELECT s.*, u.email, u.full_name, u.phone, ag.name as grade_level_name,
+              p.user_id as parent_user_id, pu.full_name as parent_name
        FROM students s
        JOIN users u ON u.id = s.user_id
        JOIN grade_levels ag ON ag.id = s.grade_level_id
@@ -121,7 +121,7 @@ async function getDashboard(req, res, next) {
   }
 }
 
-// GET /api/students/courses - List available courses for student's age group
+// GET /api/students/courses - List available courses for the student's grade level
 async function listCourses(req, res, next) {
   try {
     const student = await getStudentFromUser(req.user.id);
@@ -227,7 +227,7 @@ async function getLesson(req, res, next) {
 
     const lesson = lessonResult.rows[0];
 
-    // Verify student has access (same age group)
+    // Verify student has access (same grade level)
     if (lesson.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'You do not have access to this lesson' });
     }
@@ -810,7 +810,7 @@ async function listMyChildren(req, res, next) {
 
     const result = await query(
       `SELECT s.*, u.email, u.full_name, u.phone, ag.name as grade_level_name,
-              ag.min_age, ag.max_age
+              ag.code as grade_level_code
        FROM students s
        JOIN users u ON u.id = s.user_id
        JOIN grade_levels ag ON ag.id = s.grade_level_id

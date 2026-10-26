@@ -4,7 +4,7 @@ const { getInstructorIdForUser } = require('../utils/roleHelpers');
 /**
  * Home pins
  * ----------------------------------------------------------------------------
- * The age 5-9 child home is a VIEW over content the instructor has already
+ * The child home is a VIEW over content the instructor has already
  * published. There is no separate "home page builder" an instructor has to
  * design: they publish a course as normal, then pin up to a handful of
  * activities to the home for that grade level. The child home renders whatever

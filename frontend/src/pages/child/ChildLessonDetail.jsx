@@ -15,10 +15,12 @@ export default function ChildLessonDetail() {
   const [sessionId, setSessionId] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
+  const [fidelData, setFidelData] = useState(null);
   const completionShownRef = useRef(false);
 
   useEffect(() => {
     fetchLessonJourney();
+    fetchFidelContent();
     startSession();
     
     return () => {
@@ -171,6 +173,18 @@ export default function ChildLessonDetail() {
     }
   };
 
+  const fetchFidelContent = async () => {
+    try {
+      const response = await axiosClient.get(`/child/fidel-learning/lessons/${id}`);
+      if (response.data && response.data.families && response.data.families.length > 0) {
+        setFidelData(response.data);
+      }
+    } catch (err) {
+      // It is normal for standard lessons not to have fidel families
+      console.debug('Fidel content check:', err?.response?.status || err.message);
+    }
+  };
+
   const handleResourceCompleted = () => {
     // Refresh lesson data to update progress
     fetchLessonJourney();
@@ -317,6 +331,40 @@ export default function ChildLessonDetail() {
           </div>
         </div>
       </div>
+
+      {/* ============================================ */}
+      {/* FIDEL AUDIO LEARNING BANNER (If Fidel content exists) */}
+      {/* ============================================ */}
+      {fidelData && fidelData.families && fidelData.families.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 rounded-[2.5rem] p-6 sm:p-8 text-white shadow-2xl relative overflow-hidden border-4 border-yellow-200">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center text-5xl font-black shadow-inner border-2 border-white/40 animate-bounce">
+                {fidelData.families[0].symbol}
+              </div>
+              <div className="space-y-1">
+                <span className="inline-block bg-yellow-400 text-slate-900 font-black text-xs px-3 py-1 rounded-full uppercase tracking-wider shadow">
+                  Interactive Fidel Sound Studio 🎧
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-black text-white drop-shadow">
+                  የአማርኛ ፊደላት ድምፅና ንባብ
+                </h2>
+                <p className="text-white/90 font-medium text-sm sm:text-base max-w-xl">
+                  {fidelData.families.length} Fidel {fidelData.families.length === 1 ? 'family' : 'families'} ({fidelData.families.map(f => f.symbol).join(', ')}) with all 7 pronunciation forms. Tap to listen and practice!
+                </p>
+              </div>
+            </div>
+            <Link
+              to={`/child/lessons/${id}/fidel`}
+              className="w-full md:w-auto px-8 py-4 bg-white text-orange-600 hover:text-orange-700 font-black text-lg rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all text-center flex items-center justify-center gap-3 shrink-0"
+            >
+              <span>Launch Audio Lesson</span>
+              <span className="text-2xl">🚀</span>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ============================================ */}
       {/* ASK MY TEACHER - Big, easy-to-find help button */}

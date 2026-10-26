@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axiosClient from '../../api/axiosClient';
+import AdminLayout from '../../components/AdminLayout';
 import {
   MdSchool,
   MdAdd,
@@ -27,8 +28,6 @@ export default function AdminGradeLevels() {
     level_type: 'kindergarten',
     sequence_order: '',
     description: '',
-    min_age: '',
-    max_age: '',
     is_active: true,
   });
 
@@ -40,7 +39,7 @@ export default function AdminGradeLevels() {
   async function fetchGradeLevels() {
     try {
       setLoading(true);
-      const res = await axiosClient.get('/grades');
+      const res = await axiosClient.get('/admin/grades');
       setGradeLevels(res.data.grade_levels || []);
     } catch (err) {
       console.error('Failed to fetch grade levels:', err);
@@ -66,8 +65,6 @@ export default function AdminGradeLevels() {
       level_type: 'kindergarten',
       sequence_order: '',
       description: '',
-      min_age: '',
-      max_age: '',
       is_active: true,
     });
     setShowAddModal(true);
@@ -81,8 +78,6 @@ export default function AdminGradeLevels() {
       level_type: grade.level_type,
       sequence_order: grade.sequence_order,
       description: grade.description || '',
-      min_age: grade.min_age || '',
-      max_age: grade.max_age || '',
       is_active: grade.is_active,
     });
     setShowEditModal(true);
@@ -141,8 +136,9 @@ export default function AdminGradeLevels() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
+    <AdminLayout>
+      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
@@ -189,7 +185,6 @@ export default function AdminGradeLevels() {
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Type</th>
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Sequence</th>
-                  <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Age Range</th>
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-right text-xs font-black text-slate-600 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -209,9 +204,6 @@ export default function AdminGradeLevels() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-700">{grade.sequence_order}</td>
-                    <td className="px-6 py-4 text-sm text-slate-700">
-                      {grade.min_age && grade.max_age ? `${grade.min_age}-${grade.max_age}` : 'Not set'}
-                    </td>
                     <td className="px-6 py-4">
                       <button
                         onClick={() => toggleActive(grade)}
@@ -310,29 +302,6 @@ export default function AdminGradeLevels() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Min Age (Optional)</label>
-                  <input
-                    type="number"
-                    value={formData.min_age}
-                    onChange={(e) => setFormData({ ...formData, min_age: e.target.value ? parseInt(e.target.value) : '' })}
-                    placeholder="e.g., 5"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Max Age (Optional)</label>
-                  <input
-                    type="number"
-                    value={formData.max_age}
-                    onChange={(e) => setFormData({ ...formData, max_age: e.target.value ? parseInt(e.target.value) : '' })}
-                    placeholder="e.g., 6"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
                 <textarea
@@ -389,6 +358,7 @@ export default function AdminGradeLevels() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AdminLayout>
   );
 }

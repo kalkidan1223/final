@@ -17,7 +17,7 @@ const { query, pool } = require('../config/db');
 
 /**
  * GET /api/admin/lessons
- * List all lessons with course, instructor, age-group info.
+ * List all lessons with course, instructor, and grade-level information.
  * Optional: ?course_id=  ?limit=
  */
 async function listLessons(req, res, next) {
@@ -238,7 +238,19 @@ async function listAnnouncements(req, res, next) {
  */
 async function createAnnouncement(req, res, next) {
   try {
-    const { title, message, audience = 'all', priority = 'normal', start_date, end_date } = req.body;
+    const { title, message, audience = ['all'], priority = 'normal', start_date, end_date } = req.body;
+
+    console.log('=== DEBUG ANNOUNCEMENT ===');
+    console.log('Received audience:', audience);
+    console.log('Audience type:', typeof audience);
+    console.log('Is array:', Array.isArray(audience));
+
+    // Convert array to string for storage, or handle single string
+    const audienceArray = Array.isArray(audience) ? audience : [audience];
+    const audienceString = audienceArray.join(',');
+
+    console.log('Audience array:', audienceArray);
+    console.log('Audience string:', audienceString);
 
     if (!title || title.trim().length < 3) {
       return res.status(400).json({ error: 'Title must be at least 3 characters' });
@@ -246,18 +258,23 @@ async function createAnnouncement(req, res, next) {
     if (!message || message.trim().length < 10) {
       return res.status(400).json({ error: 'Message must be at least 10 characters' });
     }
-    if (!['all', 'parents', 'students', 'instructors'].includes(audience)) {
-      return res.status(400).json({ error: 'Invalid audience' });
+    // Validate each audience value
+    const validAudiences = ['all', 'parents', 'students', 'instructors'];
+    console.log('Valid audiences:', validAudiences);
+    const invalidAudiences = audienceArray.filter(a => !validAudiences.includes(a));
+    console.log('Invalid audiences:', invalidAudiences);
+    if (invalidAudiences.length > 0) {
+      return res.status(400).json({ error: `Invalid audience(s): ${invalidAudiences.join(', ')}` });
     }
 
-    // Ensure table exists
+    // Ensure table exists and has the correct column types
     await query(`
       CREATE TABLE IF NOT EXISTS announcements (
         id          BIGSERIAL PRIMARY KEY,
         created_by  BIGINT NOT NULL REFERENCES users(id),
         title       VARCHAR(200) NOT NULL,
         message     TEXT NOT NULL,
-        audience    VARCHAR(50) NOT NULL DEFAULT 'all',
+        audience    TEXT NOT NULL DEFAULT 'all',
         priority    VARCHAR(20) NOT NULL DEFAULT 'normal',
         start_date  DATE,
         end_date    DATE,
@@ -265,51 +282,138 @@ async function createAnnouncement(req, res, next) {
       )
     `);
 
+    // Add missing columns if they don't exist
+    try {
+      // Check what columns exist
+      const existingColumns = await query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'announcements'
+      `);
+      const columnNames = existingColumns.rows.map(r => r.column_name);
+
+      console.log('Existing columns:', columnNames);
+
+      // If table has 'content' instead of 'message', rename it
+      if (columnNames.includes('content') && !columnNames.includes('message')) {
+        await query(`ALTER TABLE announcements RENAME COLUMN content TO message`);
+        console.log('Renamed content column to message');
+      }
+
+      // Add message column if missing
+      if (!columnNames.includes('message') && !columnNames.includes('content')) {
+        await query(`ALTER TABLE announcements ADD COLUMN message TEXT NOT NULL DEFAULT ''`);
+        console.log('Added message column to announcements table');
+      }
+
+      // Add audience column if missing
+      if (!columnNames.includes('audience')) {
+        await query(`ALTER TABLE announcements ADD COLUMN audience TEXT NOT NULL DEFAULT 'all'`);
+        console.log('Added audience column to announcements table');
+      }
+
+      // Add priority column if missing
+      if (!columnNames.includes('priority')) {
+        await query(`ALTER TABLE announcements ADD COLUMN priority VARCHAR(20) NOT NULL DEFAULT 'normal'`);
+        console.log('Added priority column to announcements table');
+      }
+
+      // Add start_date column if missing
+      if (!columnNames.includes('start_date')) {
+        await query(`ALTER TABLE announcements ADD COLUMN start_date DATE`);
+        console.log('Added start_date column to announcements table');
+      }
+
+      // Add end_date column if missing
+      if (!columnNames.includes('end_date')) {
+        await query(`ALTER TABLE announcements ADD COLUMN end_date DATE`);
+        console.log('Added end_date column to announcements table');
+      }
+
+      // Re-check columns after additions
+      const updatedColumns = await query(`
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_name = 'announcements'
+      `);
+
+      // Alter audience column to TEXT if it's still VARCHAR
+      const audienceCol = updatedColumns.rows.find(r => r.column_name === 'audience');
+      if (audienceCol && audienceCol.data_type === 'character varying') {
+        await query(`ALTER TABLE announcements ALTER COLUMN audience TYPE TEXT`);
+        console.log('Converted audience column to TEXT');
+      }
+    } catch (alterErr) {
+      // Column might already exist or be TEXT, ignore error
+      console.log('Column alterations:', alterErr.message);
+    }
+
     const result = await query(
-      `INSERT INTO announcements (created_by, title, message, audience, priority, start_date, end_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO announcements (created_by, title, content, message, audience, priority, start_date, end_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [req.user.id, title.trim(), message.trim(), audience, priority,
+      [req.user.id, title.trim(), message.trim(), message.trim(), audienceString, priority,
        start_date || null, end_date || null]
     );
 
     const announcement = result.rows[0];
 
-    // Also create notifications for the target audience
+    // Deliver notifications to the target audience (parents, instructors, and students/children)
     try {
-      let usersToNotify = [];
-      if (audience === 'all') {
-        const r = await query(`SELECT id FROM users WHERE is_active = TRUE`);
-        usersToNotify = r.rows.map(u => u.id);
+      // 1. Deliver to User Accounts (parents, instructors, and independent students)
+      let rolesToNotify = [];
+      if (audienceArray.includes('all')) {
+        rolesToNotify = ['parent', 'instructor', 'student'];
       } else {
         const roleMap = { parents: 'parent', students: 'student', instructors: 'instructor' };
-        const role = roleMap[audience];
-        if (role) {
-          const r = await query(`SELECT id FROM users WHERE role = $1 AND is_active = TRUE`, [role]);
-          usersToNotify = r.rows.map(u => u.id);
+        rolesToNotify = audienceArray.map(a => roleMap[a]).filter(Boolean);
+      }
+
+      if (rolesToNotify.length > 0) {
+        const userRes = await query(
+          `SELECT id FROM users WHERE role = ANY($1) AND is_active = TRUE`,
+          [rolesToNotify]
+        );
+        const usersToNotify = userRes.rows.map(u => u.id);
+        if (usersToNotify.length > 0) {
+          const batch = usersToNotify.slice(0, 500);
+          const values = batch.map((uid, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(',');
+          const params = batch.flatMap(uid => [uid, 'info', title.trim(), message.trim()]);
+          await query(
+            `INSERT INTO notifications (user_id, type, title, message) VALUES ${values}`,
+            params
+          );
         }
       }
 
-      if (usersToNotify.length > 0) {
-        // Batch insert notifications (max 500 at a time)
-        const batch = usersToNotify.slice(0, 500);
-        const values = batch.map((uid, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(',');
-        const params = batch.flatMap(uid => [uid, 'info', title.trim(), message.trim()]);
-        await query(
-          `INSERT INTO notifications (user_id, type, title, message) VALUES ${values}`,
-          params
-        );
+      // 2. Deliver to Child Notifications (for all enrolled children/students, including Category 1 parent-managed)
+      if (audienceArray.includes('all') || audienceArray.includes('students')) {
+        const studentsRes = await query(`SELECT id FROM students WHERE is_active = TRUE`);
+        const studentIds = studentsRes.rows.map(s => s.id);
+        if (studentIds.length > 0) {
+          const batch = studentIds.slice(0, 500);
+          const values = batch.map((sid, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(',');
+          const params = batch.flatMap(sid => [sid, 'general', title.trim(), message.trim()]);
+          await query(
+            `INSERT INTO child_notifications (student_id, type, title, message) VALUES ${values}`,
+            params
+          );
+        }
       }
     } catch (notifErr) {
       // Notification delivery failure should not fail the announcement creation
       console.error('Notification batch error:', notifErr.message);
     }
 
-    await query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values)
-       VALUES ($1, 'CREATE_ANNOUNCEMENT', 'announcement', $2, $3)`,
-      [req.user.id, announcement.id, { title: title.trim(), audience, priority }]
-    );
+    try {
+      await query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, new_values)
+         VALUES ($1, 'CREATE_ANNOUNCEMENT', 'announcement', $2, $3)`,
+        [req.user.id, announcement.id, JSON.stringify({ title: title.trim(), audience, priority })]
+      );
+    } catch (auditErr) {
+      console.warn('Audit log write warning:', auditErr.message);
+    }
 
     res.status(201).json({ announcement });
   } catch (err) {
@@ -328,12 +432,62 @@ async function deleteAnnouncement(req, res, next) {
       return res.status(404).json({ error: 'Announcement not found' });
     }
     await query('DELETE FROM announcements WHERE id = $1', [id]);
-    await query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values)
-       VALUES ($1, 'DELETE_ANNOUNCEMENT', 'announcement', $2, $3)`,
-      [req.user.id, id, { title: existing.rows[0].title }]
-    );
+    try {
+      await query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values)
+         VALUES ($1, 'DELETE_ANNOUNCEMENT', 'announcement', $2, $3)`,
+        [req.user.id, id, JSON.stringify({ title: existing.rows[0].title })]
+      );
+    } catch (auditErr) {
+      console.warn('Audit log write warning:', auditErr.message);
+    }
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/announcements
+ * Retrieve active announcements applicable to the currently authenticated user (child, parent, instructor, admin)
+ */
+async function listUserAnnouncements(req, res, next) {
+  try {
+    const role = req.user?.role;
+    const isChildContext = role === 'student' || Boolean(req.headers['x-child-id']);
+
+    let audienceFilter = "(a.audience = 'all' OR a.audience LIKE '%all%')";
+    if (role === 'admin') {
+      audienceFilter = "1=1";
+    } else {
+      if (isChildContext) {
+        audienceFilter += " OR a.audience LIKE '%students%'";
+      }
+      if (role === 'parent') {
+        audienceFilter += " OR a.audience LIKE '%parents%'";
+      }
+      if (role === 'instructor') {
+        audienceFilter += " OR a.audience LIKE '%instructors%'";
+      }
+    }
+
+    const result = await query(
+      `SELECT a.id, a.title, COALESCE(NULLIF(a.message, ''), a.content) AS message,
+              a.audience, a.priority, a.start_date, a.end_date, a.created_at,
+              u.full_name AS created_by_name
+       FROM announcements a
+       LEFT JOIN users u ON u.id = a.created_by
+       WHERE (a.is_active IS NULL OR a.is_active = TRUE)
+         AND (${audienceFilter})
+         AND (a.start_date IS NULL OR a.start_date <= CURRENT_DATE)
+         AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+       ORDER BY 
+         CASE a.priority WHEN 'urgent' THEN 1 WHEN 'important' THEN 2 ELSE 3 END,
+         a.created_at DESC
+       LIMIT 30`
+    );
+
+    res.json({ announcements: result.rows });
   } catch (err) {
     next(err);
   }
@@ -526,6 +680,7 @@ module.exports = {
   listAIRecommendations,
   markRecommendationViewed,
   listAnnouncements,
+  listUserAnnouncements,
   createAnnouncement,
   deleteAnnouncement,
   sendNotification,

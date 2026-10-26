@@ -1,7 +1,7 @@
 const { query } = require('../config/db');
 
 /**
- * Reference data for the early-childhood (ages 5-9) portal.
+ * Reference data for the child learning portal.
  * ----------------------------------------------------------------------------
  * These are the constants of Ethiopian schooling itself - the Ge'ez syllabary,
  * the Ethiopic numerals, the everyday words a child recognises by picture -

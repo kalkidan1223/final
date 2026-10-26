@@ -27,15 +27,30 @@ export default function ChildNotifications() {
   const markRead = async (id) => {
     try {
       await axiosClient.patch(`/child/notifications/${id}/read`);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      setNotifications(prev => {
+        const next = prev.map(n => n.id === id ? { ...n, is_read: true } : n);
+        const unread = next.filter(n => !n.is_read).length;
+        window.dispatchEvent(new CustomEvent('childNotificationsUpdated', { detail: { unreadCount: unread } }));
+        window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: { unreadCount: unread } }));
+        return next;
+      });
     } catch (e) {
       // Silent fail
     }
   };
 
   const markAllRead = async () => {
-    const unread = notifications.filter(n => !n.is_read);
-    await Promise.all(unread.map(n => markRead(n.id)));
+    try {
+      await axiosClient.patch('/child/notifications/read-all').catch(async () => {
+        const unread = notifications.filter(n => !n.is_read);
+        await Promise.all(unread.map(n => axiosClient.patch(`/child/notifications/${n.id}/read`)));
+      });
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      window.dispatchEvent(new CustomEvent('childNotificationsUpdated', { detail: { unreadCount: 0 } }));
+      window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: { unreadCount: 0 } }));
+    } catch (e) {
+      // Silent fail
+    }
   };
 
   const formatTime = (ts) => {

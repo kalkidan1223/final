@@ -61,41 +61,41 @@ async function createInstructor(req, res, next) {
       );
       const instructor = instructorResult.rows[0];
 
-      // Insert assigned age groups if provided
+      // Link the instructor to the selected grade levels.
       if (assigned_grade_levels && Array.isArray(assigned_grade_levels) && assigned_grade_levels.length > 0) {
-        for (const ageGroupId of assigned_grade_levels) {
+        for (const gradeLevelId of assigned_grade_levels) {
+          const grade = await client.query(
+            'SELECT id FROM grade_levels WHERE id = $1 AND is_active = TRUE', [gradeLevelId]
+          );
+          if (!grade.rows.length) throw Object.assign(new Error('Choose active grade levels'), { status: 400 });
           await client.query(
             `INSERT INTO instructor_grade_levels (instructor_id, grade_level_id, assigned_by)
              VALUES ($1, $2, $3)`,
-            [instructor.id, ageGroupId, req.user.id]
+            [instructor.id, gradeLevelId, req.user.id]
           );
         }
       }
 
-      // Insert assigned courses and auto-create course instances
       if (assigned_courses && Array.isArray(assigned_courses) && assigned_courses.length > 0) {
-        for (const availableCourseId of assigned_courses) {
-          // Insert the assignment
+        const courses = await client.query(
+          `SELECT id, grade_level_id FROM courses
+           WHERE id = ANY($1::bigint[]) AND grade_level_id = ANY($2::int[])`,
+          [assigned_courses, assigned_grade_levels || []]
+        );
+        if (courses.rows.length !== new Set(assigned_courses.map(String)).size) {
+          throw Object.assign(new Error('Every assigned course must belong to a selected grade level'), { status: 400 });
+        }
+        for (const course of courses.rows) {
           await client.query(
-            `INSERT INTO instructor_courses (instructor_id, available_course_id, assigned_by)
-             VALUES ($1, $2, $3)`,
-            [instructor.id, availableCourseId, req.user.id]
+            `INSERT INTO instructor_assignments (instructor_id, course_id, grade_level_id, status, assigned_by)
+             VALUES ($1, $2, $3, 'active', $4)`,
+            [instructor.id, course.id, course.grade_level_id, req.user.id]
           );
-
-          // Auto-create course instance
-          const availableCourse = await client.query(
-            'SELECT * FROM grade_level_available_courses WHERE id = $1',
-            [availableCourseId]
+          await client.query(
+            `INSERT INTO course_instructor_assignments (course_id, instructor_id, assigned_by)
+             VALUES ($1, $2, $3) ON CONFLICT (course_id, instructor_id) DO NOTHING`,
+            [course.id, instructor.id, req.user.id]
           );
-          
-          if (availableCourse.rows.length > 0) {
-            const ac = availableCourse.rows[0];
-            await client.query(
-              `INSERT INTO courses (instructor_id, grade_level_id, title, description, available_course_id, status)
-               VALUES ($1, $2, $3, $4, $5, 'draft')`,
-              [instructor.id, ac.grade_level_id, ac.course_title, ac.course_description, availableCourseId]
-            );
-          }
         }
       }
 
@@ -279,7 +279,7 @@ async function activateUser(req, res, next) {
 // STUDENTS (admin can see/manage all students)
 // =============================================================================
 
-// GET /api/admin/students  — list all students with parent & age group info
+// GET /api/admin/students  — list all students with parent & grade information
 async function listStudents(req, res, next) {
   try {
     const { is_active, limit } = req.query;
@@ -299,7 +299,7 @@ async function listStudents(req, res, next) {
        LEFT JOIN users u ON u.id = s.user_id
        JOIN parents p ON p.id = s.parent_id
        JOIN users pu ON pu.id = p.user_id
-       JOIN grade_levels ag ON ag.id = s.grade_level_id
+       LEFT JOIN grade_levels ag ON ag.id = s.grade_level_id
        ${where}
        ORDER BY s.created_at DESC
        LIMIT $${params.length + 1}`,
@@ -307,6 +307,30 @@ async function listStudents(req, res, next) {
     );
 
     res.json({ students: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/admin/students/:id/grade-level
+async function updateStudentGradeLevel(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { grade_level_id } = req.body;
+    if (!grade_level_id) return res.status(400).json({ error: 'grade_level_id is required' });
+
+    const grade = await query(
+      'SELECT id, name FROM grade_levels WHERE id = $1 AND is_active = TRUE', [grade_level_id]
+    );
+    if (!grade.rows.length) return res.status(400).json({ error: 'Choose an active grade level' });
+
+    const result = await query(
+      `UPDATE students SET grade_level_id = $1, updated_at = now()
+       WHERE id = $2 RETURNING id, grade_level_id`,
+      [grade_level_id, id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Student not found' });
+    res.json({ student: { ...result.rows[0], grade_level_name: grade.rows[0].name } });
   } catch (err) {
     next(err);
   }
@@ -349,8 +373,7 @@ async function activateStudent(req, res, next) {
       await query('UPDATE users SET is_active = TRUE WHERE id = $1', [student.user_id]);
     }
 
-    // If the age group requires account but user_id is NULL, this is inconsistent;
-    // for now we just re-activate the student record.
+    // Parent-managed student profiles can be reactivated without a student login.
     await query('UPDATE students SET is_active = TRUE, updated_at = now() WHERE id = $1', [id]);
     res.json({ student_id: id, activated: true });
   } catch (err) {
@@ -528,24 +551,23 @@ async function listInstructors(req, res, next) {
       [...params, parseInt(limit) || 200]
     );
 
-    // Fetch assigned age groups and courses for each instructor
+    // Fetch assigned grade levels and courses for each instructor
     const instructors = result.rows;
     for (const instructor of instructors) {
-      const ageGroupsRes = await query(
-        `SELECT ag.id, ag.name, ag.min_age, ag.max_age
+      const gradeLevelsRes = await query(
+        `SELECT gl.id, gl.name, gl.code, gl.sequence_order
          FROM instructor_grade_levels iag
-         JOIN grade_levels ag ON ag.id = iag.grade_level_id
+         JOIN grade_levels gl ON gl.id = iag.grade_level_id
          WHERE iag.instructor_id = $1`,
         [instructor.id]
       );
-      instructor.assigned_grade_levels = ageGroupsRes.rows;
+      instructor.assigned_grade_levels = gradeLevelsRes.rows;
 
       const coursesRes = await query(
-        `SELECT agac.id, agac.course_title AS title, agac.course_description AS description, 
-                agac.is_active AS status, agac.grade_level_id
-         FROM instructor_courses ic
-         JOIN grade_level_available_courses agac ON agac.id = ic.available_course_id
-         WHERE ic.instructor_id = $1`,
+        `SELECT DISTINCT c.id, c.title, c.description, c.status, c.grade_level_id
+         FROM instructor_assignments ia
+         JOIN courses c ON c.id = ia.course_id
+         WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
         [instructor.id]
       );
       instructor.assigned_courses = coursesRes.rows;
@@ -595,13 +617,16 @@ async function activateInstructor(req, res, next) {
   }
 }
 
-// PATCH /api/admin/instructors/:id/assignments — update instructor age group and course assignments
+// PATCH /api/admin/instructors/:id/assignments — update instructor grade and course assignments
 async function updateInstructorAssignments(req, res, next) {
   try {
     const { id } = req.params;
     const { assigned_grade_levels, assigned_courses } = req.body;
 
-    // Verify instructor exists
+    if (!Array.isArray(assigned_grade_levels) || !Array.isArray(assigned_courses)) {
+      return res.status(400).json({ error: 'assigned_grade_levels and assigned_courses must be arrays' });
+    }
+
     const instructorResult = await query('SELECT id FROM instructors WHERE id = $1', [id]);
     if (instructorResult.rows.length === 0) {
       return res.status(404).json({ error: 'Instructor not found' });
@@ -611,86 +636,78 @@ async function updateInstructorAssignments(req, res, next) {
     try {
       await client.query('BEGIN');
 
-      // Delete existing age group assignments
       await client.query('DELETE FROM instructor_grade_levels WHERE instructor_id = $1', [id]);
-
-      // Insert new age group assignments
-      if (assigned_grade_levels && Array.isArray(assigned_grade_levels) && assigned_grade_levels.length > 0) {
-        for (const ageGroupId of assigned_grade_levels) {
-          await client.query(
-            `INSERT INTO instructor_grade_levels (instructor_id, grade_level_id, assigned_by)
-             VALUES ($1, $2, $3)`,
-            [id, ageGroupId, req.user.id]
-          );
+      for (const gradeLevelId of assigned_grade_levels) {
+        const validGrade = await client.query(
+          'SELECT id FROM grade_levels WHERE id = $1 AND is_active = TRUE', [gradeLevelId]
+        );
+        if (!validGrade.rows.length) {
+          const error = new Error(`Grade level ${gradeLevelId} is not active`);
+          error.status = 400;
+          throw error;
         }
+        await client.query(
+          `INSERT INTO instructor_grade_levels (instructor_id, grade_level_id, assigned_by)
+           VALUES ($1, $2, $3)`,
+          [id, gradeLevelId, req.user.id]
+        );
       }
 
-      // Delete existing course assignments
-      await client.query('DELETE FROM instructor_courses WHERE instructor_id = $1', [id]);
+      const allowedCourses = assigned_courses.length
+        ? await client.query(
+          `SELECT id, grade_level_id FROM courses
+           WHERE id = ANY($1::bigint[]) AND grade_level_id = ANY($2::int[])`,
+          [assigned_courses, assigned_grade_levels]
+        )
+        : { rows: [] };
 
-      // Insert new course assignments and auto-create course instances
-      if (assigned_courses && Array.isArray(assigned_courses) && assigned_courses.length > 0) {
-        for (const availableCourseId of assigned_courses) {
-          // Insert the assignment
+      if (allowedCourses.rows.length !== new Set(assigned_courses.map(String)).size) {
+        const error = new Error('Every assigned course must exist and belong to one of the selected grade levels');
+        error.status = 400;
+        throw error;
+      }
+
+      await client.query(
+        `UPDATE instructor_assignments SET status = 'inactive', updated_at = now()
+         WHERE instructor_id = $1 AND status = 'active'`, [id]
+      );
+      await client.query(
+        `DELETE FROM course_instructor_assignments
+         WHERE instructor_id = $1 AND NOT (course_id = ANY($2::bigint[]))`,
+        [id, assigned_courses]
+      );
+      for (const course of allowedCourses.rows) {
+        const previous = await client.query(
+          'SELECT id FROM instructor_assignments WHERE instructor_id = $1 AND course_id = $2 LIMIT 1',
+          [id, course.id]
+        );
+        if (previous.rows.length) {
           await client.query(
-            `INSERT INTO instructor_courses (instructor_id, available_course_id, assigned_by)
-             VALUES ($1, $2, $3)`,
-            [id, availableCourseId, req.user.id]
+            `UPDATE instructor_assignments
+             SET grade_level_id = $1, status = 'active', assigned_by = $2, updated_at = now()
+             WHERE id = $3`,
+            [course.grade_level_id, req.user.id, previous.rows[0].id]
           );
-
-          // Check if a course instance already exists for this instructor and available course
-          const existingCourse = await client.query(
-            'SELECT id, grade_level_id FROM courses WHERE instructor_id = $1 AND available_course_id = $2 LIMIT 1',
-            [id, availableCourseId]
+        } else {
+          await client.query(
+            `INSERT INTO instructor_assignments (instructor_id, course_id, grade_level_id, status, assigned_by)
+             VALUES ($1, $2, $3, 'active', $4)`,
+            [id, course.id, course.grade_level_id, req.user.id]
           );
-
-          let courseId = existingCourse.rows[0]?.id;
-          let ageGroupId = existingCourse.rows[0]?.grade_level_id;
-
-          // If not, auto-create the course instance
-          if (!courseId) {
-            const availableCourse = await client.query(
-              'SELECT * FROM grade_level_available_courses WHERE id = $1',
-              [availableCourseId]
-            );
-            
-            if (availableCourse.rows.length > 0) {
-              const ac = availableCourse.rows[0];
-              const createdCourse = await client.query(
-                `INSERT INTO courses (instructor_id, grade_level_id, title, description, available_course_id, status)
-                 VALUES ($1, $2, $3, $4, $5, 'draft')
-                 RETURNING id, grade_level_id`,
-                [id, ac.grade_level_id, ac.course_title, ac.course_description, availableCourseId]
-              );
-              courseId = createdCourse.rows[0].id;
-              ageGroupId = createdCourse.rows[0].grade_level_id;
-            }
-          }
-
-          // Sync the instructor portal teaching-workspace assignment so the assigned
-          // instructor can actually see this course under "My Assignments".
-          if (courseId) {
-            const existingAssignment = await client.query(
-              'SELECT id FROM instructor_assignments WHERE instructor_id = $1 AND course_id = $2 LIMIT 1',
-              [id, courseId]
-            );
-            if (existingAssignment.rows.length === 0) {
-              await client.query(
-                `INSERT INTO instructor_assignments (instructor_id, course_id, grade_level_id, status, assigned_by)
-                 VALUES ($1, $2, $3, 'active', $4)`,
-                [id, courseId, ageGroupId, req.user.id]
-              );
-            }
-          }
         }
+        await client.query(
+          `INSERT INTO course_instructor_assignments (course_id, instructor_id, assigned_by)
+           VALUES ($1, $2, $3) ON CONFLICT (course_id, instructor_id) DO NOTHING`,
+          [course.id, id, req.user.id]
+        );
       }
 
       await client.query('COMMIT');
       res.json({ 
         success: true, 
         message: 'Instructor assignments updated successfully',
-        assigned_grade_levels: assigned_grade_levels || [],
-        assigned_courses: assigned_courses || []
+        assigned_grade_levels,
+        assigned_courses
       });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -707,7 +724,7 @@ async function updateInstructorAssignments(req, res, next) {
 // COURSES (admin can manage all courses)
 // =============================================================================
 
-// GET /api/admin/courses  — list all courses with instructor & age group info
+// GET /api/admin/courses  — list all courses with instructor & grade information
 async function listCourses(req, res, next) {
   try {
     const { status, instructor_id, grade_level_id, search, limit } = req.query;
@@ -733,11 +750,12 @@ async function listCourses(req, res, next) {
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
-      `SELECT c.*, u.full_name AS instructor_name, ag.name AS grade_level_name
+      `SELECT c.*, u.full_name AS instructor_name, ag.name AS grade_level_name, s.name AS subject_name, s.code AS subject_code
        FROM courses c
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        JOIN grade_levels ag ON ag.id = c.grade_level_id
+       LEFT JOIN subjects s ON s.id = c.subject_id
        ${where}
        ORDER BY c.created_at DESC
        LIMIT $${params.length + 1}`,
@@ -792,84 +810,35 @@ async function deleteCourse(req, res, next) {
   }
 }
 
-// =============================================================================
-// AGE GROUPS (admin CRUD)
-// =============================================================================
-
-// POST /api/admin/age-groups  — create a new age group
-async function createAgeGroup(req, res, next) {
+// PATCH /api/admin/courses/:id  — admin can update course details (subject_id, etc.)
+async function updateCourse(req, res, next) {
   try {
-    const { name, min_age, max_age, requires_account } = req.body;
+    const { id } = req.params;
+    const { subject_id } = req.body;
 
-    if (!name || min_age == null || max_age == null) {
-      return res.status(400).json({ error: 'name, min_age and max_age are required' });
+    const courseResult = await query('SELECT * FROM courses WHERE id = $1', [id]);
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
     }
-    if (min_age > max_age) {
-      return res.status(400).json({ error: 'min_age cannot be greater than max_age' });
+
+    // If subject_id is provided, validate it exists
+    if (subject_id !== undefined && subject_id !== null) {
+      const subjectCheck = await query('SELECT id FROM subjects WHERE id = $1', [subject_id]);
+      if (subjectCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Subject not found' });
+      }
     }
 
     const result = await query(
-      `INSERT INTO grade_levels (name, min_age, max_age, requires_account)
-       VALUES ($1, $2, $3, $4)
+      `UPDATE courses
+       SET subject_id = COALESCE($1, subject_id),
+           updated_at = now()
+       WHERE id = $2
        RETURNING *`,
-      [name, min_age, max_age, requires_account ?? (min_age >= 11)]
+      [subject_id, id]
     );
 
-    res.status(201).json({ grade_level: result.rows[0] });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// PUT /api/admin/age-groups/:id  — update an age group
-async function updateAgeGroup(req, res, next) {
-  try {
-    const { id } = req.params;
-    const { name, min_age, max_age, requires_account } = req.body;
-
-    const existing = await query('SELECT * FROM grade_levels WHERE id = $1', [id]);
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Age group not found' });
-    }
-
-    const updates = [];
-    const values = [];
-    let idx = 0;
-
-    if (name !== undefined) { idx++; values.push(name); updates.push(`name = $${idx}`); }
-    if (min_age !== undefined) { idx++; values.push(min_age); updates.push(`min_age = $${idx}`); }
-    if (max_age !== undefined) { idx++; values.push(max_age); updates.push(`max_age = $${idx}`); }
-    if (requires_account !== undefined) { idx++; values.push(requires_account); updates.push(`requires_account = $${idx}`); }
-
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    idx++; values.push(id);
-    updates.push(`updated_at = now()`);
-
-    const result = await query(
-      `UPDATE grade_levels SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
-      values
-    );
-
-    res.json({ grade_level: result.rows[0] });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// DELETE /api/admin/age-groups/:id  — delete an age group
-async function deleteAgeGroup(req, res, next) {
-  try {
-    const { id } = req.params;
-    const existing = await query('SELECT * FROM grade_levels WHERE id = $1', [id]);
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'Age group not found' });
-    }
-
-    await query('DELETE FROM grade_levels WHERE id = $1', [id]);
-    res.status(204).send();
+    res.json({ course: result.rows[0] });
   } catch (err) {
     next(err);
   }
@@ -1099,6 +1068,7 @@ module.exports = {
   deactivateUser,
   activateUser,
   listStudents,
+  updateStudentGradeLevel,
   deactivateStudent,
   activateStudent,
   listParents,
@@ -1110,10 +1080,8 @@ module.exports = {
   updateInstructorAssignments,
   listCourses,
   updateCourseStatus,
+  updateCourse,
   deleteCourse,
-  createAgeGroup,
-  updateAgeGroup,
-  deleteAgeGroup,
   listReports,
   listAllNotifications,
   markNotificationRead,

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import {
   MdNotifications,
@@ -9,9 +10,18 @@ import {
 } from 'react-icons/md';
 
 export default function ParentNotifications() {
+  const outlet = useOutletContext();
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [filter, setFilter] = useState('all'); // all, unread
+
+  const syncUnreadCount = (count) => {
+    if (typeof outlet?.setUnreadNotifications === 'function') {
+      outlet.setUnreadNotifications(count);
+    }
+    window.dispatchEvent(new CustomEvent('parentNotificationsUpdated', { detail: { unreadCount: count } }));
+    window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: { unreadCount: count } }));
+  };
 
   useEffect(() => {
     fetchNotifications();
@@ -21,7 +31,13 @@ export default function ParentNotifications() {
     try {
       setLoading(true);
       const res = await axiosClient.get('/parent/notifications');
-      setNotifications(res.data.notifications || []);
+      const list = res.data.notifications || [];
+      const unread = typeof res.data.unread_count === 'number'
+        ? res.data.unread_count
+        : list.filter((n) => !n.is_read).length;
+
+      setNotifications(list);
+      syncUnreadCount(unread);
     } catch (err) {
       console.error('Failed to load notifications:', err);
     } finally {
@@ -31,10 +47,15 @@ export default function ParentNotifications() {
 
   const handleMarkAsRead = async (id) => {
     try {
-      await axiosClient.patch(`/parent/notifications/${id}/read`);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-      );
+      const res = await axiosClient.patch(`/parent/notifications/${id}/read`);
+      setNotifications((prev) => {
+        const nextList = prev.map((n) => (n.id === id ? { ...n, is_read: true } : n));
+        const unread = typeof res.data?.unread_count === 'number'
+          ? res.data.unread_count
+          : nextList.filter((n) => !n.is_read).length;
+        syncUnreadCount(unread);
+        return nextList;
+      });
     } catch (err) {
       console.error('Failed to mark read:', err);
     }
@@ -42,9 +63,12 @@ export default function ParentNotifications() {
 
   const handleMarkAllAsRead = async () => {
     try {
-      const unread = notifications.filter((n) => !n.is_read);
-      await Promise.all(unread.map((n) => axiosClient.patch(`/parent/notifications/${n.id}/read`)));
+      await axiosClient.patch('/parent/notifications/read-all').catch(async () => {
+        const unread = notifications.filter((n) => !n.is_read);
+        await Promise.all(unread.map((n) => axiosClient.patch(`/parent/notifications/${n.id}/read`)));
+      });
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      syncUnreadCount(0);
     } catch (err) {
       console.error('Failed to mark all as read:', err);
     }

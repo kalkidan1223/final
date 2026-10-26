@@ -2,90 +2,37 @@ import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useVoiceGuide from '../../hooks/useVoiceGuide';
 import useReferenceKit from '../../hooks/useReferenceKit';
-import { pickPraise, timeOfDayGreeting } from '../../utils/ethiopianLearning';
+import { timeOfDayGreeting } from '../../utils/ethiopianLearning';
 import { tileMetaFor, wordsFromPins } from '../../utils/practiceContent';
 
-/**
- * EthiopianChildHome
- * ------------------
- * The landing screen for children aged 5-9.
- *
- * Design rules, driven by how Ethiopian primary classrooms actually work:
- *
- *  1. ONE decision per screen. The instructor's assigned lesson is the only
- *     highlighted action; everything else is quiet. A child who cannot read
- *     must still be able to start learning by touching one thing.
- *
- *  2. Every label is spoken. Amharic first, with the pictogram carrying the
- *     meaning so a child who cannot read Amharic fluently still succeeds.
- *
- *  3. NO HARDCODED CURRICULUM. The tiles, the words and the praise are all
- *     instructor-published. If a teacher has not pinned anything, the screen
- *     says so plainly instead of inventing content. See src/utils/
- *     practiceContent.js for the contract.
- *
- *  4. Feedback is warm and immediate, never numeric. No star formulas,
- *     no streaks for a six-year-old who missed a day.
- */
-
+/** A single, calm learning home shared by every child account. */
 export default function EthiopianChildHome({ data, loading, error, onRetry }) {
   const voice = useVoiceGuide({ lang: 'am' });
   const { reference } = useReferenceKit();
-
   const child = data?.child || {};
   const stats = data?.stats || {};
-  const continueLearning = data?.continue_learning;
+  const lesson = data?.continue_learning;
   const courses = data?.courses || [];
-  const todaysActivities = data?.todays_activities || [];
-  const achievements = data?.achievements || [];
   const homePins = data?.home_pins || [];
-  const encouragement = data?.encouragement || [];
-
+  const announcements = data?.announcements || [];
   const greeting = useMemo(() => timeOfDayGreeting(), []);
-  const praise = useMemo(
-    () => pickPraise(encouragement, stats.completed_activities || 0),
-    [encouragement, stats.completed_activities]
-  );
+  const words = useMemo(() => wordsFromPins(homePins, reference, 4), [homePins, reference]);
+  const firstName = child.full_name?.split(' ')[0] || 'friend';
 
-  // The words on screen are the words this child's teacher set, not a list
-  // baked into the app.
-  const words = useMemo(
-    () => wordsFromPins(homePins, reference, 8),
-    [homePins, reference]
-  );
-
-  // Greet the child once, in Amharic, as soon as their name is known.
   useEffect(() => {
-    if (!child.full_name) return;
-    voice.speakOnce(
-      `home-greet-${child.full_name}`,
-      [
-        { text: `${greeting.amharic}`, lang: 'am' },
-        { text: child.full_name, lang: 'am' },
-        {
-          text: continueLearning
-            ? 'የዛሬ ትምህርትህ ዝግጁ ነው። እንጀምር።'
-            : 'ተጨዋታ ተጫን።',
-          lang: 'am',
-        },
-      ]
-    );
+    if (child.full_name) voice.speakOnce(`home-greet-${child.full_name}`, [
+      { text: greeting.amharic, lang: 'am' },
+      { text: child.full_name, lang: 'am' },
+    ]);
+    // Speak once when a new child profile is loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [child.full_name]);
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-5">
-        <div className="text-7xl animate-bounce">🌱</div>
-        <p className="text-xl sm:text-2xl font-black text-emerald-800 animate-pulse text-center px-6">
-          መጽሐፍህ እየተከፈተ ነው...
-        </p>
-        <button
-          onClick={() => voice.speak('መጽሐፍህ እየተከፈተ ነው። ጠብቅ ትንሽ።')}
-          className="px-6 py-3 bg-emerald-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition text-sm"
-        >
-          🔊 አስማም
-        </button>
+      <div className="flex min-h-[55vh] flex-col items-center justify-center gap-4 text-center">
+        <span className="text-6xl animate-bounce" aria-hidden="true">🌱</span>
+        <p className="text-lg font-extrabold text-emerald-800">Getting your learning space ready…</p>
       </div>
     );
   }
@@ -93,303 +40,128 @@ export default function EthiopianChildHome({ data, loading, error, onRetry }) {
   if (error) {
     const isAuthError = error === 'Please log in to continue';
     return (
-      <div className="bg-rose-50 border-4 border-rose-200 rounded-[2rem] p-8 text-center max-w-lg mx-auto my-12 space-y-4">
-        <span className="text-6xl block">{isAuthError ? '�' : '�😔'}</span>
-        <h3 className="text-xl font-black text-rose-900">{isAuthError ? 'እባና ተግባር / Please Log In' : 'ለምንስ ትንሽ አልቻልንም'}</h3>
-        <p className="text-sm font-bold text-rose-700">{error}</p>
+      <div className="mx-auto my-12 max-w-lg rounded-3xl border border-rose-200 bg-white p-8 text-center shadow-sm">
+        <span className="text-5xl" aria-hidden="true">{isAuthError ? '🔒' : '🌤️'}</span>
+        <h1 className="mt-3 text-xl font-black text-slate-900">{isAuthError ? 'Please log in' : 'Let’s try that again'}</h1>
+        <p className="mt-2 text-sm text-slate-600">{error}</p>
         {isAuthError ? (
-          <Link
-            to="/login"
-            className="px-8 py-3.5 bg-green-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition text-base inline-block"
-          >
-            ወደ መግቢያ / Go to Login →
-          </Link>
+          <Link to="/login" className="mt-5 inline-flex rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">Go to login</Link>
         ) : (
-          <button
-            onClick={() => {
-              voice.speak('ለምንስ ትንሽ አልቻልንም። እንደገና ሞክር።');
-              onRetry();
-            }}
-            className="px-8 py-3.5 bg-rose-600 text-white font-black rounded-2xl shadow-lg active:scale-95 transition text-base"
-          >
-            🔄 እንደገና ሞክር
-          </button>
+          <button onClick={onRetry} className="mt-5 rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white transition hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">Try again</button>
         )}
       </div>
     );
   }
 
-  const fallbackCourse = courses[0] || null;
-  const doneToday = (stats.completed_activities || 0) + (stats.completed_quizzes || 0);
-
   return (
-    <div className="space-y-7 pb-14 animate-fade-in">
-      {/* ── Voice toggle: parents and children can mute the whole portal ── */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => {
-            const next = !voice.enabled;
-            voice.setVoiceEnabled(next);
-            if (next) voice.speak('ድምፅ ተከፍቷል።');
-          }}
-          aria-pressed={voice.enabled}
-          className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl font-black text-sm shadow-sm border-2 transition active:scale-95 ${
-            voice.enabled
-              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-              : 'bg-slate-100 text-slate-600 border-slate-300'
-          }`}
-        >
-          <span className="text-lg">{voice.enabled ? '🔊' : '🔇'}</span>
-          {voice.enabled ? 'ድምፅ በርተት' : 'ድምፅ ዝግዝ'}
-        </button>
-      </div>
-
-      {/* ── Greeting: name, time of day, one line of Amharic - More Colorful & Playful ── */}
-      <header className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 p-6 sm:p-10 text-white shadow-2xl border-4 border-white/20">
-        <div className="absolute -top-8 -right-6 text-[10rem] opacity-10 select-none pointer-events-none animate-float">
-          🇪🇹
-        </div>
-        <div className="absolute bottom-0 right-32 text-7xl opacity-20 select-none pointer-events-none animate-float-slow">
-          🌿
-        </div>
-        <div className="absolute top-1/3 left-10 text-6xl opacity-15 select-none pointer-events-none animate-float">⭐</div>
-        <div className="absolute bottom-10 left-1/4 text-5xl opacity-10 select-none pointer-events-none animate-float-slow">✨</div>
-
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-6">
-          <div className="w-24 h-24 shrink-0 rounded-3xl bg-white/30 backdrop-blur-md border-4 border-white/50 flex items-center justify-center text-6xl shadow-2xl animate-bounce">
-            {greeting.emoji}
+    <div className="mx-auto max-w-5xl space-y-6 pb-10 text-slate-800">
+      <header className="flex items-center gap-4 rounded-3xl border border-emerald-100 bg-white px-5 py-4 shadow-sm sm:px-7">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-3xl" aria-hidden="true">{greeting.emoji || '🌞'}</div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-emerald-700">{greeting.amharic}</p>
+            <h1 className="truncate text-2xl font-black tracking-tight text-slate-900">Hi, {firstName}!</h1>
+            <p className="text-sm text-slate-500">Ready for a little learning today?</p>
           </div>
-
-          <div className="space-y-2 flex-1">
-            <h1 className="text-3xl sm:text-5xl font-black leading-tight drop-shadow-lg">
-              {greeting.amharic} {child.full_name || 'ትንሹ ኮከብ'}!
-            </h1>
-            <p className="text-base sm:text-lg font-bold text-yellow-100 leading-relaxed">
-              እንኳን ወደ ብራና የህፃናት መማሪያ በደህና መጣህ!
-            </p>
-          </div>
-
-          <button
-            onClick={() =>
-              voice.speak([
-                { text: greeting.amharic, lang: 'am' },
-                { text: child.full_name || 'ትንሹ ኮከብ', lang: 'am' },
-                {
-                  text: 'እንኳን ወደ ብራና የህፃናት መማሪያ በደህና መጣህ!',
-                  lang: 'am',
-                },
-              ])
-            }
-            className="shrink-0 w-full sm:w-auto px-8 py-5 bg-white/30 backdrop-blur-md border-4 border-white/50 text-white font-black rounded-3xl shadow-2xl active:scale-95 transition text-lg flex items-center justify-center gap-3 hover:bg-white/40"
-          >
-            <span className="text-2xl">{voice.isSpeaking ? '🔊' : '🔈'}</span>
-            አስማም
-          </button>
         </div>
       </header>
 
-      {/* ── THE ONE BIG THING: what the teacher set for today - More Colorful & Playful ── */}
-      {continueLearning ? (
-        <section>
-          <PrimaryLessonCard
-            lesson={continueLearning}
-            onSpeak={() =>
-              voice.speak([
-                { text: 'የዛሬ ትምህርትህ', lang: 'am' },
-                { text: continueLearning.title, lang: 'am' },
-                { text: 'አሁን እንጀምር።', lang: 'am' },
-              ])
-            }
-          />
-        </section>
-      ) : fallbackCourse ? (
-        <section>
-          <Link
-            to={`/child/courses/${fallbackCourse.id}`}
-            className="block rounded-[2.5rem] bg-gradient-to-br from-cyan-500 via-blue-600 to-purple-600 p-6 sm:p-10 text-white shadow-2xl active:scale-[0.99] transition border-4 border-white/20"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-              <div className="space-y-2">
-                <span className="inline-block bg-white/30 backdrop-blur-md px-4 py-2 rounded-full text-sm font-black uppercase tracking-wide shadow-lg border-2 border-white/50">
-                  👨‍🏫 የመምህርህ ትምህርት
+      {/* School Announcements */}
+      {announcements.length > 0 && (
+        <section aria-label="School Announcements" className="space-y-3">
+          {announcements.map((ann) => (
+            <div
+              key={ann.id}
+              className={`rounded-3xl border p-5 sm:p-6 shadow-sm transition ${
+                ann.priority === 'urgent'
+                  ? 'bg-rose-50/90 border-rose-200'
+                  : ann.priority === 'important'
+                  ? 'bg-amber-50/90 border-amber-200'
+                  : 'bg-emerald-50/90 border-emerald-200'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm text-2xl" aria-hidden="true">
+                  📢
                 </span>
-                <h2 className="text-2xl sm:text-4xl font-black drop-shadow-lg">{fallbackCourse.title}</h2>
-                <p className="text-base font-bold text-cyan-100">
-                  መምህር: {fallbackCourse.instructor_name || 'የክፍሉ መምህር'}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className={`text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                      ann.priority === 'urgent'
+                        ? 'bg-rose-200 text-rose-800'
+                        : ann.priority === 'important'
+                        ? 'bg-amber-200 text-amber-800'
+                        : 'bg-emerald-200 text-emerald-800'
+                    }`}>
+                      {ann.priority === 'urgent' ? 'Urgent Notice' : ann.priority === 'important' ? 'Important' : 'School Announcement'}
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">
+                      {new Date(ann.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
+                    {ann.title}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                    {ann.message || ann.content}
+                  </p>
+                </div>
               </div>
-              <span className="shrink-0 px-8 py-5 bg-white/30 backdrop-blur-md border-4 border-white/50 text-white font-black rounded-3xl shadow-2xl text-xl flex items-center gap-3 hover:bg-white/40 transition">
-                <span className="text-3xl animate-bounce">▶</span> ጀምር
-              </span>
             </div>
-          </Link>
+          ))}
         </section>
+      )}
+
+      {lesson ? (
+        <PrimaryLessonCard lesson={lesson} />
+      ) : courses[0] ? (
+        <Link to={`/child/courses/${courses[0].id}`} className="group flex flex-col gap-6 overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 to-teal-600 p-6 text-white shadow-lg transition hover:shadow-xl sm:flex-row sm:items-center sm:justify-between sm:p-8">
+          <div>
+            <span className="text-sm font-bold uppercase tracking-wider text-emerald-100">Your learning path</span>
+            <h2 className="mt-2 text-2xl font-black sm:text-3xl">{courses[0].title}</h2>
+            <p className="mt-1 text-emerald-50">Pick up where you left off.</p>
+          </div>
+          <span className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-lg font-black text-emerald-800 shadow-sm transition group-hover:translate-y-[-2px]">Start learning <span aria-hidden="true">→</span></span>
+        </Link>
       ) : (
-        <section className="rounded-[2.5rem] bg-gradient-to-br from-purple-100 to-pink-100 border-4 border-dashed border-purple-300 p-10 text-center space-y-4 shadow-xl">
-          <span className="text-7xl block animate-bounce">📚</span>
-          <h2 className="text-xl sm:text-2xl font-black text-purple-800">
-            መምህርህ አስደሳች ትምህርት እየዘጋጀ ነው
-          </h2>
-          <p className="text-base font-bold text-purple-600">
-            ትንሽ ቆይተህ ተጫን። በዚህ ውስጥ ልለት ተጫን!
-          </p>
+        <section className="rounded-3xl border border-dashed border-emerald-200 bg-emerald-50/70 px-6 py-10 text-center">
+          <span className="text-5xl" aria-hidden="true">📚</span>
+          <h2 className="mt-3 text-xl font-black text-slate-900">Your learning path is getting ready</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">Your teacher will add a course here soon. Come back to start learning together.</p>
         </section>
       )}
 
-      {/* ── Today's small checklist: a tick per thing, no points ── */}
-      {todaysActivities.length > 0 && (
-        <section className="rounded-[2rem] bg-white border-2 border-emerald-100 p-5 sm:p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg sm:text-xl font-black text-slate-800 flex items-center gap-2">
-              <span>✅</span> የዛሬ ሥራዎች (Today)
-            </h2>
-            <button
-              onClick={() =>
-                voice.speak(`የዛሬ ${todaysActivities.length} ሥራ አለህ። በጣም ጥሩ!`)
-              }
-              className="text-emerald-700 text-sm font-black hover:underline"
-            >
-              🔊 አስማም
-            </button>
-          </div>
-          <ul className="space-y-2.5">
-            {todaysActivities.slice(0, 4).map((item) => (
-              <li
-                key={item.id ?? item.activity_id}
-                className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50/70"
-              >
-                <span className="text-2xl">{item.icon || '🎯'}</span>
-                <span className="font-black text-slate-800 text-sm sm:text-base truncate">
-                  {item.title || 'ሥራ'}
-                </span>
-                {item.completed ? (
-                  <span className="ml-auto text-emerald-600 font-black text-sm">ተጠናቅቋል</span>
-                ) : (
-                  <span className="ml-auto text-amber-600 font-black text-sm">ቀርቷል</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* ── What the instructor pinned to this home. Nothing else. ── */}
-      {homePins.length > 0 ? (
-        <section>
-          <div className="flex items-end justify-between mb-4">
-            <div>
-              <h2 className="text-lg sm:text-2xl font-black text-slate-800 flex items-center gap-2">
-                <span>🎮</span> በመምህርህ የተመረጡ
-              </h2>
-              <p className="text-xs font-bold text-slate-500">
-                ሥራዎች — ከሥራዎች ውጭ በራስህ የሚሆኑ ጨዋታዎች
-              </p>
-            </div>
-            <button
-              onClick={() => voice.speak('በመምህርህ የተመረጡ ሥራዎች።')}
-              className="text-slate-500 text-sm font-black hover:underline shrink-0"
-            >
-              🔊 አስማም
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {homePins.map((pin, index) => (
-              <PracticeTile key={pin.pin_id} pin={pin} index={index} />
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="rounded-[2rem] bg-white border-4 border-dashed border-slate-200 p-8 text-center space-y-3">
-          <span className="text-6xl block">⏳</span>
-          <h2 className="text-lg sm:text-xl font-black text-slate-800">
-            መምህርህ ጨዋታ እየመረጠ ነው
-          </h2>
-          <p className="text-sm font-bold text-slate-500 max-w-md mx-auto">
-            በዚህ ውስጥ ስለሚጨዋቱ ምን መምህርህ እንደመረጠ ይገኛል።
-          </p>
-          <p className="text-xs font-bold text-slate-400">
-            👨‍🏫 መምህሮች በትምህርት ገጽ ላይ «Child Home» ላይ መምረጥ ይችላሉ።
-          </p>
-        </section>
-      )}
-
-      {/* ── Warm feedback, not a scoreboard ── */}
-      <section className="rounded-[2rem] bg-gradient-to-r from-amber-100 via-yellow-50 to-emerald-50 border-2 border-amber-200 p-5 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="text-6xl">{praise.emoji || '🌟'}</div>
-          <div className="flex-1">
-            <h2 className="text-xl sm:text-2xl font-black text-amber-950">{praise.text}</h2>
-            <p className="text-sm font-bold text-amber-800">
-              እስከ አሁን {doneToday} ሥራ ፈጽሟል።
-              {doneToday === 0
-                ? ' ዛሬ መጀመሪያዎን አስጀምር!'
-                : ' ቀጥልህ ጥሩ ሥራ ነህ!'}
-            </p>
-          </div>
-          <button
-            onClick={() => voice.speak([{ text: praise.text, lang: 'am' }])}
-            className="shrink-0 px-6 py-3.5 bg-amber-500 text-white font-black rounded-2xl shadow-lg active:scale-95 transition flex items-center justify-center gap-2"
-          >
-            <span className="text-xl">🔊</span>
-            አስማም
-          </button>
-        </div>
+      <section aria-label="Your progress" className="grid grid-cols-3 divide-x divide-slate-100 rounded-3xl border border-slate-100 bg-white py-4 shadow-sm">
+        <ProgressItem icon="📘" value={stats.total_courses || courses.length} label="Courses" />
+        <ProgressItem icon="✅" value={(stats.completed_activities || 0) + (stats.completed_quizzes || 0)} label="Activities done" />
+        <ProgressItem icon="🔥" value={data?.learning_streak || 0} label="Day streak" />
       </section>
 
-      {/* ── Badges: quiet, tucked away, so they do not compete for attention ── */}
-      {achievements.length > 0 && (
-        <section className="rounded-[2rem] bg-white border-2 border-slate-100 p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <span>🏅</span> የእርስዎ ሜራጫዎች
-            </h2>
-            <Link
-              to="/child/achievements"
-              className="text-xs font-black text-sky-700 hover:underline"
-            >
-              ሁሉንም እይ ➔
-            </Link>
+      {homePins.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Picked for you</p>
+              <h2 className="text-xl font-black text-slate-900">A little extra practice</h2>
+            </div>
+            {homePins.length > 3 && <Link to="/child/activities" className="text-sm font-bold text-emerald-800 underline-offset-4 hover:underline">See all</Link>}
           </div>
-          <div className="flex gap-3 flex-wrap">
-            {achievements.slice(0, 5).map((badge) => (
-              <div
-                key={badge.id ?? badge.code}
-                className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-amber-50 border border-amber-200"
-              >
-                <span className="text-2xl">{badge.icon || '🏅'}</span>
-                <span className="text-xs font-black text-amber-900">{badge.name}</span>
-              </div>
-            ))}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {homePins.slice(0, 3).map((pin, index) => <PracticeTile key={pin.pin_id} pin={pin} index={index} />)}
           </div>
         </section>
       )}
 
-      {/* ── The words the teacher set this week ── */}
       {words.length > 0 && (
-        <section className="rounded-[2rem] bg-white border-2 border-slate-100 p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <span>💬</span> የቀንን ቃላት
-            </h2>
-            <span className="text-xs font-bold text-slate-400">
-              በመምህርህ ትምህርት
-            </span>
+        <section className="flex flex-col gap-3 rounded-2xl bg-amber-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Say it out loud</p>
+            <p className="font-bold text-slate-800">Practice a new word</p>
           </div>
-          <div className="flex flex-wrap gap-2.5">
-            {words.map((item) => (
-              <button
-                key={item.word}
-                onClick={() => voice.speak([{ text: item.word, lang: 'am' }])}
-                className="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 transition font-black text-slate-800 flex items-center gap-2"
-              >
-                <span className="text-lg">{item.emoji}</span>
-                {item.word}
-                {item.english && (
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">
-                    {item.english}
-                  </span>
-                )}
+          <div className="flex flex-wrap gap-2">
+            {words.slice(0, 3).map((item) => (
+              <button key={item.word} onClick={() => voice.speak([{ text: item.word, lang: 'am' }])} className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 transition hover:border-amber-400 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">
+                <span className="mr-1" aria-hidden="true">{item.emoji}</span>{item.word}
               </button>
             ))}
           </div>
@@ -399,102 +171,53 @@ export default function EthiopianChildHome({ data, loading, error, onRetry }) {
   );
 }
 
-/**
- * One instructor-pinned activity.
- *
- * A practice game (letter tracing, counting, matching) opens the game renderer
- * with the teacher's own content. Anything else opens the normal lesson flow.
- */
+function ProgressItem({ icon, value, label }) {
+  return (
+    <div className="px-2 text-center">
+      <span className="text-xl" aria-hidden="true">{icon}</span>
+      <p className="mt-1 text-xl font-black text-slate-900">{value}</p>
+      <p className="text-xs font-semibold text-slate-500">{label}</p>
+    </div>
+  );
+}
+
 function PracticeTile({ pin, index }) {
   const meta = tileMetaFor(pin);
-  const isPractice =
-    pin.kind === 'letter_tracing' || pin.kind === 'counting' || pin.kind === 'matching';
+  const isPractice = ['letter_tracing', 'counting', 'matching'].includes(pin.kind);
   const to = isPractice ? `/child/practice/${pin.id}` : `/child/lessons/${pin.lesson_id}`;
-
   return (
-    <Link
-      to={to}
-      className={`group relative rounded-[2rem] bg-gradient-to-b ${meta.tileBg} ring-4 ${meta.tileClass} p-5 text-center shadow-md hover:shadow-2xl active:scale-95 transition flex flex-col items-center gap-2 hover:scale-105 hover:-translate-y-2 animate-slide-up`}
-      style={{ animationDelay: `${index * 0.1}s` }}
-    >
-      <div className="w-20 h-20 rounded-3xl bg-white/70 shadow-inner flex items-center justify-center text-4xl group-active:scale-95 group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
-        {meta.emoji}
-      </div>
-      <h3 className={`text-base sm:text-lg font-black leading-tight ${meta.tileText}`}>
-        {pin.title}
-      </h3>
-      {pin.lesson_title && (
-        <p className={`text-xs font-bold opacity-70 ${meta.tileText}`}>{pin.lesson_title}</p>
-      )}
-      <span
-        className={`mt-1 inline-flex items-center gap-1.5 px-4 py-2 ${meta.tileChip} text-white text-xs font-black rounded-xl shadow hover:scale-110 transition-transform`}
-      >
-        {isPractice ? '▶ ጀምር' : '📖 ተመልክ'}
+    <Link to={to} className="group flex items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" style={{ animationDelay: `${index * 0.08}s` }}>
+      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-3xl transition group-hover:scale-105" aria-hidden="true">{meta.emoji}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-black text-slate-900">{pin.title}</span>
+        <span className="mt-0.5 block truncate text-xs font-medium text-slate-500">{pin.lesson_title || (isPractice ? 'Practice game' : 'Lesson')}</span>
       </span>
+      <span className="text-xl font-black text-emerald-700" aria-hidden="true">→</span>
     </Link>
   );
 }
 
-/**
- * The instructor's assigned lesson, given the only loudest call to action
- * on the whole screen.
- */
-function PrimaryLessonCard({ lesson, onSpeak }) {
-  const progress = Math.min(100, Math.max(0, lesson.lesson_progress || 0));
-
+function PrimaryLessonCard({ lesson }) {
+  const progress = Math.min(100, Math.max(0, Number(lesson.lesson_progress) || 0));
   return (
-    <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-amber-500 via-orange-500 to-rose-500 p-6 sm:p-8 text-white shadow-2xl border-4 border-white">
-      <div className="absolute -bottom-8 -left-6 text-[10rem] opacity-10 select-none pointer-events-none">
-        📖
-      </div>
-
-      <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="space-y-3 text-center lg:text-left lg:max-w-xl">
-          <span className="inline-block bg-black/20 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wide">
-            👨‍🏫 በመምህርህ የተመረጠ
-          </span>
-          <h2 className="text-2xl sm:text-4xl font-black leading-tight">{lesson.title}</h2>
-          <p className="text-base font-bold text-amber-100">ትምህርት: {lesson.course_title}</p>
-
-          {progress > 0 && (
-            <div className="w-full max-w-xs mx-auto lg:mx-0">
-              <div className="bg-black/20 h-3.5 rounded-full overflow-hidden">
-                <div
-                  className="bg-white h-full rounded-full transition-all duration-500"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <p className="text-xs font-black mt-1.5 text-amber-50">የተጠናቀቀው: {progress}%</p>
+    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 via-emerald-700 to-teal-600 p-6 text-white shadow-lg sm:p-8">
+      <div className="pointer-events-none absolute -right-5 -top-8 select-none text-[9rem] opacity-[0.08]" aria-hidden="true">✦</div>
+      <div className="relative grid gap-6 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div className="min-w-0">
+          <p className="text-sm font-bold uppercase tracking-wider text-emerald-100">Your next lesson</p>
+          <h2 className="mt-2 text-2xl font-black leading-tight sm:text-3xl">{lesson.title}</h2>
+          <p className="mt-1 truncate text-sm font-medium text-emerald-100">{lesson.course_title}</p>
+          <div className="mt-5 max-w-md">
+            <div className="mb-1.5 flex justify-between text-xs font-bold text-emerald-50"><span>Lesson progress</span><span>{progress}%</span></div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-black/20" role="progressbar" aria-label="Lesson progress" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-amber-300 transition-all" style={{ width: `${progress}%` }} />
             </div>
-          )}
-
-          <button
-            onClick={onSpeak}
-            className="inline-flex items-center gap-2 px-5 py-3 bg-white/20 hover:bg-white/30 rounded-2xl text-sm font-black active:scale-95 transition"
-          >
-            <span className="text-lg">🔊</span> ትምህርቱን አስማም
-          </button>
+          </div>
         </div>
-
-        <Link
-          to={`/child/lessons/${lesson.id}`}
-          className="shrink-0 w-full lg:w-auto px-8 py-6 bg-white text-orange-600 font-black rounded-[2rem] shadow-2xl hover:scale-105 active:scale-95 transition-all text-xl sm:text-2xl flex items-center justify-center gap-3 border-4 border-amber-200"
-        >
-          <span className="text-3xl">▶</span>
-          <span>
-            ትምህርቱን ጀምር
-            <span className="block text-xs font-black text-orange-400 uppercase tracking-wide">
-              Start
-            </span>
-          </span>
-          <span className="text-3xl">🚀</span>
+        <Link to={`/child/lessons/${lesson.id}`} className="inline-flex min-h-14 items-center justify-center gap-3 rounded-2xl bg-amber-300 px-7 py-4 text-lg font-black text-emerald-950 shadow-md transition hover:bg-amber-200 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
+          <span className="text-2xl" aria-hidden="true">▶</span> Continue
         </Link>
       </div>
-      <div className="mt-4 text-center">
-        <Link to="/child/results" className="inline-flex items-center gap-2 text-purple-700 hover:text-purple-800 font-bold text-sm bg-white px-4 py-2 rounded-full shadow-md border-2 border-purple-100 transition hover:scale-105">
-          <span>🏆</span> My Results
-        </Link>
-      </div>
-    </div>
+    </section>
   );
 }

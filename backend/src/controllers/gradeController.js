@@ -15,8 +15,9 @@ const { query } = require('../config/db');
  */
 async function getGradeLevels(req, res, next) {
   try {
+    const includeInactive = req.user?.role === 'admin' && req.query.include_inactive === 'true';
     const result = await query(
-      `SELECT * FROM grade_levels WHERE is_active = TRUE ORDER BY sequence_order ASC`
+      `SELECT * FROM grade_levels ${includeInactive ? '' : 'WHERE is_active = TRUE'} ORDER BY sequence_order ASC`
     );
     res.json({ grade_levels: result.rows });
   } catch (err) {
@@ -52,17 +53,17 @@ async function getGradeLevel(req, res, next) {
  */
 async function createGradeLevel(req, res, next) {
   try {
-    const { code, name, level_type, sequence_order, description, min_age, max_age, is_active } = req.body;
+    const { code, name, level_type, sequence_order, description, is_active } = req.body;
 
     if (!code || !name || !level_type || sequence_order === undefined) {
       return res.status(400).json({ error: 'Code, name, level type, and sequence order are required' });
     }
 
     const result = await query(
-      `INSERT INTO grade_levels (code, name, level_type, sequence_order, description, min_age, max_age, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO grade_levels (code, name, level_type, sequence_order, description, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [code, name, level_type, sequence_order, description || null, min_age || null, max_age || null, is_active !== false]
+      [code, name, level_type, sequence_order, description || null, is_active !== false]
     );
 
     res.status(201).json({ grade_level: result.rows[0], message: 'Grade level created successfully' });
@@ -81,7 +82,7 @@ async function createGradeLevel(req, res, next) {
 async function updateGradeLevel(req, res, next) {
   try {
     const { id } = req.params;
-    const { code, name, level_type, sequence_order, description, min_age, max_age, is_active } = req.body;
+    const { code, name, level_type, sequence_order, description, is_active } = req.body;
 
     const result = await query(
       `UPDATE grade_levels
@@ -90,13 +91,11 @@ async function updateGradeLevel(req, res, next) {
            level_type = COALESCE($3, level_type),
            sequence_order = COALESCE($4, sequence_order),
            description = COALESCE($5, description),
-           min_age = COALESCE($6, min_age),
-           max_age = COALESCE($7, max_age),
-           is_active = COALESCE($8, is_active),
+           is_active = COALESCE($6, is_active),
            updated_at = now()
-       WHERE id = $9
+       WHERE id = $7
        RETURNING *`,
-      [code, name, level_type, sequence_order, description, min_age, max_age, is_active, id]
+      [code, name, level_type, sequence_order, description, is_active, id]
     );
 
     if (result.rows.length === 0) {
@@ -120,14 +119,20 @@ async function deleteGradeLevel(req, res, next) {
   try {
     const { id } = req.params;
 
-    // Check if grade level is being used by students
-    const studentCheck = await query(
-      `SELECT COUNT(*) FROM students WHERE grade_level_id = $1`,
+    // Keep curriculum and history intact. Administrators can deactivate a
+    // grade level instead of deleting one that has been used.
+    const usageCheck = await query(
+      `SELECT (
+         (SELECT COUNT(*) FROM students WHERE grade_level_id = $1) +
+         (SELECT COUNT(*) FROM courses WHERE grade_level_id = $1) +
+         (SELECT COUNT(*) FROM curriculum_objectives WHERE grade_level_id = $1) +
+         (SELECT COUNT(*) FROM instructor_assignments WHERE grade_level_id = $1)
+       )::int AS total`,
       [id]
     );
 
-    if (parseInt(studentCheck.rows[0].count) > 0) {
-      return res.status(400).json({ error: 'Cannot delete grade level that is assigned to students' });
+    if (usageCheck.rows[0].total > 0) {
+      return res.status(409).json({ error: 'This grade level is in use. Deactivate it to hide it from new assignments.' });
     }
 
     const result = await query(
@@ -302,6 +307,88 @@ async function getCurriculumVersions(req, res, next) {
 }
 
 // ============================================================================
+// SUBJECT-GRADE ASSIGNMENTS
+// ============================================================================
+
+/**
+ * GET /api/subject-grade-assignments
+ * Get all subject-grade assignments
+ */
+async function getSubjectGradeAssignments(req, res, next) {
+  try {
+    const result = await query(
+      `SELECT sga.*, s.name as subject_name, s.code as subject_code,
+              gl.name as grade_level_name, gl.code as grade_level_code
+       FROM subject_grade_assignments sga
+       JOIN subjects s ON s.id = sga.subject_id
+       JOIN grade_levels gl ON gl.id = sga.grade_level_id
+       WHERE sga.is_active = TRUE
+       ORDER BY gl.sequence_order ASC, s.code ASC`
+    );
+    res.json({ assignments: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/subject-grade-assignments
+ * Assign a subject to a grade level (Admin only)
+ */
+async function createSubjectGradeAssignment(req, res, next) {
+  try {
+    const { subject_id, grade_level_id } = req.body;
+
+    if (!subject_id || !grade_level_id) {
+      return res.status(400).json({ error: 'subject_id and grade_level_id are required' });
+    }
+
+    // Validate subject exists
+    const subjectCheck = await query('SELECT id FROM subjects WHERE id = $1', [subject_id]);
+    if (!subjectCheck.rows.length) {
+      return res.status(404).json({ error: 'Subject not found' });
+    }
+
+    // Validate grade level exists
+    const gradeCheck = await query('SELECT id FROM grade_levels WHERE id = $1', [grade_level_id]);
+    if (!gradeCheck.rows.length) {
+      return res.status(404).json({ error: 'Grade level not found' });
+    }
+
+    const result = await query(
+      `INSERT INTO subject_grade_assignments (subject_id, grade_level_id, assigned_by)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (subject_id, grade_level_id) DO UPDATE SET
+         is_active = TRUE,
+         assigned_by = $3,
+         assigned_at = now()
+       RETURNING *`,
+      [subject_id, grade_level_id, req.user.id]
+    );
+
+    res.status(201).json({ assignment: result.rows[0], message: 'Subject assigned to grade level successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/subject-grade-assignments/:id
+ * Remove a subject-grade assignment (Admin only)
+ */
+async function deleteSubjectGradeAssignment(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    await query('DELETE FROM subject_grade_assignments WHERE id = $1', [id]);
+
+    res.json({ message: 'Subject-grade assignment removed successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============================================================================
 // CURRICULUM OBJECTIVES
 // ============================================================================
 
@@ -367,6 +454,10 @@ module.exports = {
   createSubject,
   updateSubject,
   deleteSubject,
+  // Subject-Grade Assignments
+  getSubjectGradeAssignments,
+  createSubjectGradeAssignment,
+  deleteSubjectGradeAssignment,
   // Curriculum
   getCurriculumVersions,
   getCurriculumObjectives,

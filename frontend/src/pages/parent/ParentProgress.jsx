@@ -151,7 +151,7 @@ export default function ParentProgress() {
             </div>
 
             {courses.length === 0 ? (
-              <p className="text-sm text-slate-400 py-6 text-center">No assigned courses found for this age group.</p>
+              <p className="text-sm text-slate-400 py-6 text-center">No courses are available for this child’s grade level yet.</p>
             ) : (
               <div className="space-y-4">
                 {courses.map((c) => (

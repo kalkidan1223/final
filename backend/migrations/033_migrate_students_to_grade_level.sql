@@ -6,27 +6,26 @@
 BEGIN;
 
 -- ----------------------------------------------------------------------------
--- STEP 1: Migrate existing students from age_group_id to grade_level_id
+-- STEP 1: Use a previously recorded educational choice when available.
 -- ----------------------------------------------------------------------------
--- Map age groups to grade levels (based on age ranges)
--- We'll use a simple mapping based on the child's age
+-- A child's date of birth does not determine their grade. Older records with no
+-- recorded grade are deliberately left unassigned for an administrator to review.
+UPDATE student_registration_requests sr
+SET grade_level_id = gl.id
+FROM grade_levels gl
+WHERE sr.grade_level_id IS NULL
+  AND regexp_replace(lower(COALESCE(sr.current_grade, sr.grade, '')), '[^a-z0-9]', '', 'g')
+      IN (regexp_replace(lower(gl.code), '[^a-z0-9]', '', 'g'),
+          regexp_replace(lower(gl.name), '[^a-z0-9]', '', 'g'));
 
 UPDATE students
-SET grade_level_id = (
-  CASE
-    WHEN date_of_birth IS NULL THEN (SELECT id FROM grade_levels WHERE code = 'GRADE_1' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) BETWEEN 5 AND 6 THEN (SELECT id FROM grade_levels WHERE code = 'KG1' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) = 6 THEN (SELECT id FROM grade_levels WHERE code = 'KG2' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) = 7 THEN (SELECT id FROM grade_levels WHERE code = 'GRADE_1' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) = 8 THEN (SELECT id FROM grade_levels WHERE code = 'GRADE_2' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) = 9 THEN (SELECT id FROM grade_levels WHERE code = 'GRADE_3' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) = 10 THEN (SELECT id FROM grade_levels WHERE code = 'GRADE_4' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) = 11 THEN (SELECT id FROM grade_levels WHERE code = 'GRADE_5' LIMIT 1)
-    WHEN EXTRACT(YEAR FROM age(date_of_birth)) >= 12 THEN (SELECT id FROM grade_levels WHERE code = 'GRADE_6' LIMIT 1)
-    ELSE (SELECT id FROM grade_levels WHERE code = 'GRADE_1' LIMIT 1)
-  END
-)
-WHERE grade_level_id IS NULL;
+SET grade_level_id = sr.grade_level_id
+FROM student_registration_requests sr
+WHERE students.grade_level_id IS NULL
+  AND sr.parent_id = students.parent_id
+  AND lower(sr.student_full_name) = lower(students.full_name)
+  AND sr.date_of_birth = students.date_of_birth
+  AND sr.grade_level_id IS NOT NULL;
 
 COMMIT;
 

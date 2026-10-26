@@ -10,7 +10,7 @@ const { gradeAnswer, correctAnswerText, formatMatchingAnswer, matchingScore } = 
 async function resolveChild(req) {
   if (req.user.role === 'student') {
     const res = await query(
-      `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
+      `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code,
               u.email, u.full_name as user_full_name,
               p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
               COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 10)::int as age
@@ -37,7 +37,7 @@ async function resolveChild(req) {
     let child = null;
     if (requestedChildId) {
       const res = await query(
-        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
@@ -58,7 +58,7 @@ async function resolveChild(req) {
     // automatically find the parent's first early learner child (age <= 9)
     if (!child) {
       const res = await query(
-        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code, gl.min_age, gl.max_age,
+        `SELECT s.*, gl.name as grade_level_name, gl.code as grade_code,
                 s.full_name as user_full_name,
                 p.id as parent_db_id, pu.full_name as parent_name, pu.phone as parent_phone,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
@@ -277,10 +277,24 @@ async function getDashboard(req, res, next) {
     ]);
 
     // 7. Unread notifications count
-    const notifRes = await query(
-      `SELECT COUNT(*)::int as unread_count FROM notifications WHERE user_id = $1 AND is_read = FALSE`,
-      [req.user.id]
-    );
+    const [notifRes, annRes] = await Promise.all([
+      query(
+        `SELECT COUNT(*)::int as unread_count FROM notifications WHERE user_id = $1 AND is_read = FALSE`,
+        [req.user.id]
+      ),
+      query(
+        `SELECT id, title, COALESCE(NULLIF(message, ''), content) AS message, priority, created_at, start_date, end_date
+         FROM announcements
+         WHERE (is_active IS NULL OR is_active = TRUE)
+           AND (audience = 'all' OR audience LIKE '%all%' OR audience LIKE '%students%')
+           AND (start_date IS NULL OR start_date <= CURRENT_DATE)
+           AND (end_date IS NULL OR end_date >= CURRENT_DATE)
+         ORDER BY 
+           CASE priority WHEN 'urgent' THEN 1 WHEN 'important' THEN 2 ELSE 3 END,
+           created_at DESC
+         LIMIT 5`
+      ),
+    ]);
 
     const age = child.age !== undefined
       ? child.age
@@ -315,6 +329,7 @@ async function getDashboard(req, res, next) {
       learning_streak: streakRes.rows[0]?.streak_days || 0,
       achievements: achievements.filter(a => a.earned).slice(0, 4),
       unread_notifications: notifRes.rows[0]?.unread_count || 0,
+      announcements: annRes.rows,
       // Instructor-published content for the age 5-9 home.
       home_pins: homePins,
       encouragement: praiseRes.rows,
@@ -1876,6 +1891,23 @@ async function markNotificationRead(req, res, next) {
   }
 }
 
+// PATCH /api/child/notifications/read-all
+async function markAllNotificationsRead(req, res, next) {
+  try {
+    const child = await resolveChild(req);
+    if (!child) return res.status(404).json({ error: 'Child profile not found' });
+
+    await query(
+      'UPDATE child_notifications SET is_read = TRUE WHERE student_id = $1 AND is_read = FALSE',
+      [child.id]
+    );
+
+    res.json({ message: 'All notifications marked as read', unread_count: 0 });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Adds an `is_locked` flag to each resource row so the child portal tabs
 // respect the same sequencing rules as the lesson journey.
 async function annotateLocks(studentId, rows, resourceType) {
@@ -1967,6 +1999,7 @@ module.exports = {
   getAchievements,
   getNotifications,
   markNotificationRead,
+  markAllNotificationsRead,
 };
 
 

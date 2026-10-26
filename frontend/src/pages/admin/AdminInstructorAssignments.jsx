@@ -116,7 +116,7 @@ function AssignmentFormModal({ existing, instructors, courses, gradeLevels, acad
             >
               <option value="">Select grade level…</option>
               {gradeLevels.map(gl => (
-                <option key={gl.id} value={gl.id}>{gl.name} ({gl.min_age}–{gl.max_age} yrs)</option>
+                <option key={gl.id} value={gl.id}>{gl.name}</option>
               ))}
             </select>
           </div>

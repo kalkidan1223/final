@@ -110,19 +110,18 @@ function EditAssignmentsModal({ instructor, onClose, onSave, gradeLevels }) {
       setLoadingCourses(true);
       try {
         const coursePromises = assignedGradeLevels.map(gradeLevelId =>
-          axiosClient.get(`/grades/${gradeLevelId}/available-courses`)
+          axiosClient.get(`/admin/courses?grade_level_id=${gradeLevelId}`)
         );
         const responses = await Promise.all(coursePromises);
 
         const allAvailableCourses = responses.flatMap((res, idx) =>
-          (res.data.available_courses || [])
-            .filter(c => c.is_active)
+          (res.data.courses || [])
+            .filter(c => c.status !== 'archived')
             .map(c => ({
-              id: `${assignedGradeLevels[idx]}_${c.id}`,
+              id: c.id,
               grade_level_id: assignedGradeLevels[idx],
-              title: c.course_title,
-              description: c.course_description,
-              available_course_id: c.id
+              title: c.title,
+              description: c.description,
             }))
         );
         setAvailableCourses(allAvailableCourses);
@@ -229,11 +228,11 @@ function EditAssignmentsModal({ instructor, onClose, onSave, gradeLevels }) {
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                 {availableCourses.map(course => {
-                  const isSelected = assignedCourses.includes(course.available_course_id || course.id);
+                  const isSelected = assignedCourses.map(String).includes(String(course.id));
                   return (
                     <div
                       key={course.id}
-                      onClick={() => toggleCourse(course.available_course_id || course.id)}
+                      onClick={() => toggleCourse(course.id)}
                       className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
                         isSelected
                           ? 'border-violet-600 bg-violet-50 text-violet-900'
@@ -300,7 +299,7 @@ export default function AdminInstructors() {
   // For edit assignments modal
   const [gradeLevels, setGradeLevels] = useState([]);
 
-  // Load age groups and courses when editing
+  // Load the configurable grade levels when editing assignments.
   useEffect(() => {
     if (editInst) {
       loadOptions();
@@ -482,7 +481,7 @@ export default function AdminInstructors() {
           instructor={editInst} 
           onClose={() => setEditInst(null)} 
           onSave={handleEditAssignments}
-          ageGroups={ageGroups}
+          gradeLevels={gradeLevels}
         />
       )}
     </AdminLayout>

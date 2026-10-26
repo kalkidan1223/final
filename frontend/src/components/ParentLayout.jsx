@@ -51,6 +51,45 @@ export default function ParentLayout() {
     fetchInitialData();
   }, []);
 
+  const fetchUnreadNotifications = async () => {
+    try {
+      const notifRes = await axiosClient.get('/parent/notifications');
+      const count = typeof notifRes.data?.unread_count === 'number'
+        ? notifRes.data.unread_count
+        : (notifRes.data?.notifications || []).filter((n) => !n.is_read).length;
+      setUnreadNotifications(count);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Re-fetch notifications whenever route changes (e.g. entering /parent/notifications)
+  useEffect(() => {
+    fetchUnreadNotifications();
+  }, [location.pathname]);
+
+  // Synchronize on custom events or periodic timer
+  useEffect(() => {
+    const handleNotifUpdate = (e) => {
+      if (typeof e.detail?.unreadCount === 'number') {
+        setUnreadNotifications(e.detail.unreadCount);
+      } else {
+        fetchUnreadNotifications();
+      }
+    };
+
+    window.addEventListener('parentNotificationsUpdated', handleNotifUpdate);
+    window.addEventListener('notificationsUpdated', handleNotifUpdate);
+
+    const interval = setInterval(fetchUnreadNotifications, 30000);
+
+    return () => {
+      window.removeEventListener('parentNotificationsUpdated', handleNotifUpdate);
+      window.removeEventListener('notificationsUpdated', handleNotifUpdate);
+      clearInterval(interval);
+    };
+  }, []);
+
   async function fetchInitialData() {
     try {
       const [notifRes, childRes] = await Promise.all([
@@ -58,7 +97,10 @@ export default function ParentLayout() {
         axiosClient.get('/parent/children').catch(() => ({ data: { children: [] } })),
       ]);
 
-      setUnreadNotifications(notifRes.data?.unread_count || 0);
+      const count = typeof notifRes.data?.unread_count === 'number'
+        ? notifRes.data.unread_count
+        : (notifRes.data?.notifications || []).filter((n) => !n.is_read).length;
+      setUnreadNotifications(count);
       const kids = childRes.data?.children || [];
       setChildrenList(kids);
 
@@ -328,7 +370,17 @@ export default function ParentLayout() {
 
         {/* Page Content Body */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">
-          <Outlet context={{ selectedChildId, selectedChild, childrenList, refreshChildren: fetchInitialData }} />
+          <Outlet
+            context={{
+              selectedChildId,
+              selectedChild,
+              childrenList,
+              refreshChildren: fetchInitialData,
+              unreadNotifications,
+              setUnreadNotifications,
+              refreshNotifications: fetchUnreadNotifications,
+            }}
+          />
         </main>
       </div>
 
@@ -351,6 +403,7 @@ export default function ParentLayout() {
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const active = location.pathname === item.to;
+                const hasBadge = item.badge === 'notifications' && unreadNotifications > 0;
                 return (
                   <Link
                     key={item.to}
@@ -362,6 +415,11 @@ export default function ParentLayout() {
                   >
                     <Icon className="text-xl" />
                     <span>{item.label}</span>
+                    {hasBadge && (
+                      <span className="ml-auto bg-red-500 text-white font-black text-xs px-1.5 py-0.5 rounded-full">
+                        {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

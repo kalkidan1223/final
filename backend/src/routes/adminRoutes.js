@@ -20,6 +20,7 @@ router.patch('/users/:id/activate', requireAuth, authorize('admin'), adminContro
 
 // --- Student Management ---
 router.get('/students', requireAuth, authorize('admin'), adminController.listStudents);
+router.patch('/students/:id/grade-level', requireAuth, authorize('admin'), adminController.updateStudentGradeLevel);
 router.patch('/students/:id/deactivate', requireAuth, authorize('admin'), adminController.deactivateStudent);
 router.patch('/students/:id/activate', requireAuth, authorize('admin'), adminController.activateStudent);
 
@@ -39,6 +40,7 @@ router.post('/instructors', requireAuth, authorize('admin'), adminController.cre
 // --- Course Management ---
 router.get('/courses', requireAuth, authorize('admin'), adminController.listCourses);
 router.patch('/courses/:id/status', requireAuth, authorize('admin'), adminController.updateCourseStatus);
+router.patch('/courses/:id', requireAuth, authorize('admin'), adminController.updateCourse);
 router.delete('/courses/:id', requireAuth, authorize('admin'), adminController.deleteCourse);
 
 // --- Reports ---
@@ -65,5 +67,6 @@ router.patch('/ai-recommendations/:id/view', requireAuth, authorize('admin'), ad
 // --- Announcements ---
 router.get('/announcements', requireAuth, authorize('admin'), adminExtController.listAnnouncements);
 router.post('/announcements', requireAuth, authorize('admin'), adminExtController.createAnnouncement);
+router.delete('/announcements/:id', requireAuth, authorize('admin'), adminExtController.deleteAnnouncement);
 
 module.exports = router;

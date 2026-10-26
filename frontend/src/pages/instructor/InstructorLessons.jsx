@@ -106,12 +106,20 @@ export default function InstructorLessons() {
             </p>
           </div>
 
-          <Link
-            to="/instructor/courses"
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition self-start sm:self-auto text-sm"
-          >
-            <MdAdd className="text-lg" /> + New Lesson
-          </Link>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <Link
+              to="/instructor/fidel-lessons"
+              className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition text-sm"
+            >
+              <span>🔤</span> Fidel Family Lessons
+            </Link>
+            <Link
+              to="/instructor/courses"
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition text-sm"
+            >
+              <MdAdd className="text-lg" /> + New Lesson
+            </Link>
+          </div>
         </div>
 
         {/* Filters Bar */}

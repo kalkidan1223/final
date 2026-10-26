@@ -4,7 +4,7 @@ import {
   MdSchool, MdPeople, MdMenuBook, MdLibraryBooks, MdPending,
   MdArrowForward, MdOpenInNew, MdInfoOutline, MdAdd,
   MdAutoStories, MdExtension, MdQuiz, MdGrading, MdTrendingUp,
-  MdCheckCircle, MdCancel, MdChildCare, MdUpload
+  MdCheckCircle, MdCancel, MdChildCare, MdUpload, MdCampaign
 } from 'react-icons/md';
 import InstructorLayout from '../../components/InstructorLayout';
 import axiosClient from '../../api/axiosClient';
@@ -162,6 +162,7 @@ export default function InstructorDashboard() {
   const recentSubs = data?.recent_submissions || [];
   const recentQuizzes = data?.recent_quiz_results || [];
   const prog = data?.progress_overview || {};
+  const announcements = data?.announcements || [];
 
   return (
     <InstructorLayout>
@@ -214,6 +215,62 @@ export default function InstructorDashboard() {
             </div>
           </div>
         </div>
+
+        {/* School Announcements */}
+        {announcements.length > 0 && (
+          <section aria-label="School Announcements" className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <span className="p-1.5 rounded-xl bg-amber-100 text-amber-700 text-lg">
+                <MdCampaign />
+              </span>
+              <div>
+                <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                  School Announcements
+                </h2>
+                <p className="text-xs text-slate-500">Official administration notices and updates</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {announcements.map((ann) => (
+                <div
+                  key={ann.id}
+                  className={`bg-white rounded-2xl border p-5 shadow-sm transition hover:shadow-md flex flex-col justify-between ${
+                    ann.priority === 'urgent'
+                      ? 'border-rose-200 bg-rose-50/30'
+                      : ann.priority === 'important'
+                      ? 'border-amber-200 bg-amber-50/30'
+                      : 'border-slate-200'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span
+                        className={`text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                          ann.priority === 'urgent'
+                            ? 'bg-rose-100 text-rose-700'
+                            : ann.priority === 'important'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {ann.priority === 'urgent' ? 'Urgent Notice' : ann.priority === 'important' ? 'Important' : 'Announcement'}
+                      </span>
+                      <span className="text-xs text-slate-400 font-medium">
+                        {new Date(ann.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-bold text-slate-900 leading-snug">
+                      {ann.title}
+                    </h3>
+                    <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                      {ann.message || ann.content}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Quick Action Navigation Bar */}
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-3">

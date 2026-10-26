@@ -34,7 +34,7 @@ const MAX_ANSWER_LENGTH = 2000;
 async function resolveChild(req) {
   if (req.user.role === 'student') {
     const res = await query(
-      `SELECT s.*, gl.name AS grade_level_name, gl.min_age, gl.max_age,
+      `SELECT s.*, gl.name AS grade_level_name,
               u.email, u.full_name AS user_full_name,
               COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 10)::int AS age
        FROM students s
@@ -56,7 +56,7 @@ async function resolveChild(req) {
     let child = null;
     if (requestedChildId) {
       const res = await query(
-        `SELECT s.*, gl.name AS grade_level_name, gl.min_age, gl.max_age,
+        `SELECT s.*, gl.name AS grade_level_name,
                 s.full_name AS user_full_name,
                 COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int AS age
          FROM students s

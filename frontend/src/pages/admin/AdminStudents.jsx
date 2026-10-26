@@ -95,7 +95,15 @@ export default function AdminStudents() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [viewStudent, setViewStudent] = useState(null);
+  const [gradeLevels, setGradeLevels] = useState([]);
+  const [savingGradeFor, setSavingGradeFor] = useState(null);
   const debounce = useRef(null);
+
+  useEffect(() => {
+    axiosClient.get('/admin/grades')
+      .then(({ data }) => setGradeLevels(data.grade_levels || []))
+      .catch(() => setError('Failed to load grade levels'));
+  }, []);
 
   const loadStudents = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
@@ -145,6 +153,25 @@ export default function AdminStudents() {
       loadStudents(true);
     } catch (err) {
       setError(err.response?.data?.error || 'Action failed');
+    }
+  }
+
+  async function handleGradeChange(student, value) {
+    if (!value || String(value) === String(student.grade_level_id || '')) return;
+    setSavingGradeFor(student.id);
+    try {
+      const { data } = await axiosClient.patch(`/admin/students/${student.id}/grade-level`, {
+        grade_level_id: Number(value),
+      });
+      setStudents(current => current.map(item => item.id === student.id
+        ? { ...item, ...data.student }
+        : item));
+      setSuccess(`Grade level updated for ${student.full_name}`);
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not update grade level');
+    } finally {
+      setSavingGradeFor(null);
     }
   }
 
@@ -219,7 +246,18 @@ export default function AdminStudents() {
                       <p className="text-sm font-medium text-slate-800">{s.full_name}</p>
                       <p className="text-xs text-slate-400">{s.date_of_birth ? new Date(s.date_of_birth).toLocaleDateString() : ''}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{s.grade_level_name}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={s.grade_level_id || ''}
+                        disabled={savingGradeFor === s.id}
+                        onChange={event => handleGradeChange(s, event.target.value)}
+                        aria-label={`Grade level for ${s.full_name}`}
+                        className="max-w-40 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100 disabled:opacity-60"
+                      >
+                        <option value="">Assign grade…</option>
+                        {gradeLevels.map(level => <option key={level.id} value={level.id}>{level.name}</option>)}
+                      </select>
+                    </td>
                     <td className="px-4 py-3 text-sm text-slate-600">{s.grade || '—'} {s.section ? `· ${s.section}` : ''}</td>
                     <td className="px-4 py-3"><AccountTypeBadge hasLogin={!!s.user_id} /></td>
                     <td className="px-4 py-3 text-sm text-slate-600">{s.parent_name || '—'}</td>

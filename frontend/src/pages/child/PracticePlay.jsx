@@ -17,7 +17,7 @@ import MatchPractice from './MatchPractice';
  * instructor built in the ActivityBuilder from the seeded reference tables.
  *
  * Nothing here invents content. If the instructor's activity is missing or
- * belongs to another age group, the child is sent back to the home screen
+ * belongs to another grade level, the child is sent back to the home screen
  * rather than shown someone else's lesson.
  */
 

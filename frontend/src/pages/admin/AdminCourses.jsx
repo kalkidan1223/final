@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { MdBook, MdSearch, MdRefresh, MdPublish, MdUnpublished, MdArchive, MdDelete } from 'react-icons/md';
+import { MdBook, MdSearch, MdRefresh, MdPublish, MdUnpublished, MdArchive, MdDelete, MdEdit } from 'react-icons/md';
 import AdminLayout from '../../components/AdminLayout';
 import axiosClient from '../../api/axiosClient';
 
@@ -29,6 +29,7 @@ function ViewModal({ course, onClose }) {
               ['Status', <StatusBadge key="s" status={course.status} />],
               ['Instructor', course.instructor_name],
               ['Grade Level', course.grade_level_name],
+              ['Subject', course.subject_name || '—'],
               ['Created', new Date(course.created_at).toLocaleDateString()],
               ['Updated', new Date(course.updated_at).toLocaleDateString()],
             ].map(([label, val]) => (
@@ -58,6 +59,68 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
   );
 }
 
+function EditSubjectModal({ course, subjects, onClose, onSave }) {
+  const [selectedSubject, setSelectedSubject] = useState(course.subject_id?.toString() || '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(course.id, { subject_id: selectedSubject ? parseInt(selectedSubject) : null });
+      onClose();
+    } catch (err) {
+      console.error('Failed to update subject:', err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-800">Edit Subject</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <p className="text-sm text-slate-500 mb-2">Course: {course.title}</p>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Select Subject</label>
+            <select
+              value={selectedSubject}
+              onChange={e => setSelectedSubject(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">No Subject</option>
+              {subjects.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-xl transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Subject'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminCourses() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,9 +131,11 @@ export default function AdminCourses() {
   const [statusFilter, setStatusFilter] = useState('');
   const [gradeFilter, setGradeFilter] = useState('');
   const [gradeLevels, setGradeLevels] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [viewCourse, setViewCourse] = useState(null);
+  const [editSubjectCourse, setEditSubjectCourse] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const debounce = useRef(null);
 
@@ -78,6 +143,13 @@ export default function AdminCourses() {
     try {
       const { data } = await axiosClient.get('/grades');
       setGradeLevels(data.grade_levels || []);
+    } catch { /* silent */ }
+  }, []);
+
+  const loadSubjects = useCallback(async () => {
+    try {
+      const { data } = await axiosClient.get('/subjects');
+      setSubjects(data.subjects || []);
     } catch { /* silent */ }
   }, []);
 
@@ -105,7 +177,7 @@ export default function AdminCourses() {
     }
   }, [statusFilter, gradeFilter, search, page]);
 
-  useEffect(() => { loadGradeLevels(); }, [loadGradeLevels]);
+  useEffect(() => { loadGradeLevels(); loadSubjects(); }, [loadGradeLevels, loadSubjects]);
 
   useEffect(() => {
     clearTimeout(debounce.current);
@@ -132,6 +204,15 @@ export default function AdminCourses() {
       setTimeout(() => setSuccess(''), 2500);
       loadCourses(true);
     } catch (err) { setError(err.response?.data?.error || 'Delete failed'); setConfirmDelete(null); }
+  }
+
+  async function handleUpdateSubject(courseId, { subject_id }) {
+    try {
+      await axiosClient.patch(`/admin/courses/${courseId}`, { subject_id });
+      setSuccess('Subject updated successfully');
+      setTimeout(() => setSuccess(''), 2500);
+      loadCourses(true);
+    } catch (err) { setError(err.response?.data?.error || 'Failed to update subject'); }
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -189,15 +270,15 @@ export default function AdminCourses() {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>{['Title', 'Instructor', 'Grade Level', 'Status', 'Created', 'Actions'].map(h => (
+                <tr>{['Title', 'Instructor', 'Grade Level', 'Subject', 'Status', 'Created', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}</tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {loading ? [...Array(6)].map((_, i) => (
-                  <tr key={i}>{[...Array(6)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}</tr>
+                {loading ? [...Array(7)].map((_, i) => (
+                  <tr key={i}>{[...Array(7)].map((_, j) => <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-100 rounded animate-pulse" /></td>)}</tr>
                 )) : courses.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">No courses found.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400">No courses found.</td></tr>
                 ) : courses.map(c => (
                   <tr key={c.id} className="hover:bg-slate-50 transition">
                     <td className="px-4 py-3">
@@ -205,11 +286,15 @@ export default function AdminCourses() {
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600">{c.instructor_name}</td>
                     <td className="px-4 py-3 text-sm text-slate-500">{c.grade_level_name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{c.subject_name || '—'}</td>
                     <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                     <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{new Date(c.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button onClick={() => setViewCourse(c)} className="rounded-lg bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 text-slate-600 px-2.5 py-1 text-xs font-medium transition">View</button>
+                        <button onClick={() => setEditSubjectCourse(c)} className="rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 px-2.5 py-1 text-xs font-medium transition flex items-center gap-1">
+                          <MdEdit className="text-sm" />Subject
+                        </button>
                         {c.status !== 'published' && (
                           <button onClick={() => handleStatus(c.id, 'published')} className="rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2.5 py-1 text-xs font-medium transition flex items-center gap-1">
                             <MdPublish className="text-sm" />Publish
@@ -248,6 +333,14 @@ export default function AdminCourses() {
       </div>
 
       {viewCourse && <ViewModal course={viewCourse} onClose={() => setViewCourse(null)} />}
+      {editSubjectCourse && (
+        <EditSubjectModal
+          course={editSubjectCourse}
+          subjects={subjects}
+          onClose={() => setEditSubjectCourse(null)}
+          onSave={handleUpdateSubject}
+        />
+      )}
       {confirmDelete && (
         <ConfirmModal
           message={`Delete course "${confirmDelete.title}"? This will remove all lessons, materials, quizzes, and activities. This cannot be undone.`}

@@ -221,7 +221,7 @@ export default function AdminDashboard() {
         {/* ── Secondary Stats Row ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4">
           <StatCard label="Parent-Managed Children" value={pop.parent_managed_children}  icon={MdFamilyRestroom} to="/admin/students" color="emerald" loading={loading} />
-          <StatCard label="Student Accounts (10-12)" value={pop.student_accounts}        icon={MdSchool}         to="/admin/students" color="sky"     loading={loading} />
+          <StatCard label="Student Accounts" value={pop.student_accounts}        icon={MdSchool}         to="/admin/students" color="sky"     loading={loading} />
           <StatCard label="Total Lessons"            value={content.total_lessons}        icon={MdMenuBook}       to="/admin/lessons"  color="violet"  loading={loading} />
           <StatCard label="Total Quizzes"            value={content.total_quizzes}        icon={MdQuiz}           to="/admin/courses"  color="amber"   loading={loading} />
         </div>
@@ -353,8 +353,8 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-4">
                 {[
-                  { label: 'Ages 5–9 · Parent-Managed', value: pop.ages_5_to_9 || 0, color: 'bg-emerald-500' },
-                  { label: 'Ages 10–12 · Student Account', value: pop.ages_10_to_12 || 0, color: 'bg-sky-500' },
+                  { label: 'Parent-Managed', value: pop.parent_managed_children || 0, color: 'bg-emerald-500' },
+                  { label: 'Student Accounts', value: pop.student_accounts || 0, color: 'bg-sky-500' },
                 ].map(({ label, value, color }) => {
                   const pct = pop.total_children ? Math.round((Number(value) / Number(pop.total_children)) * 100) : 0;
                   return (

@@ -8,7 +8,7 @@ import { tileMetaFor } from '../../utils/practiceContent';
 /**
  * InstructorChildHome
  * -------------------
- * The teacher's control over the age 5-9 child landing screen.
+ * The teacher's control over the child landing screen.
  *
  * The child home is NOT a page builder. It is a view over the course the
  * teacher has already published: they pick up to a handful of activities and

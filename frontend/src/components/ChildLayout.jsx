@@ -91,6 +91,22 @@ export default function ChildLayout() {
     fetchUnreadCount();
   }, [location.pathname]);
 
+  useEffect(() => {
+    const handleNotifUpdate = (e) => {
+      if (typeof e.detail?.unreadCount === 'number') {
+        setUnreadCount(e.detail.unreadCount);
+      } else {
+        fetchUnreadCount();
+      }
+    };
+    window.addEventListener('childNotificationsUpdated', handleNotifUpdate);
+    window.addEventListener('notificationsUpdated', handleNotifUpdate);
+    return () => {
+      window.removeEventListener('childNotificationsUpdated', handleNotifUpdate);
+      window.removeEventListener('notificationsUpdated', handleNotifUpdate);
+    };
+  }, []);
+
   const fetchChildInfo = async () => {
     try {
       const res = await axiosClient.get('/child/profile');
@@ -126,29 +142,32 @@ export default function ChildLayout() {
     }
   };
 
-  const isEarlyLearner = child?.is_early_learner !== undefined ? child.is_early_learner : (child?.age ? child.age <= 9 : true);
   const childName = child?.full_name || (user?.role === 'parent' ? 'Your Child' : 'Student');
 
-  // Navigation items - horizontal top navigation like the reference
+  // Keep the main navigation focused; secondary destinations live under More.
   const navItems = [
     { path: '/child', label: 'Home', icon: '🏠' },
     { path: '/child/courses', label: 'Courses', icon: '📚' },
     { path: '/child/activities', label: 'Activities', icon: '🎯' },
-    { path: '/child/quizzes', label: 'Quizzes', icon: '📝' },
     { path: '/child/progress', label: 'Progress', icon: '📊' },
+  ];
+  const moreItems = [
+    { path: '/child/quizzes', label: 'Quizzes', icon: '📝' },
+    { path: '/child/results', label: 'Results', icon: '🏆' },
     { path: '/child/achievements', label: 'Achievements', icon: '🏆' },
+    { path: '/child/questions', label: 'My Questions', icon: '🙋' },
     { path: '/child/notifications', label: 'Notifications', icon: '🔔' },
     { path: '/child/profile', label: 'Profile', icon: '👤' },
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-purple-50/60 via-pink-50/40 to-orange-50/30 text-slate-800">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
       {/* Parent Mode Top Ribbon */}
       {user?.role === 'parent' && (
         <aside aria-label="Parent assistance controls" className="bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white px-4 py-2 text-sm shadow-sm flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50">
           <div className="flex items-center gap-2 font-medium">
             <span className="text-lg">👨‍👩‍👧</span>
-            <span>የወላጅ ሁነታ (Parent Guided Mode): ከ<strong>{childName}</strong> ጋር አብረው እየተማሩ ነው! (ዕድሜ {child?.age || '5–9'})</span>
+            <span>Parent guided mode: learning with <strong>{childName}</strong>{child?.grade_level_name ? ` • ${child.grade_level_name}` : ''}</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -162,7 +181,7 @@ export default function ChildLayout() {
                 >
                   {siblingChildren.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.full_name} ({c.age ? `ዕድሜ ${c.age}` : '5–9'})
+                      {c.full_name}{c.grade_level_name ? ` (${c.grade_level_name})` : ''}
                     </option>
                   ))}
                 </select>
@@ -179,20 +198,20 @@ export default function ChildLayout() {
       )}
 
       {/* Top Navigation Bar - Child-friendly, no scrolling */}
-      <nav aria-label="Child portal navigation" className="bg-white/95 backdrop-blur-md border-b-4 border-purple-200 sticky top-0 z-40 shadow-lg">
+      <nav aria-label="Child portal navigation" className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 py-3">
           {/* Logo and User Actions Row */}
           <div className="flex items-center justify-between mb-3">
             {/* Logo */}
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/child')}>
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center text-2xl shadow-xl animate-bounce">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-700 flex items-center justify-center text-2xl text-white shadow-sm">
                 📜
               </div>
               <div className="hidden sm:block">
-                <span className="text-xs font-black uppercase tracking-wider text-purple-700 block">
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-700 block">
                   Brana Kids Hub
                 </span>
-                <h1 className="text-lg font-black text-purple-900">Student Portal</h1>
+                <h1 className="text-lg font-black text-slate-900">Learning space</h1>
               </div>
             </div>
 
@@ -233,7 +252,7 @@ export default function ChildLayout() {
           </div>
 
           {/* Navigation Links - Full width, no scrolling */}
-          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap" role="tablist">
+          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
             {navItems.map((item) => {
               const isExact = location.pathname === item.path;
               const isChild = item.path !== '/child' && location.pathname.startsWith(item.path);
@@ -247,12 +266,11 @@ export default function ChildLayout() {
                   className={`
                     relative flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all border-2
                     ${active
-                      ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white shadow-lg scale-105 border-purple-400'
-                      : 'text-slate-600 hover:bg-purple-50 hover:text-purple-700 hover:scale-105 border-transparent hover:border-purple-200'
+                      ? 'bg-emerald-700 text-white shadow-sm border-emerald-700'
+                      : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-800 border-transparent hover:border-emerald-200'
                     }
                   `}
-                  role="tab"
-                  aria-selected={active}
+                  aria-current={active ? 'page' : undefined}
                 >
                   <span className="text-xl" aria-hidden="true">{item.icon}</span>
                   <span>{item.label}</span>
@@ -264,6 +282,22 @@ export default function ChildLayout() {
                 </NavLink>
               );
             })}
+            <details className="relative">
+              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-purple-50 hover:text-purple-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-700">
+                <span aria-hidden="true">•••</span><span>More</span>
+              </summary>
+              <div className="absolute right-0 top-full z-50 mt-2 grid min-w-52 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                {moreItems.map((item) => {
+                  const active = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+                  return (
+                    <NavLink key={item.path} to={item.path} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? 'bg-purple-50 text-purple-800' : 'text-slate-600 hover:bg-slate-50'}`} aria-current={active ? 'page' : undefined}>
+                      <span aria-hidden="true">{item.icon}</span><span>{item.label}</span>
+                      {item.path === '/child/notifications' && unreadCount > 0 && <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </details>
           </div>
         </div>
       </nav>
@@ -274,11 +308,11 @@ export default function ChildLayout() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white/80 border-t border-purple-100 py-4 mt-auto">
+      <footer className="mt-auto border-t border-slate-200 bg-white py-4">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-slate-500">
           <div className="flex items-center justify-center gap-2">
             <span className="text-lg animate-bounce">🎈</span>
-            <span className="font-semibold text-purple-700">Brana Kids Hub</span>
+            <span className="font-semibold text-emerald-800">Brana Kids Hub</span>
             <span>— Learn, Play, Grow!</span>
           </div>
         </div>

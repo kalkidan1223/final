@@ -51,6 +51,9 @@ import InstructorProfile from './pages/instructor/InstructorProfile';
 import InstructorChildHome from './pages/instructor/InstructorChildHome';
 import InstructorVocabulary from './pages/instructor/InstructorVocabulary';
 import InstructorResults from './pages/instructor/Results';
+import InstructorFidelLessons from './pages/instructor/InstructorFidelLessons';
+import InstructorFidelAuthoring from './pages/instructor/InstructorFidelAuthoring';
+import ChildFidelLesson from './pages/child/ChildFidelLesson';
 import ParentDashboard from './pages/parent/ParentDashboard';
 import ParentChildren from './pages/parent/ParentChildren';
 import ParentChildLearningSpace from './pages/parent/ParentChildLearningSpace';
@@ -376,6 +379,15 @@ export default function App() {
       <Route path="/instructor/students"
         element={<ProtectedRoute roles={['instructor']}><InstructorStudents /></ProtectedRoute>}
       />
+      <Route path="/instructor/fidel-lessons"
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorFidelLessons /></ProtectedRoute>}
+      />
+      <Route path="/instructor/fidel-lessons/create"
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorFidelAuthoring /></ProtectedRoute>}
+      />
+      <Route path="/instructor/fidel-lessons/:lessonId/edit"
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorFidelAuthoring /></ProtectedRoute>}
+      />
       <Route path="/instructor/lessons"
         element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorLessons /></ProtectedRoute>}
       />
@@ -445,6 +457,7 @@ export default function App() {
         <Route path="courses" element={<ChildCourses />} />
         <Route path="courses/:id" element={<ChildCourseDetail />} />
         <Route path="lessons/:id" element={<ChildLessonDetail />} />
+        <Route path="lessons/:lessonId/fidel" element={<ChildFidelLesson />} />
         <Route path="activities/:id" element={<ChildActivityDetail />} />
         <Route path="progress" element={<ChildProgress />} />
         <Route path="activities" element={<ChildActivities />} />

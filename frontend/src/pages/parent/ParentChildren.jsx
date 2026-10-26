@@ -618,7 +618,7 @@ export default function ParentChildren() {
                       <option value="">Select Grade Level</option>
                       {gradeLevels.map((grade) => (
                         <option key={grade.id} value={grade.id}>
-                          {grade.name} {grade.min_age && grade.max_age && `(Ages ${grade.min_age}-${grade.max_age})`}
+                          {grade.name}
                         </option>
                       ))}
                     </select>

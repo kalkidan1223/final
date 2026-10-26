@@ -5,9 +5,9 @@ import axiosClient from '../../api/axiosClient';
 
 const AUDIENCE_OPTIONS = [
   { value: 'all', label: 'Everyone', icon: MdPeople },
-  { value: 'parents', label: 'All Parents & Guardians', icon: MdFamilyRestroom },
-  { value: 'students', label: 'All Students', icon: MdSchool },
-  { value: 'instructors', label: 'All Instructors', icon: MdGroups },
+  { value: 'parents', label: 'Parents', icon: MdFamilyRestroom },
+  { value: 'students', label: 'Students', icon: MdSchool },
+  { value: 'instructors', label: 'Instructors', icon: MdGroups },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -19,7 +19,7 @@ const PRIORITY_OPTIONS = [
 const EMPTY_FORM = {
   title: '',
   message: '',
-  audience: 'all',
+  audience: ['all'],
   priority: 'normal',
   start_date: '',
   end_date: '',
@@ -31,11 +31,29 @@ function PriorityBadge({ priority }) {
 }
 
 function AudienceBadge({ audience }) {
-  const opt = AUDIENCE_OPTIONS.find(a => a.value === audience);
-  const Icon = opt?.icon || MdPeople;
+  // Handle both single string (comma-separated or single) and array
+  const audienceArray = Array.isArray(audience)
+    ? audience
+    : typeof audience === 'string'
+    ? audience.split(',').map((s) => s.trim()).filter(Boolean)
+    : [audience];
+
+  if (audienceArray.includes('all')) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-slate-600">
+        <MdPeople className="text-slate-400" /> Everyone
+      </span>
+    );
+  }
+
+  const labels = audienceArray.map(a => {
+    const opt = AUDIENCE_OPTIONS.find(o => o.value === a);
+    return opt?.label || a;
+  });
+
   return (
     <span className="flex items-center gap-1 text-xs text-slate-600">
-      <Icon className="text-slate-400" /> {opt?.label || audience}
+      <MdPeople className="text-slate-400" /> {labels.join(', ')}
     </span>
   );
 }
@@ -88,7 +106,7 @@ export default function AdminAnnouncements() {
   function validate() {
     if (!form.title.trim() || form.title.trim().length < 3) return 'Title must be at least 3 characters';
     if (!form.message.trim() || form.message.trim().length < 10) return 'Message must be at least 10 characters';
-    if (!form.audience) return 'Please select an audience';
+    if (!form.audience || form.audience.length === 0) return 'Please select at least one audience';
     if (form.start_date && form.end_date && new Date(form.end_date) < new Date(form.start_date)) return 'End date must be after start date';
     return null;
   }
@@ -100,6 +118,11 @@ export default function AdminAnnouncements() {
     setError('');
     setSubmitting(true);
     try {
+      console.log('=== FRONTEND DEBUG ===');
+      console.log('Form data being sent:', JSON.stringify(form, null, 2));
+      console.log('Audience value:', form.audience);
+      console.log('Audience type:', typeof form.audience);
+      console.log('Is array:', Array.isArray(form.audience));
       await axiosClient.post('/admin/announcements', form);
       setSuccess('Announcement created and sent successfully!');
       setForm(EMPTY_FORM);
@@ -107,6 +130,9 @@ export default function AdminAnnouncements() {
       loadAnnouncements(true);
       setTimeout(() => setSuccess(''), 4000);
     } catch (err) {
+      console.error('=== FRONTEND ERROR ===');
+      console.error('Error:', err);
+      console.error('Error response:', err.response?.data);
       setError(err.response?.data?.error || 'Failed to create announcement');
     } finally {
       setSubmitting(false);
@@ -181,19 +207,34 @@ export default function AdminAnnouncements() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Audience <span className="text-rose-500">*</span></label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
                   {AUDIENCE_OPTIONS.map(opt => {
                     const Icon = opt.icon;
-                    const active = form.audience === opt.value;
+                    const active = form.audience.includes(opt.value);
                     return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => updateForm('audience', opt.value)}
-                        className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition ${active ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                      >
-                        <Icon className="flex-shrink-0" /> {opt.label.split(' ')[0]}
-                      </button>
+                      <label key={opt.value} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium cursor-pointer transition ${active ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                        <input
+                          type="checkbox"
+                          checked={active}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              // If selecting "Everyone", clear others and only select everyone
+                              if (opt.value === 'all') {
+                                updateForm('audience', ['all']);
+                              } else {
+                                // If selecting a specific audience, remove "everyone" if present
+                                const newAudience = form.audience.filter(a => a !== 'all');
+                                updateForm('audience', [...newAudience, opt.value]);
+                              }
+                            } else {
+                              // If deselecting, remove from array
+                              updateForm('audience', form.audience.filter(a => a !== opt.value));
+                            }
+                          }}
+                          className="rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        <Icon className="flex-shrink-0" /> {opt.label}
+                      </label>
                     );
                   })}
                 </div>
@@ -252,7 +293,7 @@ export default function AdminAnnouncements() {
                       <h3 className="font-semibold text-slate-800">{ann.title}</h3>
                       <PriorityBadge priority={ann.priority} />
                     </div>
-                    <p className="text-sm text-slate-600 mb-3 line-clamp-2">{ann.message}</p>
+                    <p className="text-sm text-slate-600 mb-3 line-clamp-2">{ann.message || ann.content}</p>
                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
                       <AudienceBadge audience={ann.audience} />
                       <span className="flex items-center gap-1">

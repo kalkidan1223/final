@@ -217,7 +217,6 @@ async function getChildren(req, res, next) {
           u.email as student_email,
           u.is_active as student_is_active,
           gl.name as grade_level_name,
-          gl.min_age, gl.max_age, gl.requires_account,
           'approved' as account_status,
           NULL as account_rejection_reason,
           (
@@ -278,7 +277,7 @@ async function getChildren(req, res, next) {
           sr.student_email,
           (CASE WHEN sr.student_email IS NOT NULL THEN 'pending_account' ELSE NULL END) as user_id,
           FALSE as student_is_active,
-          (CASE WHEN sr.age BETWEEN 5 AND 7 THEN '5-7' WHEN sr.age BETWEEN 8 AND 9 THEN '8-9' ELSE '10-12' END) as grade_level_name,
+          gl.name as grade_level_name,
           sr.status as account_status,
           sr.rejection_reason as account_rejection_reason,
           0 as total_assigned_courses,
@@ -289,6 +288,7 @@ async function getChildren(req, res, next) {
           sr.submitted_at as last_activity,
           TRUE as is_pending_request
          FROM student_registration_requests sr
+         LEFT JOIN grade_levels gl ON gl.id = sr.grade_level_id
          WHERE sr.parent_id = $1 AND sr.status IN ('pending', 'rejected')
          ORDER BY sr.submitted_at DESC`,
         [parentId]
@@ -331,7 +331,6 @@ async function getChildById(req, res, next) {
         u.full_name as student_full_name,
         u.is_active as student_is_active,
         gl.name as grade_level_name,
-        gl.min_age, gl.max_age, gl.requires_account,
         CASE
           WHEN s.user_id IS NULL THEN 'active'
           WHEN u.is_active = TRUE THEN 'approved'
@@ -503,18 +502,6 @@ async function registerChild(req, res, next) {
     const monthDiff = today.getMonth() - birthDate.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       age--;
-    }
-
-    // Validate age against grade level (optional but helpful)
-    if (gradeLevel.min_age && age < gradeLevel.min_age) {
-      return res.status(400).json({
-        error: `Child's age (${age}) is below the minimum age for ${gradeLevel.name} (${gradeLevel.min_age})`,
-      });
-    }
-    if (gradeLevel.max_age && age > gradeLevel.max_age) {
-      return res.status(400).json({
-        error: `Child's age (${age}) is above the maximum age for ${gradeLevel.name} (${gradeLevel.max_age})`,
-      });
     }
 
     const full_name = `${first_name.trim()} ${middle_name ? middle_name.trim() + ' ' : ''}${last_name ? last_name.trim() : ''}`.trim();
@@ -1434,13 +1421,14 @@ async function getDashboardStats(req, res, next) {
           sr.student_photo_url as profile_picture,
           sr.date_of_birth,
           (CASE WHEN sr.student_email IS NOT NULL THEN 'pending_account' ELSE NULL END) as user_id,
-          (CASE WHEN sr.age BETWEEN 5 AND 7 THEN '5-7' WHEN sr.age BETWEEN 8 AND 9 THEN '8-9' ELSE '10-12' END) as grade_level_name,
+          gl.name as grade_level_name,
           sr.status as account_status,
           0 as courses_count,
           0 as completed_lessons,
           0 as avg_progress,
           sr.submitted_at as last_activity
          FROM student_registration_requests sr
+         LEFT JOIN grade_levels gl ON gl.id = sr.grade_level_id
          WHERE sr.parent_id = $1 AND sr.status = 'pending'
          ORDER BY sr.submitted_at DESC`,
         [parentId]
@@ -1448,6 +1436,19 @@ async function getDashboardStats(req, res, next) {
     ]);
 
     const combinedSummary = [...approvedSummary.rows, ...pendingSummary.rows];
+
+    const annResult = await query(
+      `SELECT id, title, COALESCE(NULLIF(message, ''), content) AS message, priority, created_at, start_date, end_date
+       FROM announcements
+       WHERE (is_active IS NULL OR is_active = TRUE)
+         AND (audience = 'all' OR audience LIKE '%all%' OR audience LIKE '%parents%')
+         AND (start_date IS NULL OR start_date <= CURRENT_DATE)
+         AND (end_date IS NULL OR end_date >= CURRENT_DATE)
+       ORDER BY 
+         CASE priority WHEN 'urgent' THEN 1 WHEN 'important' THEN 2 ELSE 3 END,
+         created_at DESC
+       LIMIT 5`
+    );
 
     res.json({
       stats: {
@@ -1458,6 +1459,7 @@ async function getDashboardStats(req, res, next) {
       },
       recent_feedback: feedbackStats.rows,
       children_summary: combinedSummary,
+      announcements: annResult.rows,
     });
   } catch (err) {
     next(err);
@@ -1482,7 +1484,11 @@ async function getNotifications(req, res, next) {
       [req.user.id]
     );
 
-    const unreadCount = result.rows.filter(n => !n.is_read).length;
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS unread_count FROM notifications WHERE user_id = $1 AND is_read = FALSE`,
+      [req.user.id]
+    );
+    const unreadCount = countResult.rows[0]?.unread_count ?? result.rows.filter(n => !n.is_read).length;
 
     res.json({
       notifications: result.rows,
@@ -1504,7 +1510,28 @@ async function markNotificationRead(req, res, next) {
       `UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2`,
       [id, req.user.id]
     );
-    res.json({ message: 'Notification marked as read' });
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS unread_count FROM notifications WHERE user_id = $1 AND is_read = FALSE`,
+      [req.user.id]
+    );
+    const unreadCount = countResult.rows[0]?.unread_count ?? 0;
+    res.json({ message: 'Notification marked as read', unread_count: unreadCount });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /api/parent/notifications/read-all
+ * Mark all notifications as read for the logged in parent
+ */
+async function markAllNotificationsRead(req, res, next) {
+  try {
+    await query(
+      `UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE`,
+      [req.user.id]
+    );
+    res.json({ message: 'All notifications marked as read', unread_count: 0 });
   } catch (err) {
     next(err);
   }
@@ -1530,6 +1557,7 @@ async function getInstructorsForParent(req, res, next) {
     const result = await query(
       `SELECT DISTINCT
         i.id,
+        u.id AS user_id,
         u.full_name,
         u.email,
         i.qualification,
@@ -1574,5 +1602,6 @@ module.exports = {
   getDashboardStats,
   getNotifications,
   markNotificationRead,
+  markAllNotificationsRead,
   getInstructorsForParent,
 };

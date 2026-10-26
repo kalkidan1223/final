@@ -38,17 +38,20 @@ async function createCourse(req, res, next) {
       });
     }
 
-    const { title, description, grade_level_id, thumbnail_url, available_course_id } = req.body;
+    const { title, description, grade_level_id, thumbnail_url } = req.body;
     if (!title || !grade_level_id) {
       return res.status(400).json({ error: 'title and grade_level_id are required' });
     }
 
+    const grade = await query('SELECT id FROM grade_levels WHERE id = $1 AND is_active = TRUE', [grade_level_id]);
+    if (!grade.rows.length) return res.status(400).json({ error: 'Choose an active grade level' });
+
     // Admin creating a course manually
     const result = await query(
-      `INSERT INTO courses (instructor_id, grade_level_id, title, description, thumbnail_url, available_course_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'draft')
+      `INSERT INTO courses (instructor_id, grade_level_id, title, description, thumbnail_url, status)
+       VALUES ($1, $2, $3, $4, $5, 'draft')
        RETURNING *`,
-      [null, grade_level_id, title, description || null, thumbnail_url || null, available_course_id || null]
+      [null, grade_level_id, title, description || null, thumbnail_url || null]
     );
 
     res.status(201).json({ course: result.rows[0] });
@@ -65,11 +68,11 @@ async function getMyInstructorDashboard(req, res, next) {
     const [summary, recentCourses] = await Promise.all([
       query(
         `SELECT
-          (SELECT COUNT(*)::int FROM courses WHERE instructor_id = $1) AS assigned_courses,
-          (SELECT COUNT(*)::int FROM lessons l JOIN courses c ON c.id = l.course_id WHERE c.instructor_id = $1) AS total_lessons,
-          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.grade_level_id = s.grade_level_id WHERE c.instructor_id = $1 AND s.is_active = TRUE) AS total_students,
-          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.grade_level_id = s.grade_level_id WHERE c.instructor_id = $1 AND s.user_id IS NULL AND s.is_active = TRUE) AS parent_managed_children,
-          (SELECT COUNT(*)::int FROM activity_submissions sub JOIN activities a ON a.id = sub.activity_id JOIN lessons l ON l.id = a.lesson_id JOIN courses c ON c.id = l.course_id WHERE c.instructor_id = $1 AND sub.status = 'pending') AS pending_activities,
+          (SELECT COUNT(DISTINCT c.id)::int FROM courses c WHERE c.instructor_id = $1 OR EXISTS (SELECT 1 FROM instructor_assignments ia WHERE ia.course_id = c.id AND ia.instructor_id = $1 AND ia.status = 'active')) AS assigned_courses,
+          (SELECT COUNT(*)::int FROM lessons l JOIN courses c ON c.id = l.course_id WHERE c.instructor_id = $1 OR EXISTS (SELECT 1 FROM instructor_assignments ia WHERE ia.course_id = c.id AND ia.instructor_id = $1 AND ia.status = 'active')) AS total_lessons,
+          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.grade_level_id = s.grade_level_id WHERE (c.instructor_id = $1 OR EXISTS (SELECT 1 FROM instructor_assignments ia WHERE ia.course_id = c.id AND ia.instructor_id = $1 AND ia.status = 'active')) AND s.is_active = TRUE) AS total_students,
+          (SELECT COUNT(DISTINCT s.id)::int FROM students s JOIN courses c ON c.grade_level_id = s.grade_level_id WHERE (c.instructor_id = $1 OR EXISTS (SELECT 1 FROM instructor_assignments ia WHERE ia.course_id = c.id AND ia.instructor_id = $1 AND ia.status = 'active')) AND s.user_id IS NULL AND s.is_active = TRUE) AS parent_managed_children,
+          (SELECT COUNT(*)::int FROM activity_submissions sub JOIN activities a ON a.id = sub.activity_id JOIN lessons l ON l.id = a.lesson_id JOIN courses c ON c.id = l.course_id WHERE (c.instructor_id = $1 OR EXISTS (SELECT 1 FROM instructor_assignments ia WHERE ia.course_id = c.id AND ia.instructor_id = $1 AND ia.status = 'active')) AND sub.status = 'pending') AS pending_activities,
           (SELECT COUNT(*)::int FROM notifications WHERE user_id = $2 AND is_read = FALSE) AS unread_notifications`,
         [instructorId, req.user.id]
       ),
@@ -77,7 +80,10 @@ async function getMyInstructorDashboard(req, res, next) {
         `SELECT c.id, c.title, c.status, ag.name AS grade_level_name, COUNT(l.id)::int AS lesson_count
          FROM courses c JOIN grade_levels ag ON ag.id = c.grade_level_id
          LEFT JOIN lessons l ON l.course_id = c.id
-         WHERE c.instructor_id = $1
+         WHERE c.instructor_id = $1 OR EXISTS (
+           SELECT 1 FROM instructor_assignments ia
+           WHERE ia.course_id = c.id AND ia.instructor_id = $1 AND ia.status = 'active'
+         )
          GROUP BY c.id, ag.name ORDER BY c.updated_at DESC LIMIT 5`,
         [instructorId]
       ),
@@ -123,15 +129,18 @@ async function listCourses(req, res, next) {
     if (req.user.role === 'instructor' && req.query.mine === 'true') {
       const instructorId = await getInstructorIdForUser(req.user.id);
       params.push(instructorId);
-      conditions.push(`c.instructor_id = $${params.length}`);
+      conditions.push(`(c.instructor_id = $${params.length} OR EXISTS (
+        SELECT 1 FROM instructor_assignments ia
+        WHERE ia.course_id = c.id AND ia.instructor_id = $${params.length} AND ia.status = 'active'
+      ))`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
       `SELECT c.*, u.full_name AS instructor_name, ag.name AS grade_level_name
        FROM courses c
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        JOIN grade_levels ag ON ag.id = c.grade_level_id
        ${where}
        ORDER BY c.created_at DESC`,
@@ -153,8 +162,8 @@ async function getCourse(req, res, next) {
     const courseResult = await query(
       `SELECT c.*, u.full_name AS instructor_name, ag.name AS grade_level_name
        FROM courses c
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        JOIN grade_levels ag ON ag.id = c.grade_level_id
        WHERE c.id = $1`,
       [id]

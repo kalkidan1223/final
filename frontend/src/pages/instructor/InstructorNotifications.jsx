@@ -29,12 +29,18 @@ export default function InstructorNotifications() {
 
   async function markRead(id) {
     await axiosClient.patch(`/instructor/notifications/${id}/read`).catch(() => null);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    setNotifications(prev => {
+      const next = prev.map(n => n.id === id ? { ...n, is_read: true } : n);
+      const unread = next.filter(n => !n.is_read).length;
+      window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: { unreadCount: unread } }));
+      return next;
+    });
   }
 
   async function markAllRead() {
     await axiosClient.patch('/instructor/notifications/read-all').catch(() => null);
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: { unreadCount: 0 } }));
   }
 
   const filtered = notifications.filter(n => {

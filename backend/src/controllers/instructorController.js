@@ -205,6 +205,19 @@ async function getDashboard(req, res, next) {
       avg_score: parseFloat(prog.avg_progress || 0),
     };
 
+    const annResult = await query(
+      `SELECT id, title, COALESCE(NULLIF(message, ''), content) AS message, priority, created_at, start_date, end_date
+       FROM announcements
+       WHERE (is_active IS NULL OR is_active = TRUE)
+         AND (audience = 'all' OR audience LIKE '%all%' OR audience LIKE '%instructors%')
+         AND (start_date IS NULL OR start_date <= CURRENT_DATE)
+         AND (end_date IS NULL OR end_date >= CURRENT_DATE)
+       ORDER BY 
+         CASE priority WHEN 'urgent' THEN 1 WHEN 'important' THEN 2 ELSE 3 END,
+         created_at DESC
+       LIMIT 5`
+    );
+
     res.json({
       summary,
       courses: coursesRes.rows,
@@ -214,7 +227,8 @@ async function getDashboard(req, res, next) {
         active_students: parseInt(prog.active_students || 0),
         completed_students: parseInt(prog.completed_students || 0),
         avg_progress: parseFloat(prog.avg_progress || 0),
-      }
+      },
+      announcements: annResult.rows,
     });
   } catch (err) {
     next(err);

@@ -50,6 +50,7 @@ router.post('/quizzes/:quizId/submit', ...authChild, childController.submitQuiz)
 router.get('/progress', ...authChild, childController.getProgress);
 router.get('/achievements', ...authChild, childController.getAchievements);
 router.get('/notifications', ...authChild, childController.getNotifications);
+router.patch('/notifications/read-all', ...authChild, childController.markAllNotificationsRead);
 router.patch('/notifications/:id/read', ...authChild, childController.markNotificationRead);
 
 // Ask My Teacher — Student → Instructor Q&A

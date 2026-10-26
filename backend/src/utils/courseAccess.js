@@ -2,7 +2,7 @@ const { query } = require('../config/db');
 const { getInstructorIdForUser } = require('./roleHelpers');
 
 // Returns whether the authenticated user may read a course. Learners can only
-// read published courses that match an approved child/student age group.
+// read published courses that match an approved child/student grade level.
 // Instructors can read courses they authored OR courses assigned to them by admin.
 async function canReadCourse(user, course) {
   if (!user) return false;

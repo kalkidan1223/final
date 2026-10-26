@@ -10,7 +10,7 @@ const ROLE_LINKS = {
     { label: 'Instructors', to: '/admin/instructors' },
     { label: 'Assignments', to: '/admin/instructor-assignments' },
     { label: 'Courses',     to: '/admin/courses' },
-    { label: 'Age Groups',  to: '/admin/age-groups' },
+    { label: 'Grade Levels', to: '/admin/grade-levels' },
     { label: 'Reports',     to: '/admin/reports' },
     { label: 'Notifications', to: '/admin/notifications' },
     { label: 'Analytics',   to: '/admin/analytics' },

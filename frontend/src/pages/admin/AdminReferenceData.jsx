@@ -14,7 +14,7 @@ import { invalidateReferenceKit } from '../../hooks/useReferenceKit';
 /**
  * AdminReferenceData
  * ------------------
- * Maintenance of the four reference datasets the age 5-9 child portal is built
+ * Maintenance of the four reference datasets the child portal is built
  * on: the Ge'ez syllabary, the Ethiopic numerals, the picture words, and the
  * encouragement phrases.
  *

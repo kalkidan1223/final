@@ -23,6 +23,7 @@ const NAV_GROUPS = [
     items: [
       { label: 'Courses', to: '/instructor/courses', icon: MdMenuBook },
       { label: 'Lessons', to: '/instructor/lessons', icon: MdAutoStories },
+      { label: 'Fidel Family Lessons', to: '/instructor/fidel-lessons', icon: MdTranslate },
       { label: 'Materials', to: '/instructor/materials', icon: MdLibraryBooks },
       { label: 'Activities', to: '/instructor/activities', icon: MdExtension },
       { label: 'Quizzes', to: '/instructor/quizzes', icon: MdQuiz },

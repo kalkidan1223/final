@@ -33,6 +33,14 @@ async function createInstructorAssignment(req, res, next) {
       return res.status(400).json({ error: 'instructor_id, course_id, and grade_level_id are required' });
     }
 
+    const course = await query(
+      'SELECT id, grade_level_id FROM courses WHERE id = $1 AND grade_level_id = $2',
+      [course_id, grade_level_id]
+    );
+    if (!course.rows.length) {
+      return res.status(400).json({ error: 'The selected course does not belong to this grade level' });
+    }
+
     const { rows } = await query(
       `INSERT INTO instructor_assignments
          (instructor_id, course_id, grade_level_id, grade, section, academic_year_id, status, assigned_by)
@@ -49,17 +57,12 @@ async function createInstructorAssignment(req, res, next) {
       [instructor_id, course_id]
     );
 
-    // Link the course's curriculum entry to the instructor so the admin's
-    // Instructor list (assigned_courses) stays consistent too.
-    const courseLink = await query('SELECT available_course_id FROM courses WHERE id = $1', [course_id]);
-    if (courseLink.rows[0]?.available_course_id) {
-      await query(
-        `INSERT INTO instructor_courses (instructor_id, available_course_id, assigned_by)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (instructor_id, available_course_id) DO NOTHING`,
-        [instructor_id, courseLink.rows[0].available_course_id, req.user.id]
-      );
-    }
+    await query(
+      `INSERT INTO course_instructor_assignments (course_id, instructor_id, assigned_by)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (course_id, instructor_id) DO NOTHING`,
+      [course_id, instructor_id, req.user.id]
+    );
 
     res.status(201).json({ assignment: rows[0] });
   } catch (err) {

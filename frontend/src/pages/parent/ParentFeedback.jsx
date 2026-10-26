@@ -76,13 +76,12 @@ export default function ParentFeedback() {
 
     try {
       setSendingMessage(true);
-      // Send notification or message to the instructor
+      const recipientId = contactModalInstructor.user_id || contactModalInstructor.id;
       await axiosClient.post('/messages', {
-        recipient_id: contactModalInstructor.id,
-        subject: contactSubject || `Question regarding ${selectedChild?.full_name}`,
-        body: contactMessage,
-      }).catch(() => {
-        // Fallback: If dedicated message table endpoint is slightly different, emit notification
+        receiver_id: recipientId,
+        student_id: selectedChild?.id || null,
+        body: contactMessage.trim(),
+        subject: contactSubject || `Question regarding ${selectedChild?.full_name || 'student'}`,
       });
 
       setMessageSuccess('Your message has been sent to the instructor.');
