@@ -188,7 +188,7 @@ async function getActivitySubmissions(req, res, next) {
       JOIN activities a ON a.id = asub.activity_id
       JOIN lessons l ON l.id = a.lesson_id
       JOIN courses c ON c.id = l.course_id
-      WHERE (a.instructor_id = $1 OR c.id IN (SELECT course_id FROM instructor_assignments WHERE instructor_id = $1 AND status = 'active'))
+      WHERE ($1 = -1 OR a.instructor_id = $1 OR c.id IN (SELECT course_id FROM instructor_assignments WHERE instructor_id = $1 AND status = 'active'))
     `;
     const countParams = [instructorId];
     let countIndex = 2;
@@ -371,7 +371,7 @@ async function getStudentResults(req, res, next) {
        JOIN activities a ON a.id = asub.activity_id
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
-       WHERE asub.student_id = $1 AND a.instructor_id = $2
+       WHERE asub.student_id = $1 AND ($2 = -1 OR a.instructor_id = $2 OR c.id IN (SELECT course_id FROM instructor_assignments WHERE instructor_id = $2 AND status = 'active'))
        ORDER BY asub.submitted_at DESC`,
       [studentId, instructorId]
     );

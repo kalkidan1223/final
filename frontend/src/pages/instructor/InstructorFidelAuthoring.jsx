@@ -20,7 +20,7 @@ import {
   MdHeadphones,
 } from 'react-icons/md';
 import axiosClient from '../../api/axiosClient';
-import Layout from '../../components/Layout';
+import InstructorLayout from '../../components/InstructorLayout';
 import { resolveFileUrl } from '../../utils/fileUrl';
 
 export default function InstructorFidelAuthoring() {
@@ -95,12 +95,20 @@ export default function InstructorFidelAuthoring() {
       setLoading(true);
       try {
         // 1. Fetch assigned courses
-        const coursesRes = await axiosClient.get('/courses?mine=true');
-        const myCourses = coursesRes.data.courses || [];
+        const coursesRes = await axiosClient.get('/instructor/courses');
+        const rawCourses = coursesRes.data.courses || [];
+        const myCourses = rawCourses.map(c => ({
+          ...c,
+          id: c.course_id || c.id,
+          title: c.course_title || c.title,
+          description: c.course_description || c.description,
+          grade_level_name: c.grade_level_name || 'All Grades',
+          status: c.course_status || c.status,
+        }));
         setCourses(myCourses);
 
         if (!selectedCourseId && myCourses.length > 0) {
-          const amh = myCourses.find(c => c.subject_name === 'Amharic' || c.title?.includes('Amharic'));
+          const amh = myCourses.find(c => c.subject_name === 'Amharic' || c.title?.includes('Amharic') || c.title?.includes('አማርኛ'));
           setSelectedCourseId(amh ? amh.id : myCourses[0].id);
         }
 
@@ -275,6 +283,7 @@ export default function InstructorFidelAuthoring() {
       family_ids: selectedFamilies.map(f => f.id),
       practice_settings: {
         activities_enabled: activitiesEnabled,
+        activity_order: activitiesEnabled,
         listening_required_first: listeningRequiredFirst,
         require_all_audio_ready: requireAllAudioReady,
       },
@@ -323,7 +332,7 @@ export default function InstructorFidelAuthoring() {
   });
 
   return (
-    <Layout title={isEditing ? 'Edit Fidel Lesson' : 'Create Fidel Lesson'} role="instructor">
+    <InstructorLayout>
       <div className="max-w-6xl mx-auto space-y-8 pb-20">
         {/* Navigation & Header */}
         <div className="flex items-center justify-between">
@@ -953,6 +962,6 @@ export default function InstructorFidelAuthoring() {
           </div>
         )}
       </div>
-    </Layout>
+    </InstructorLayout>
   );
 }

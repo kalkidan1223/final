@@ -512,32 +512,76 @@ async function approveInstructorRegistration(req, res, next) {
       return res.status(400).json({ error: `Registration is already ${reg.status}` });
     }
 
-    const passwordHash = reg.password_hash;
-
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      const userResult = await client.query(
-        `INSERT INTO users (email, password_hash, role, full_name, phone)
-         VALUES ($1, $2, 'instructor', $3, $4)
-         RETURNING id, email, full_name, role, phone, is_active`,
-        [reg.email, passwordHash, reg.full_name, reg.phone]
+      // ── KEY FIX: Check if a users row already exists (e.g. signed up via Google OAuth) ──
+      const existingUser = await client.query(
+        `SELECT id, email, full_name, role, is_active FROM users WHERE email = $1`,
+        [reg.email.toLowerCase()]
       );
-      const user = userResult.rows[0];
 
+      let user;
+
+      if (existingUser.rows.length > 0) {
+        // User already exists (Google OAuth signup) — update role & activate
+        const updateResult = await client.query(
+          `UPDATE users
+           SET role = 'instructor',
+               full_name = $1,
+               phone     = $2,
+               is_active = TRUE,
+               updated_at = now()
+           WHERE email = $3
+           RETURNING id, email, full_name, role, phone, is_active`,
+          [reg.full_name, reg.phone || null, reg.email.toLowerCase()]
+        );
+        user = updateResult.rows[0];
+      } else {
+        // Brand-new user — create the users row
+        // Google-oauth placeholder means no real password was set; use it as-is
+        const passwordHash = reg.password_hash === 'google-oauth' ? null : reg.password_hash;
+        const insertResult = await client.query(
+          `INSERT INTO users (email, password_hash, role, full_name, phone, is_active)
+           VALUES ($1, $2, 'instructor', $3, $4, TRUE)
+           RETURNING id, email, full_name, role, phone, is_active`,
+          [reg.email.toLowerCase(), passwordHash, reg.full_name, reg.phone || null]
+        );
+        user = insertResult.rows[0];
+      }
+
+      // ── Create or update the instructors profile row ──
+      // (it may already exist if the Google-OAuth registration flow created it)
       await client.query(
         `INSERT INTO instructors (user_id, bio, qualification, specialty)
-         VALUES ($1, $2, $3, $4)`,
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id) DO UPDATE
+           SET bio           = EXCLUDED.bio,
+               qualification = EXCLUDED.qualification,
+               specialty     = EXCLUDED.specialty`,
         [user.id, reg.bio || null, reg.education_level || null, reg.specialization || null]
       );
 
+      // ── Mark the request approved ──
       await client.query(
-        `UPDATE instructor_registration_requests SET status = 'approved', reviewed_by = $1, reviewed_at = now(), reviewed_notes = $2
+        `UPDATE instructor_registration_requests
+         SET status = 'approved', reviewed_by = $1, reviewed_at = now(), reviewed_notes = $2
          WHERE id = $3`,
         [req.user.id, notes || null, id]
       );
 
+      // ── Send approval notification to the instructor ──
+      await client.query(
+        `INSERT INTO notifications (user_id, type, title, message)
+         VALUES ($1, 'info', 'Instructor Account Approved! 🎉', $2)`,
+        [
+          user.id,
+          `Congratulations ${reg.full_name}! Your instructor application has been approved. You can now log in and access your instructor portal.`
+        ]
+      );
+
+      // ── Audit log ──
       await client.query(
         `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent, metadata)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -546,7 +590,7 @@ async function approveInstructorRegistration(req, res, next) {
       );
 
       await client.query('COMMIT');
-      res.json({ message: 'Instructor registration approved', user: user, registration_id: id });
+      res.json({ message: 'Instructor registration approved', user, registration_id: id });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

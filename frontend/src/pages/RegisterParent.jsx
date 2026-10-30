@@ -323,7 +323,10 @@ export default function RegisterParent() {
                     <input required placeholder="Phone *" value={form.phone} onChange={update('phone')} className="rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
                   </div>
                   <input placeholder="Alternative Phone" value={form.alt_phone} onChange={update('alt_phone')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
-                  <input required type="email" placeholder="Email Address *" value={form.email} onChange={update('email')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />
+                  {isGoogleUser && (
+                    <p className="text-xs text-blue-600 font-semibold mb-1">?? Email from Google (locked)</p>
+                  )}
+                  <input required type="email" placeholder="Email Address *" value={form.email} onChange={update('email')} readOnly={isGoogleUser} className={`w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100${isGoogleUser ? ' bg-blue-50 text-slate-500 cursor-not-allowed' : ''}`} />
                   {!isGoogleUser && (
                     <>
                       <input required type="password" placeholder="Password *" value={form.password} onChange={update('password')} className="w-full rounded-xl border-2 border-slate-200 py-3 px-4 focus:border-emerald-400 focus:outline-none focus:ring-4 focus:ring-emerald-100" />

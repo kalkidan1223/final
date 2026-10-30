@@ -122,6 +122,8 @@ function EditAssignmentsModal({ instructor, onClose, onSave, gradeLevels }) {
               grade_level_id: assignedGradeLevels[idx],
               title: c.title,
               description: c.description,
+              subject_name: c.subject_name,
+              subject_id: c.subject_id,
             }))
         );
         setAvailableCourses(allAvailableCourses);
@@ -247,6 +249,7 @@ function EditAssignmentsModal({ instructor, onClose, onSave, gradeLevels }) {
                       />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium">{course.title}</p>
+                        {course.subject_name && <p className="text-xs text-slate-400">{course.subject_name}</p>}
                         {course.description && (
                           <p className="text-xs text-slate-500 truncate mt-0.5">{course.description}</p>
                         )}

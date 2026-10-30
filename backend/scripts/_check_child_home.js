@@ -6,7 +6,7 @@
 // What it proves, in order:
 //   1. The reference kit is readable and the syllabary is complete.
 //   2. Only admins can maintain reference data; only instructors/admins can pin.
-//   3. An instructor sees only their OWN age groups and only their OWN courses.
+//   3. An instructor sees only their OWN grade levels and only their OWN courses.
 //   4. Pinning works, is capped at 6, and reordering persists.
 //   5. A child aged 9 or under gets exactly those pins on their dashboard, with
 //      the instructor's own content, and can open the activity.
@@ -103,7 +103,7 @@ const createdPinIds = [];
   const studentRes = await query(
     `SELECT s.id, s.full_name, u.id AS user_id, u.email,
             EXTRACT(YEAR FROM age(CURRENT_DATE, s.date_of_birth))::int AS age,
-            s.age_group_id
+            s.grade_level_id
      FROM students s JOIN users u ON u.id = s.user_id
      ORDER BY s.id`
   );
@@ -124,7 +124,7 @@ const createdPinIds = [];
   const studentRef = await call('GET', '/api/reference/admin/fidel', { token: kidToken });
   check('student cannot reach reference admin', studentRef.status === 403, `status ${studentRef.status}`);
 
-  const studentPins = await call('GET', '/api/home/pins?age_group_id=1', { token: kidToken });
+  const studentPins = await call('GET', '/api/home/pins?grade_level_id=1', { token: kidToken });
   check('student cannot reach home pins', studentPins.status === 403, `status ${studentPins.status}`);
 
   const anon = await call('GET', '/api/reference/early-learner-kit');
@@ -136,36 +136,37 @@ const createdPinIds = [];
   const theirCourses = courses.data?.courses || [];
   console.log(`      ${theirCourses.length} course(s) assigned to this instructor:`);
   for (const c of theirCourses) {
-    console.log(`        #${c.course_id} "${c.course_title}" age_group_id=${c.age_group_id} (${c.age_group_name}) status=${c.course_status}`);
+    console.log(`        #${c.course_id} "${c.course_title}" grade_level_id=${c.grade_level_id} (${c.age_group_name}) status=${c.course_status}`);
   }
-  check('  instructor course list carries age_group_id',
-    theirCourses.every((c) => c.age_group_id != null),
+  check('  instructor course list carries grade_level_id',
+    theirCourses.every((c) => c.grade_level_id != null),
     theirCourses.length ? 'present' : 'no courses to check');
 
-  const ownCourseIds = new Set(theirCourses.map((c) => c.course_id));
-  const target = theirCourses.find((c) => c.age_group_id != null && c.course_status === 'published');
+  const ownedRes = await query('SELECT id FROM courses WHERE instructor_id = $1', [teacher.instructor_id]);
+  const ownCourseIds = new Set([...theirCourses.map((c) => c.course_id), ...ownedRes.rows.map((r) => r.id)]);
+  const target = theirCourses.find((c) => c.grade_level_id != null && c.course_status === 'published');
   if (!target) {
-    console.log('\nNo published course with an age group for this instructor; stopping after 1-3.');
+    console.log('\nNo published course with an grade level for this instructor; stopping after 1-3.');
     report();
     return;
   }
-  const ageGroupId = target.age_group_id;
+  const gradeLevelId = target.grade_level_id;
 
-  const candidates = await call('GET', `/api/home/candidates?age_group_id=${ageGroupId}`, { token: teacherToken });
-  check(`GET /home/candidates for age group ${ageGroupId}`, candidates.status === 200, `status ${candidates.status}`);
+  const candidates = await call('GET', `/api/home/candidates?grade_level_id=${gradeLevelId}`, { token: teacherToken });
+  check(`GET /home/candidates for grade level ${gradeLevelId}`, candidates.status === 200, `status ${candidates.status}`);
   const acts = candidates.data?.activities || [];
   console.log(`      ${acts.length} activities, ${candidates.data?.lessons?.length || 0} lessons available to pin`);
   const foreign = acts.filter((a) => !ownCourseIds.has(a.course_id));
   check('  candidates contain no course from another instructor', foreign.length === 0,
     foreign.length ? `${foreign.length} leaked` : 'all owned');
 
-  // A different age group must not leak content this instructor does not own.
+  // A different grade level must not leak content this instructor does not own.
   // Note this is an OWNERSHIP check, not an emptiness one: the teacher legitimately
   // publishes for several age bands, so "no rows" would be a false expectation.
-  const otherAgeGroup = await call('GET', '/api/home/candidates?age_group_id=2', { token: teacherToken });
+  const otherAgeGroup = await call('GET', '/api/home/candidates?grade_level_id=2', { token: teacherToken });
   const otherActs = otherAgeGroup.data?.activities || [];
   const otherForeign = otherActs.filter((a) => !ownCourseIds.has(a.course_id));
-  check('  another age group leaks no course from another instructor',
+  check('  another grade level leaks no course from another instructor',
     otherForeign.length === 0,
     otherForeign.length
       ? `${otherForeign.length} of ${otherActs.length} leaked`
@@ -177,12 +178,12 @@ const createdPinIds = [];
   for (const type of wanted) {
     const a = acts.find((x) => x.activity_type === type && !x.is_pinned);
     if (!a) {
-      console.log(`      (no ${type} activity published for age group ${ageGroupId})`);
+      console.log(`      (no ${type} activity published for grade level ${gradeLevelId})`);
       continue;
     }
     const res = await call('POST', '/api/home/pins', {
       token: teacherToken,
-      body: { age_group_id: ageGroupId, resource_type: 'activity', resource_id: a.id },
+      body: { grade_level_id: gradeLevelId, resource_type: 'activity', resource_id: a.id },
     });
     check(`pin ${type} "${a.title}"`, res.status === 201, `status ${res.status}`);
     if (res.status === 201) {
@@ -197,7 +198,7 @@ const createdPinIds = [];
     if (chosen.length >= 6) break;
     const res = await call('POST', '/api/home/pins', {
       token: teacherToken,
-      body: { age_group_id: ageGroupId, resource_type: 'activity', resource_id: spare.id },
+      body: { grade_level_id: gradeLevelId, resource_type: 'activity', resource_id: spare.id },
     });
     if (res.status === 201) {
       chosen.push(res.data.pin);
@@ -207,7 +208,7 @@ const createdPinIds = [];
   while (chosen.length < 6 && spares.length) {
     const extra = await call('POST', '/api/home/pins', {
       token: teacherToken,
-      body: { age_group_id: ageGroupId, resource_type: 'lesson', resource_id: candidates.data.lessons[chosen.length]?.id },
+      body: { grade_level_id: gradeLevelId, resource_type: 'lesson', resource_id: candidates.data.lessons[chosen.length]?.id },
     });
     if (extra.status === 201) {
       chosen.push(extra.data.pin);
@@ -218,7 +219,7 @@ const createdPinIds = [];
     const overflow = await call('POST', '/api/home/pins', {
       token: teacherToken,
       body: {
-        age_group_id: ageGroupId,
+        grade_level_id: gradeLevelId,
         resource_type: 'lesson',
         resource_id: candidates.data.lessons[0]?.id,
       },
@@ -237,15 +238,15 @@ const createdPinIds = [];
     const res = await call('POST', '/api/home/pins', {
       token: teacherToken,
       body: {
-        age_group_id: ageGroupId === 1 ? 2 : 1,
+        grade_level_id: gradeLevelId === 1 ? 2 : 1,
         resource_type: 'activity',
         resource_id: wrongGroup.id,
       },
     });
-    check('pinning into the wrong age group is refused', res.status === 400, `status ${res.status}`);
+    check('pinning into the wrong grade level is refused', res.status === 400, `status ${res.status}`);
   }
 
-  const listed = await call('GET', `/api/home/pins?age_group_id=${ageGroupId}`, { token: teacherToken });
+  const listed = await call('GET', `/api/home/pins?grade_level_id=${gradeLevelId}`, { token: teacherToken });
   check('GET /home/pins', listed.status === 200, `status ${listed.status}`);
   const pins = listed.data?.pins || [];
   check('  pins come back with their content attached', pins.every((p) => p.title && p.kind),
@@ -269,7 +270,7 @@ const createdPinIds = [];
     const [first, second] = pins;
     await call('PATCH', `/api/home/pins/${first.pin_id}`, { token: teacherToken, body: { display_order: 1 } });
     await call('PATCH', `/api/home/pins/${second.pin_id}`, { token: teacherToken, body: { display_order: 0 } });
-    const after = await call('GET', `/api/home/pins?age_group_id=${ageGroupId}`, { token: teacherToken });
+    const after = await call('GET', `/api/home/pins?grade_level_id=${gradeLevelId}`, { token: teacherToken });
     check('reordering persists', after.data.pins[0].pin_id === second.pin_id,
       `first is now "${after.data.pins[0].title}"`);
   }
@@ -280,9 +281,9 @@ const createdPinIds = [];
   check('a pin that does not exist is a 404', bogus.status === 404, `status ${bogus.status}`);
 
   // ── 5. The child view ─────────────────────────────────────────────────────
-  const childForGroup = kids.find((k) => k.age_group_id === ageGroupId) || null;
+  const childForGroup = kids.find((k) => k.grade_level_id === gradeLevelId) || null;
   const subject = young || childForGroup || anyKid;
-  console.log(`\n      checking the child portal for "${subject.full_name}" (age ${subject.age}, age group ${subject.age_group_id})`);
+  console.log(`\n      checking the child portal for "${subject.full_name}" (age ${subject.age}, grade level ${subject.grade_level_id})`);
 
   const dash = await call('GET', '/api/child/dashboard', {
     token: signAccessToken({ id: subject.user_id, role: 'student', email: subject.email }),
@@ -298,7 +299,7 @@ const createdPinIds = [];
 
   const childPins = dash.data?.home_pins || [];
   const isEarlyLearner = subject.age <= 9;
-  if (isEarlyLearner && subject.age_group_id === ageGroupId) {
+  if (isEarlyLearner && subject.grade_level_id === gradeLevelId) {
     check('  the child home shows what the teacher pinned', childPins.length === pins.length,
       `${childPins.length} of ${pins.length}`);
     check('  in the instructor\'s order',
@@ -318,7 +319,7 @@ const createdPinIds = [];
     console.log(
       `      note: "${subject.email}" is ${subject.age}, so this is the 10-12 path, not\n` +
         '      the age 5-9 one. The early-learner home needs a child under 10 to test.\n' +
-        `      Its age group is ${subject.age_group_id}, which has ${childPins.length} tile(s).`
+        `      Its grade level is ${subject.grade_level_id}, which has ${childPins.length} tile(s).`
     );
     check('  a child in the 10-12 band is not treated as an early learner',
       dash.data?.child?.is_early_learner === false,
@@ -339,17 +340,17 @@ const createdPinIds = [];
       act.data?.activity?.activity_config != null,
       `type=${act.data?.activity?.activity_type}`);
   } else {
-    console.log('      (no practice game pinned for this age group, so nothing to open)');
+    console.log('      (no practice game pinned for this grade level, so nothing to open)');
   }
 
-  // A child must not be able to open a pinned activity from another age group.
-  const otherGroupPin = (await call('GET', '/api/home/pins?age_group_id=' + (ageGroupId === 1 ? 3 : 1), { token: teacherToken })).data?.pins;
+  // A child must not be able to open a pinned activity from another grade level.
+  const otherGroupPin = (await call('GET', '/api/home/pins?grade_level_id=' + (gradeLevelId === 1 ? 3 : 1), { token: teacherToken })).data?.pins;
   if (otherGroupPin?.length) {
     const res = await call('GET', `/api/child/activities/${otherGroupPin[0].id}`, {
       token: signAccessToken({ id: subject.user_id, role: 'student', email: subject.email }),
       childId: subject.id,
     });
-    check('  a child cannot open another age group\'s activity', res.status === 403, `status ${res.status}`);
+    check('  a child cannot open another grade level\'s activity', res.status === 403, `status ${res.status}`);
   }
 
   // ── 6. Over-9 children do not get the early portal ────────────────────────
@@ -361,7 +362,7 @@ const createdPinIds = [];
     check(`a ${older.age}-year-old is not an early learner`,
       oldDash.data?.child?.is_early_learner === false,
       `is_early_learner=${oldDash.data?.child?.is_early_learner}`);
-    check('  and gets no child home tiles for an age group nobody pinned',
+    check('  and gets no child home tiles for an grade level nobody pinned',
       (oldDash.data?.home_pins || []).length === 0,
       `${(oldDash.data?.home_pins || []).length} tiles`);
   }
@@ -372,7 +373,7 @@ const createdPinIds = [];
   );
   if (parentRes.rows.length) {
     const p = parentRes.rows[0];
-    const res = await call('GET', `/api/home/pins?age_group_id=${ageGroupId}`, {
+    const res = await call('GET', `/api/home/pins?grade_level_id=${gradeLevelId}`, {
       token: signAccessToken({ id: p.user_id, role: 'parent', email: p.email }),
     });
     check('a parent cannot manage the child home', res.status === 403, `status ${res.status}`);

@@ -7,6 +7,9 @@ import RegisterParent from './pages/RegisterParent';
 import Signup from './pages/Signup';
 import SignupInstructor from './pages/SignupInstructor';
 import GoogleRoleSelection from './pages/GoogleRoleSelection';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
+import OAuthCallback from './pages/auth/OAuthCallback';
 import Unauthorized from './pages/Unauthorized';
 import Home from './pages/Home';
 import AuthCallback from './pages/AuthCallback';
@@ -53,6 +56,8 @@ import InstructorVocabulary from './pages/instructor/InstructorVocabulary';
 import InstructorResults from './pages/instructor/Results';
 import InstructorFidelLessons from './pages/instructor/InstructorFidelLessons';
 import InstructorFidelAuthoring from './pages/instructor/InstructorFidelAuthoring';
+import InstructorEnglishAuthoring from './pages/instructor/InstructorEnglishAuthoring';
+import ChildEnglishLesson from './pages/child/ChildEnglishLesson';
 import ChildFidelLesson from './pages/child/ChildFidelLesson';
 import ParentDashboard from './pages/parent/ParentDashboard';
 import ParentChildren from './pages/parent/ParentChildren';
@@ -109,13 +114,15 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/home" element={<Home />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       {/* Sign up flow */}
       <Route path="/signup" element={<Signup />} />
       <Route path="/signup/parent" element={<RegisterParent />} />
       <Route path="/signup/instructor" element={<SignupInstructor />} />
       {/* Legacy /register → redirect to /signup/parent */}
       <Route path="/register" element={<Navigate to="/signup/parent" replace />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/auth/callback" element={<OAuthCallback />} />
       <Route path="/auth/role-selection" element={<GoogleRoleSelection />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 
@@ -385,9 +392,13 @@ export default function App() {
       <Route path="/instructor/fidel-lessons/create"
         element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorFidelAuthoring /></ProtectedRoute>}
       />
+      <Route path="/instructor/english-lessons/create"
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorEnglishAuthoring /></ProtectedRoute>} />
       <Route path="/instructor/fidel-lessons/:lessonId/edit"
         element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorFidelAuthoring /></ProtectedRoute>}
       />
+      <Route path="/instructor/english-lessons/create"
+        element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorEnglishAuthoring /></ProtectedRoute>} />
       <Route path="/instructor/lessons"
         element={<ProtectedRoute roles={['instructor', 'admin']}><InstructorLessons /></ProtectedRoute>}
       />
@@ -458,6 +469,7 @@ export default function App() {
         <Route path="courses/:id" element={<ChildCourseDetail />} />
         <Route path="lessons/:id" element={<ChildLessonDetail />} />
         <Route path="lessons/:lessonId/fidel" element={<ChildFidelLesson />} />
+        <Route path="lessons/:lessonId/english" element={<ChildEnglishLesson />} />
         <Route path="activities/:id" element={<ChildActivityDetail />} />
         <Route path="progress" element={<ChildProgress />} />
         <Route path="activities" element={<ChildActivities />} />

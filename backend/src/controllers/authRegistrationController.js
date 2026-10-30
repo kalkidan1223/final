@@ -1,4 +1,5 @@
-const bcrypt = require('bcrypt');
+﻿const bcrypt = require('bcrypt');
+const { sendPasswordResetEmail } = require('../services/emailService');
 const crypto = require('crypto');
 const { pool, query } = require('../config/db');
 const { isValidEmail, isValidPassword, validateRegisterParent, validateLogin } = require('../utils/validators');
@@ -34,7 +35,14 @@ async function issueTokenPair(res, user) {
 }
 
 async function publicUser(row) {
-  const base = { id: row.id, email: row.email, full_name: row.full_name, role: row.role, is_active: row.is_active };
+  const base = {
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    role: row.role,
+    is_active: row.is_active,
+    google_id: row.google_id || null,
+  };
   return base;
 }
 
@@ -298,11 +306,15 @@ async function forgotPassword(req, res, next) {
 
     await logAudit(null, user.id, 'PASSWORD_RESET_REQUEST', 'user', user.id, null, { email: user.email });
 
-    // In production, send email here. For now, return the token for testing.
-    res.json({
-      message: 'Password reset link has been sent to your email.',
-      reset_token: token, // Remove in production — only for testing
-    });
+    // Send the reset email
+    const emailResult = await sendPasswordResetEmail(
+      { email: email.toLowerCase(), full_name: user.full_name },
+      token
+    );
+    if (!emailResult.success) {
+      console.error('Failed to send reset email:', emailResult.error);
+    }
+    res.json({ message: 'If an account exists with this email, a password reset link has been sent.' });
   } catch (err) {
     next(err);
   }
@@ -401,7 +413,7 @@ async function registerInstructor(req, res, next) {
     const errs = [];
     if (!full_name || full_name.trim().length < 2) errs.push('Full name is required');
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push('Valid email is required');
-    if (!password && !req.user?.google_id) errs.push('Password is required (unless using Google OAuth)');
+    if (!password && !req.user?.google_id && !req.body.is_google) errs.push('Password is required (unless using Google OAuth)');
     if (password && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password))
       errs.push('Password must be 8+ chars with uppercase, lowercase, number and special character');
     if (!phone || !/^\d{10,15}$/.test(phone)) errs.push('Phone must be 10-15 digits');
@@ -426,32 +438,44 @@ async function registerInstructor(req, res, next) {
         // User exists from Google OAuth - update role and create instructor record
         const userId = existingUser.rows[0].id;
 
-        // Update user role to instructor
+        // Update user role to instructor and store phone in users table
         await client.query(
-          `UPDATE users SET role = 'instructor', full_name = $1, updated_at = now() WHERE id = $2`,
-          [full_name.trim(), userId]
+          `UPDATE users SET role = 'instructor', full_name = $1, phone = $2, updated_at = now() WHERE id = $3`,
+          [full_name.trim(), phone || null, userId]
         );
 
-        // Create instructor record
+        // Create instructor record using actual DB columns: user_id, bio, qualification, specialty
         result = await client.query(
-          `INSERT INTO instructors (user_id, phone, specialization, education_level, years_of_experience, bio)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING id, full_name, email, status`,
+          `INSERT INTO instructors (user_id, bio, qualification, specialty)
+           VALUES ($1, $2, $3, $4)
+           RETURNING id`,
           [
-            userId, phone,
-            specialization || null, education_level || null,
-            years_of_experience ? parseInt(years_of_experience, 10) : null,
-            bio || null
+            userId,
+            bio || null,
+            education_level || null,
+            specialization || null,
           ]
         );
 
-        // Create registration request
-        await client.query(
-          `INSERT INTO instructor_registration_requests (user_id, full_name, email, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
+        // Create registration request (no user_id col; password_hash NOT NULL so use placeholder for Google)
+        // ON CONFLICT DO UPDATE handles re-registration via Google
+        const regResult = await client.query(
+          `INSERT INTO instructor_registration_requests (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
-           RETURNING id, full_name, email, status`,
-          [userId, full_name.trim(), email.toLowerCase(), phone, specialization || null, education_level || null,
-           years_of_experience ? parseInt(years_of_experience, 10) : null, bio || null, terms_agreed]
+           ON CONFLICT (email) DO UPDATE SET
+             full_name = EXCLUDED.full_name, phone = EXCLUDED.phone,
+             specialization = EXCLUDED.specialization, education_level = EXCLUDED.education_level,
+             years_of_experience = EXCLUDED.years_of_experience, bio = EXCLUDED.bio,
+             status = 'pending', submitted_at = now()
+           RETURNING id`,
+          [
+            full_name.trim(), email.toLowerCase(),
+            'google-oauth',
+            phone || '',
+            specialization || null, education_level || null,
+            years_of_experience ? parseInt(years_of_experience, 10) : null,
+            bio || null, terms_agreed,
+          ]
         );
 
         // Notify admins
@@ -467,7 +491,7 @@ async function registerInstructor(req, res, next) {
         await client.query('COMMIT');
         res.status(201).json({
           message: 'Instructor application submitted. Your account is pending administrator review.',
-          registration_id: result.rows[0].id,
+          registration_id: regResult.rows[0].id,
           status: 'pending',
         });
       } else {

@@ -341,25 +341,31 @@ async function updateFidelLesson(req, res, next) {
     // Update practice settings if provided
     if (practice_settings) {
       const settings = practice_settings;
+      const activitiesEnabled = settings.activities_enabled || ['listen_explore', 'listen_identify', 'sound_match', 'quiz'];
+      const activityOrder = settings.activity_order || activitiesEnabled;
+      const listeningRequiredFirst = settings.listening_required_first !== undefined ? Boolean(settings.listening_required_first) : true;
+      const minListenCount = settings.min_listen_count_required || 1;
+      const requireAllAudioReady = settings.require_all_audio_ready !== undefined ? Boolean(settings.require_all_audio_ready) : true;
+
       await client.query(
         `INSERT INTO lesson_fidel_configs (
            lesson_id, activities_enabled, activity_order, listening_required_first,
            min_listen_count_required, require_all_audio_ready, updated_at
          ) VALUES ($1, $2, $3, $4, $5, $6, now())
          ON CONFLICT (lesson_id) DO UPDATE SET
-           activities_enabled = COALESCE($2, lesson_fidel_configs.activities_enabled),
-           activity_order = COALESCE($3, lesson_fidel_configs.activity_order),
-           listening_required_first = COALESCE($4, lesson_fidel_configs.listening_required_first),
-           min_listen_count_required = COALESCE($5, lesson_fidel_configs.min_listen_count_required),
-           require_all_audio_ready = COALESCE($6, lesson_fidel_configs.require_all_audio_ready),
+           activities_enabled = EXCLUDED.activities_enabled,
+           activity_order = EXCLUDED.activity_order,
+           listening_required_first = EXCLUDED.listening_required_first,
+           min_listen_count_required = EXCLUDED.min_listen_count_required,
+           require_all_audio_ready = EXCLUDED.require_all_audio_ready,
            updated_at = now()`,
         [
           lessonId,
-          settings.activities_enabled ? JSON.stringify(settings.activities_enabled) : null,
-          settings.activity_order ? JSON.stringify(settings.activity_order) : null,
-          settings.listening_required_first !== undefined ? Boolean(settings.listening_required_first) : null,
-          settings.min_listen_count_required || null,
-          settings.require_all_audio_ready !== undefined ? Boolean(settings.require_all_audio_ready) : null,
+          JSON.stringify(activitiesEnabled),
+          JSON.stringify(activityOrder),
+          listeningRequiredFirst,
+          minListenCount,
+          requireAllAudioReady,
         ]
       );
     }

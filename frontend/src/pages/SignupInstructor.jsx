@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
@@ -135,6 +135,7 @@ export default function SignupInstructor() {
       await registerInstructor({
         ...form,
         full_name: `${form.first_name} ${form.last_name}`.trim(),
+        is_google: isGoogleUser,
       });
       setSubmitted(true);
     } catch (err) {
@@ -247,14 +248,22 @@ export default function SignupInstructor() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1">Email Address *</label>
+                      <label className="block text-sm font-medium text-slate-600 mb-1">
+                        Email Address *
+                        {isGoogleUser && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600 font-semibold">
+                            ?? from Google (locked)
+                          </span>
+                        )}
+                      </label>
                       <input
                         required
                         type="email"
                         placeholder="you@example.com"
                         value={form.email}
                         onChange={update('email')}
-                        className="input-field"
+                        readOnly={isGoogleUser}
+                        className={`input-field${isGoogleUser ? ' bg-blue-50 text-slate-500 cursor-not-allowed' : ''}`}
                       />
                     </div>
                     <div>

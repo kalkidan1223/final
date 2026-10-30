@@ -165,13 +165,24 @@ export default function InstructorCourseDetail() {
             <MdMenuBook className="text-indigo-500" /> Lessons
           </h2>
           <div className="flex items-center gap-2">
-            <button
+            {(course?.subject_id === 2 || /english/i.test(course?.title || '')) && (
+              <button
+                onClick={() => navigate(`/instructor/english-lessons/create?courseId=${id}`)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition"
+                title="Create an interactive English Letter lesson"
+              >
+                <span>🔤</span> CREATE LETTER LESSON
+              </button>
+            )}
+            {(course?.subject_id === 3 || /amharic|ፊደል/i.test(course?.title || '')) && (
+<button
               onClick={() => navigate(`/instructor/fidel-lessons/create?courseId=${id}`)}
               className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition"
               title="Create an interactive Amharic Fidel Family audio lesson"
             >
               <span>🔤</span> CREATE FIDEL LESSON
             </button>
+            )}
             <button
               onClick={() => navigate(`/instructor/courses/${id}/lessons/create`)}
               className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"

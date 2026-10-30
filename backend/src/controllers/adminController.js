@@ -829,9 +829,15 @@ async function updateCourse(req, res, next) {
       }
     }
 
+    // Only update subject_id when explicitly provided (allow null to clear)
+    if (subject_id === undefined) {
+      const result = await query('SELECT * FROM courses WHERE id = $1', [id]);
+      return res.json({ course: result.rows[0] });
+    }
+
     const result = await query(
       `UPDATE courses
-       SET subject_id = COALESCE($1, subject_id),
+       SET subject_id = $1,
            updated_at = now()
        WHERE id = $2
        RETURNING *`,

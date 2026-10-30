@@ -5,6 +5,7 @@ const passport = require('./config/passport');
 const { UPLOAD_ROOT } = require('./middleware/upload');
 
 const authRoutes = require('./routes/authRoutes');
+const passwordResetRoutes = require('./routes/passwordResetRoutes');
 const adminApprovalRoutes = require('./routes/adminApprovalRoutes');
 const studentsRoutes = require('./routes/studentsRoutes');
 const childRoutes = require('./routes/childRoutes');
@@ -33,6 +34,7 @@ const gradeRoutes = require('./routes/gradeRoutes');
 const announcementsRoutes = require('./routes/announcementsRoutes');
 const messagesRoutes = require('./routes/messagesRoutes');
 const fidelRoutes = require('./routes/fidelRoutes');
+const englishLessonRoutes = require('./routes/englishLessonRoutes');
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
@@ -72,6 +74,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/uploads', express.static(UPLOAD_ROOT));
 
 app.use('/api/auth', authRoutes);
+app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/child', childRoutes);
 app.use('/api/child/results', childResultsRoutes);
 app.use('/api/students', studentsRoutes);
@@ -100,6 +103,7 @@ app.use('/api/announcements', announcementsRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api', gradeRoutes);
 app.use('/api', fidelRoutes);
+app.use('/api', englishLessonRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

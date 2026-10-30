@@ -13,6 +13,7 @@ const {
   validateStudentInvite,
   validateStudentRegister,
 } = require('../utils/validators');
+const { sendWelcomeEmail } = require('../services/emailService');
 
 const SALT_ROUNDS = 12;
 const REFRESH_COOKIE_NAME = 'refresh_token';
@@ -43,7 +44,13 @@ async function issueTokenPair(res, user) {
 }
 
 async function publicUser(row) {
-  const base = { id: row.id, email: row.email, full_name: row.full_name, role: row.role };
+  const base = {
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    role: row.role,
+    google_id: row.google_id || null,   // needed so frontend can detect Google-OAuth users
+  };
   if (row.role === 'student') {
     const r = await query('SELECT id FROM students WHERE user_id = $1', [row.id]);
     base.student_id = r.rows[0]?.id || null;
@@ -86,6 +93,11 @@ async function registerParent(req, res, next) {
       );
 
       await client.query('COMMIT');
+
+      // Send welcome email (non-blocking)
+      sendWelcomeEmail(user.email, user.full_name).catch(err => {
+        console.error('Failed to send welcome email:', err);
+      });
 
       const accessToken = await issueTokenPair(res, user);
       res.status(201).json({ user: await publicUser(user), access_token: accessToken });
@@ -182,7 +194,7 @@ async function refresh(req, res, next) {
     await query('UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1', [stored.rows[0].id]);
 
     const userResult = await query(
-      'SELECT id, email, full_name, role, is_active FROM users WHERE id = $1',
+      'SELECT id, email, full_name, role, is_active, google_id FROM users WHERE id = $1',
       [payload.sub]
     );
     const user = userResult.rows[0];
@@ -222,7 +234,7 @@ async function logout(req, res, next) {
 async function me(req, res, next) {
   try {
     const result = await query(
-      'SELECT id, email, full_name, role FROM users WHERE id = $1',
+      'SELECT id, email, full_name, role, google_id FROM users WHERE id = $1',
       [req.user.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -324,6 +336,11 @@ async function registerStudentWithInvite(req, res, next) {
       await client.query('UPDATE student_invites SET used = TRUE WHERE id = $1', [invite.id]);
 
       await client.query('COMMIT');
+
+      // Send welcome email (non-blocking)
+      sendWelcomeEmail(user.email, user.full_name).catch(err => {
+        console.error('Failed to send welcome email:', err);
+      });
 
       const accessToken = await issueTokenPair(res, user);
       res.status(201).json({ user: await publicUser(user), access_token: accessToken });

@@ -36,11 +36,8 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      navigate(ROLE_HOME[user.role] || '/', { replace: true });
-    }
-  }, [user, authLoading, navigate]);
+  // (removed auto-redirect: allow viewing the login page even when a session
+  // exists, so users can switch accounts without refreshing the tab)
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -221,9 +218,9 @@ export default function Login() {
                     />
                     <span className="text-sm text-slate-600 font-medium">Remember me</span>
                   </label>
-                  <a href="#" className="text-sm font-semibold text-violet-600 hover:text-violet-700 transition-colors">
+                  <Link to="/forgot-password" className="text-sm font-semibold text-violet-600 hover:text-violet-700 transition-colors">
                     Forgot password?
-                  </a>
+                  </Link>
                 </div>
 
                 <button

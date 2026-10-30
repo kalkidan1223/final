@@ -13,7 +13,7 @@ import {
   MdRefresh,
 } from 'react-icons/md';
 import axiosClient from '../../api/axiosClient';
-import Layout from '../../components/Layout';
+import InstructorLayout from '../../components/InstructorLayout';
 
 export default function InstructorFidelLessons() {
   const navigate = useNavigate();
@@ -38,8 +38,16 @@ export default function InstructorFidelLessons() {
     setLoading(true);
     setError(null);
     try {
-      const res = await axiosClient.get('/courses?mine=true');
-      const myCourses = res.data.courses || [];
+      const res = await axiosClient.get('/instructor/courses');
+      const rawCourses = res.data.courses || [];
+      const myCourses = rawCourses.map(c => ({
+        ...c,
+        id: c.course_id || c.id,
+        title: c.course_title || c.title,
+        description: c.course_description || c.description,
+        grade_level_name: c.grade_level_name || 'All Grades',
+        status: c.course_status || c.status,
+      }));
       setCourses(myCourses);
       if (myCourses.length > 0) {
         // Prefer an Amharic course if available
@@ -87,7 +95,7 @@ export default function InstructorFidelLessons() {
   const selectedCourse = courses.find(c => String(c.id) === String(selectedCourseId));
 
   return (
-    <Layout title="Fidel Family Lessons" role="instructor">
+    <InstructorLayout>
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Top Header */}
         <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 rounded-3xl p-6 md:p-8 text-white shadow-xl shadow-amber-900/10 relative overflow-hidden">
@@ -293,6 +301,6 @@ export default function InstructorFidelLessons() {
           </div>
         )}
       </div>
-    </Layout>
+    </InstructorLayout>
   );
 }

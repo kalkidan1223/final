@@ -402,3 +402,53 @@ Create or modify `backend/.env` according to the table below:
 ## License & Institutional Attribution
 
 Developed exclusively for **Brana Youth Academy**. All curriculum designs, phonetic mappings, and educational materials are protected institutional assets. All rights reserved © 2026.
+
+
+---
+
+## 🆕 Latest Features (October 2026)
+
+### Google OAuth Integration
+Users can now sign in using their Google accounts with a single click. The "Continue with Google" button provides:
+- Fast, secure authentication
+- No need to remember additional passwords
+- Automatic account creation and linking
+- Seamless integration with existing accounts
+
+**Setup Guide:** See [EMAIL_SETUP_GUIDE.md](EMAIL_SETUP_GUIDE.md) for Google OAuth configuration.
+
+### Email Notification System
+A comprehensive email notification system with support for:
+
+1. **Welcome Emails** - Automatically sent when users register
+2. **Password Reset** - Secure token-based password recovery via email
+3. **Inactivity Reminders** - Automated emails to re-engage users who haven't logged in
+4. **Assignment Notifications** - Ready for instructor use when assigning work
+
+**Features:**
+- Secure SMTP delivery via nodemailer
+- HTML email templates
+- 60-minute reset token expiry
+- Single-use token enforcement
+- Non-blocking email delivery
+
+**Setup Guide:** See [EMAIL_SETUP_GUIDE.md](EMAIL_SETUP_GUIDE.md) for SMTP configuration.
+
+### Password Reset Flow
+Users can now reset forgotten passwords through a secure email-based flow:
+1. Click "Forgot password?" on the login page
+2. Receive a secure reset link via email (valid for 60 minutes)
+3. Set a new password
+4. Log in with the new credentials
+
+**Security:** Uses cryptographically secure random tokens stored in the database with automatic expiration.
+
+### Quick Reference
+See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for:
+- User-facing feature descriptions
+- API endpoints documentation
+- NPM scripts for email tasks
+- Common troubleshooting tips
+- Testing procedures
+
+---

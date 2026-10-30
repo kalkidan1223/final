@@ -9,8 +9,8 @@ const {
   getStudentResults
 } = require('../controllers/instructorResultsController');
 
-// All routes require instructor authentication
-const guard = [requireAuth, authorize('instructor')];
+// All routes require instructor or admin authentication
+const guard = [requireAuth, authorize('instructor', 'admin')];
 
 // GET /api/instructor/results/overview - Get aggregated statistics
 router.get('/overview', guard, getResultsOverview);
