@@ -562,7 +562,7 @@ function ActivityResourceViewer({ resourceId }) {
               to={`/child/activities/${resourceId}`}
               className="inline-block px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-lg rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
             >
-              ▶️ Start Activity
+              🎯 Start Activity
             </Link>
           )}
         </div>
@@ -620,7 +620,7 @@ function QuizResourceViewer({ resourceId }) {
               to={`/child/quizzes/${resourceId}`}
               className="inline-block px-8 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-black text-lg rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
             >
-              {hasAttempt ? 'ðŸ”„ Try Again' : 'ðŸ§  Take Quiz'}
+              {hasAttempt ? '🔄 Try Again' : '📝 Take Quiz'}
             </Link>
           )}
         </div>
