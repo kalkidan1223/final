@@ -78,12 +78,18 @@ async function createInstructor(req, res, next) {
 
       if (assigned_courses && Array.isArray(assigned_courses) && assigned_courses.length > 0) {
         const courses = await client.query(
-          `SELECT id, grade_level_id FROM courses
-           WHERE id = ANY($1::bigint[]) AND grade_level_id = ANY($2::int[])`,
+          `SELECT c.id, c.grade_level_id FROM courses c
+           JOIN subject_grade_assignments sga
+             ON sga.subject_id = c.subject_id
+            AND sga.grade_level_id = c.grade_level_id
+            AND sga.is_active = TRUE
+           WHERE c.id = ANY($1::bigint[])
+             AND c.grade_level_id = ANY($2::int[])
+             AND c.subject_id IS NOT NULL`,
           [assigned_courses, assigned_grade_levels || []]
         );
         if (courses.rows.length !== new Set(assigned_courses.map(String)).size) {
-          throw Object.assign(new Error('Every assigned course must belong to a selected grade level'), { status: 400 });
+          throw Object.assign(new Error('Every assigned course must have a subject assigned to its grade level'), { status: 400 });
         }
         for (const course of courses.rows) {
           await client.query(
@@ -564,9 +570,13 @@ async function listInstructors(req, res, next) {
       instructor.assigned_grade_levels = gradeLevelsRes.rows;
 
       const coursesRes = await query(
-        `SELECT DISTINCT c.id, c.title, c.description, c.status, c.grade_level_id
+        `SELECT DISTINCT c.id, c.title, c.description, c.status,
+                c.grade_level_id, gl.name AS grade_level_name,
+                c.subject_id, s.name AS subject_name, s.code AS subject_code
          FROM instructor_assignments ia
          JOIN courses c ON c.id = ia.course_id
+         JOIN grade_levels gl ON gl.id = c.grade_level_id
+         LEFT JOIN subjects s ON s.id = c.subject_id
          WHERE ia.instructor_id = $1 AND ia.status = 'active'`,
         [instructor.id]
       );
@@ -655,14 +665,20 @@ async function updateInstructorAssignments(req, res, next) {
 
       const allowedCourses = assigned_courses.length
         ? await client.query(
-          `SELECT id, grade_level_id FROM courses
-           WHERE id = ANY($1::bigint[]) AND grade_level_id = ANY($2::int[])`,
+          `SELECT c.id, c.grade_level_id FROM courses c
+           JOIN subject_grade_assignments sga
+             ON sga.subject_id = c.subject_id
+            AND sga.grade_level_id = c.grade_level_id
+            AND sga.is_active = TRUE
+           WHERE c.id = ANY($1::bigint[])
+             AND c.grade_level_id = ANY($2::int[])
+             AND c.subject_id IS NOT NULL`,
           [assigned_courses, assigned_grade_levels]
         )
         : { rows: [] };
 
       if (allowedCourses.rows.length !== new Set(assigned_courses.map(String)).size) {
-        const error = new Error('Every assigned course must exist and belong to one of the selected grade levels');
+        const error = new Error('Every assigned course must match a selected grade level and an active subject-grade pairing');
         error.status = 400;
         throw error;
       }
@@ -737,7 +753,10 @@ async function listCourses(req, res, next) {
     }
     if (instructor_id) {
       params.push(instructor_id);
-      conditions.push(`c.instructor_id = $${params.length}`);
+      conditions.push(`(c.instructor_id = $${params.length} OR EXISTS (
+        SELECT 1 FROM instructor_assignments ia
+        WHERE ia.course_id = c.id AND ia.instructor_id = $${params.length} AND ia.status = 'active'
+      ))`);
     }
     if (grade_level_id) {
       params.push(grade_level_id);
@@ -826,6 +845,15 @@ async function updateCourse(req, res, next) {
       const subjectCheck = await query('SELECT id FROM subjects WHERE id = $1', [subject_id]);
       if (subjectCheck.rows.length === 0) {
         return res.status(400).json({ error: 'Subject not found' });
+      }
+
+      const gradeSubjectCheck = await query(
+        `SELECT 1 FROM subject_grade_assignments
+         WHERE subject_id = $1 AND grade_level_id = $2 AND is_active = TRUE`,
+        [subject_id, courseResult.rows[0].grade_level_id]
+      );
+      if (gradeSubjectCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Assign this subject to the course grade level before linking it to the course' });
       }
     }
 

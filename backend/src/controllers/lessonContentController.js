@@ -61,8 +61,9 @@ async function getLessonDetail(req, res, next) {
     const { id } = req.params;
     const lessonResult = await query(
       `SELECT l.*, c.title AS course_title, c.id AS course_id, c.status,
-              c.instructor_id, c.grade_level_id
+              c.instructor_id, c.grade_level_id, gl.lesson_builder_type
        FROM lessons l JOIN courses c ON c.id = l.course_id
+       LEFT JOIN grade_levels gl ON gl.id = c.grade_level_id
        WHERE l.id = $1`,
       [id]
     );

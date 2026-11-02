@@ -10,6 +10,8 @@ const EMPTY_FORM = {
   title: '',
   description: '',
   learning_objectives: '',
+  prerequisites: '',
+  teacher_notes: '',
   instructions: '',
   order_index: '',
   estimated_duration_minutes: '',
@@ -23,6 +25,7 @@ export default function InstructorLessonCreate() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [courseTitle, setCourseTitle] = useState('');
+  const [lessonBuilderType, setLessonBuilderType] = useState('structured');
   const [targetCourseId, setTargetCourseId] = useState(courseId || '');
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(isEdit);
@@ -40,6 +43,7 @@ export default function InstructorLessonCreate() {
       if (courseId) {
         const { data } = await axiosClient.get(`/instructor/courses/${courseId}`);
         setCourseTitle(data.course?.title || '');
+        setLessonBuilderType(data.course?.lesson_builder_type || 'structured');
         setTargetCourseId(courseId);
       } else if (!isEdit) {
         const { data } = await axiosClient.get('/instructor/courses');
@@ -47,6 +51,7 @@ export default function InstructorLessonCreate() {
         if (data.courses?.length > 0) {
           setTargetCourseId(data.courses[0].course_id);
           setCourseTitle(data.courses[0].course_title);
+          setLessonBuilderType(data.courses[0].lesson_builder_type || 'structured');
         }
       }
       if (isEdit) {
@@ -56,11 +61,15 @@ export default function InstructorLessonCreate() {
           title: lesson.title || '',
           description: lesson.description || '',
           learning_objectives: lesson.learning_objectives || '',
+          prerequisites: lesson.prerequisites || '',
+          teacher_notes: lesson.teacher_notes || '',
           instructions: lesson.instructions || '',
           order_index: lesson.order_index ?? '',
           estimated_duration_minutes: lesson.estimated_duration_minutes ?? '',
           difficulty_level: lesson.difficulty_level || 'beginner',
         });
+        setLessonBuilderType(lesson.lesson_builder_type || 'structured');
+        setCourseTitle(lesson.course_title || '');
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Could not load lesson details');
@@ -82,6 +91,8 @@ export default function InstructorLessonCreate() {
         title: form.title.trim(),
         description: form.description.trim() || null,
         learning_objectives: form.learning_objectives.trim() || null,
+        prerequisites: form.prerequisites.trim() || null,
+        teacher_notes: form.teacher_notes.trim() || null,
         instructions: form.instructions.trim() || null,
         difficulty_level: form.difficulty_level,
         estimated_duration_minutes:
@@ -138,7 +149,7 @@ export default function InstructorLessonCreate() {
         <p className="mb-6 text-sm text-slate-500">
           {isEdit
             ? 'Update the lesson details below.'
-            : 'Plan and structure this lesson for children aged 5–9. Educational materials, interactive tracing, and quizzes can be added inside.'}
+            : 'Start with the lesson details and learning goal. After saving, add materials, videos, activities, or quizzes, then publish when the lesson is ready for students.'}
         </p>
 
         {error && (
@@ -158,6 +169,7 @@ export default function InstructorLessonCreate() {
                   setTargetCourseId(e.target.value);
                   const sel = courses.find(c => String(c.course_id) === String(e.target.value));
                   setCourseTitle(sel?.course_title || '');
+                  setLessonBuilderType(sel?.lesson_builder_type || 'structured');
                 }}
                 className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none bg-white font-medium"
               >
@@ -204,6 +216,35 @@ export default function InstructorLessonCreate() {
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
             />
           </div>
+
+          {lessonBuilderType === 'visual' ? (
+            <section className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-sky-50 p-4" aria-live="polite">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-black uppercase tracking-wide text-indigo-700">Child preview · Visual & guided</p>
+                {courseTitle && <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-slate-600">{courseTitle}</span>}
+              </div>
+              <h2 className="mt-3 text-lg font-black text-slate-900">{form.title || 'Your lesson title'}</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{form.description || 'Add a short introduction that helps students know what they will learn.'}</p>
+              {form.learning_objectives && <p className="mt-3 rounded-xl bg-white/80 p-3 text-sm font-semibold text-indigo-900">{form.learning_objectives}</p>}
+              <p className="mt-3 text-xs text-slate-500">After saving, add pictures, audio, videos, practice activities, or a quiz from the lesson page.</p>
+            </section>
+          ) : (
+            <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-500">Structured lesson · {courseTitle || 'Assigned course'}</p>
+              <p className="mt-1 text-sm text-slate-600">Set the learning goal and lesson sequence. Add prerequisites and teacher notes where they help.</p>
+            </section>
+          )}
+
+          {lessonBuilderType === 'structured' && <>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Prerequisites</label>
+              <textarea rows={2} value={form.prerequisites} onChange={(e) => update('prerequisites', e.target.value)} placeholder="What should students know before starting? (optional)" className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Teacher Notes</label>
+              <textarea rows={2} value={form.teacher_notes} onChange={(e) => update('teacher_notes', e.target.value)} placeholder="Private planning notes for the instructor (optional)" className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+            </div>
+          </>}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Instructions</label>

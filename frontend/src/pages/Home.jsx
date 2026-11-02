@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import ChildLearningAnimation from '../components/ChildLearningAnimation';
+import ThemeToggle from '../components/ThemeToggle';
 
 /* ─── Scroll Reveal Hook ─── */
 function useReveal() {
@@ -81,8 +83,9 @@ function Navbar() {
             ))}
           </div>
 
-          {/* Auth Buttons */}
-          <div className="hidden md:flex items-center gap-2">
+          {/* Night Mode & Auth */}
+          <div className="hidden md:flex items-center gap-3">
+            <ThemeToggle />
             <button
               onClick={() => navigate('/login')}
               className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
@@ -129,7 +132,8 @@ function Navbar() {
                 {l.label}
               </button>
             ))}
-            <div className="border-t border-slate-100 mt-2 pt-2 space-y-1">
+            <div className="border-t border-slate-100 mt-2 pt-2 space-y-2">
+              <div className="px-4 py-1 flex items-center justify-between"><span className="text-xs font-semibold text-slate-500">Theme</span><ThemeToggle /></div>
               <button
                 onClick={() => { setOpen(false); navigate('/login'); }}
                 className="block w-full text-left px-4 py-2.5 text-indigo-600 hover:bg-indigo-50 rounded-lg font-semibold text-sm"
@@ -160,6 +164,8 @@ function HeroSection() {
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4c1d95 65%, #6d28d9 100%)' }}
     >
+      {/* Ambient Child Learning in Soft Light Animation */}
+      <ChildLearningAnimation mode="hero" />
       {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div

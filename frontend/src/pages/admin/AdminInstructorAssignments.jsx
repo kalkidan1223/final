@@ -1,446 +1,292 @@
-import { useEffect, useState } from 'react';
-import {
-  MdAssignment, MdAdd, MdDelete, MdEdit, MdSearch,
-  MdSchool, MdClose, MdSave, MdInfoOutline, MdRefresh
-} from 'react-icons/md';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { MdAssignment, MdClose, MdEdit, MdRefresh, MdSearch, MdSchool } from 'react-icons/md';
 import AdminLayout from '../../components/AdminLayout';
 import axiosClient from '../../api/axiosClient';
 
-/* ─── Helpers ─── */
-const STATUS_COLORS = {
-  active:   'bg-emerald-100 text-emerald-700 border-emerald-200',
-  inactive: 'bg-slate-100 text-slate-600 border-slate-200',
-  archived: 'bg-amber-100 text-amber-700 border-amber-200',
-};
+const pairKey = (gradeId, subjectId) => `${gradeId}:${subjectId}`;
 
-function ConfirmModal({ message, onConfirm, onCancel }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onCancel}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
-        <p className="text-slate-700 font-medium mb-5 text-center">{message}</p>
-        <div className="flex gap-3 justify-center">
-          <button onClick={onCancel} className="px-5 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button>
-          <button onClick={onConfirm} className="px-5 py-2 text-sm rounded-xl bg-red-600 text-white hover:bg-red-700 font-semibold">Delete</button>
-        </div>
-      </div>
-    </div>
+function AssignmentModal({ instructor, gradeLevels, subjectGradeAssignments, courses, onSave, onClose }) {
+  const instructorCourses = instructor.assigned_courses || [];
+  const activePairs = new Set(subjectGradeAssignments.map(item => pairKey(item.grade_level_id, item.subject_id)));
+  const initialPairs = instructorCourses
+    .filter(course => course.subject_id && course.status !== 'archived' && activePairs.has(pairKey(course.grade_level_id, course.subject_id)))
+    .map(course => pairKey(course.grade_level_id, course.subject_id));
+  const [selectedGrades, setSelectedGrades] = useState(() =>
+    [...new Set([
+      ...(instructor.assigned_grade_levels || []).map(level => String(level.id)),
+      ...instructorCourses.map(course => String(course.grade_level_id)),
+    ])]
   );
-}
-
-function AssignmentFormModal({ existing, instructors, courses, gradeLevels, academicYears, onSave, onClose }) {
-  const [form, setForm] = useState({
-    instructor_id:    existing?.instructor_id || '',
-    course_id:        existing?.course_id || '',
-    grade_level_id:   existing?.grade_level_id || '',
-    academic_year_id: existing?.academic_year_id || '',
-    grade:            existing?.grade || '',
-    section:          existing?.section || '',
-    status:           existing?.status || 'active',
-  });
+  const [selectedPairs, setSelectedPairs] = useState(() => [...new Set(initialPairs)]);
   const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
+  const [error, setError] = useState('');
 
-  function update(field, value) {
-    setForm(f => ({ ...f, [field]: value }));
+  const subjectsByGrade = useMemo(() => {
+    const result = new Map();
+    for (const assignment of subjectGradeAssignments) {
+      const gradeId = String(assignment.grade_level_id);
+      const list = result.get(gradeId) || [];
+      if (!list.some(item => String(item.subject_id) === String(assignment.subject_id))) {
+        list.push(assignment);
+      }
+      result.set(gradeId, list);
+    }
+    return result;
+  }, [subjectGradeAssignments]);
+
+  const coursesForPair = (gradeId, subjectId) => courses.filter(course =>
+    String(course.grade_level_id) === String(gradeId) &&
+    String(course.subject_id) === String(subjectId) &&
+    course.status !== 'archived'
+  );
+
+  function toggleGrade(gradeId) {
+    const id = String(gradeId);
+    const wasSelected = selectedGrades.includes(id);
+    setSelectedGrades(current => wasSelected ? current.filter(item => item !== id) : [...current, id]);
+    if (wasSelected) {
+      setSelectedPairs(current => current.filter(key => !key.startsWith(`${id}:`)));
+    }
   }
 
-  async function submit(e) {
-    e.preventDefault();
-    setError('');
+  function toggleSubject(gradeId, subjectId) {
+    const key = pairKey(gradeId, subjectId);
+    setSelectedPairs(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key]);
+  }
+
+  async function submit() {
     setSaving(true);
+    setError('');
     try {
-      await onSave(form);
+      const assignedCourses = [...new Set(selectedPairs.flatMap(key => {
+        const [gradeId, subjectId] = key.split(':');
+        return coursesForPair(gradeId, subjectId).map(course => course.id);
+      }))];
+      const assignedGradeLevels = [...new Set(selectedPairs.map(key => key.split(':')[0]))];
+      await onSave(instructor.id, {
+        assigned_grade_levels: assignedGradeLevels,
+        assigned_courses: assignedCourses,
+      });
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save assignment');
+      setError(err.response?.data?.error || 'Could not save these subject assignments.');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h2 className="font-bold text-slate-800 text-lg">
-            {existing ? 'Edit Assignment' : 'New Instructor Assignment'}
-          </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><MdClose className="text-xl" /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onClick={onClose}>
+      <section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl" onClick={event => event.stopPropagation()} aria-labelledby="assign-subjects-title">
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-5">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-600">Instructor teaching areas</p>
+            <h2 id="assign-subjects-title" className="mt-1 text-xl font-black text-slate-900">Assign subjects to {instructor.full_name}</h2>
+            <p className="mt-1 text-sm text-slate-500">Choose one or more grade and subject pairs.</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><MdClose className="text-xl" /></button>
+        </header>
+
+        <div className="space-y-6 p-6">
+          {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+
+          <section>
+            <div className="mb-3 flex items-end justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900">1. Choose grade levels</h3>
+                <p className="mt-1 text-xs text-slate-500">Subject choices will match the grades you select.</p>
+              </div>
+              <span className="text-xs font-semibold text-slate-500">{selectedGrades.length} selected</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {gradeLevels.map(level => {
+                const selected = selectedGrades.includes(String(level.id));
+                return (
+                  <button key={level.id} type="button" aria-pressed={selected} onClick={() => toggleGrade(level.id)} className={`rounded-xl border px-3 py-3 text-left text-sm font-bold transition ${selected ? 'border-indigo-500 bg-indigo-50 text-indigo-900 ring-1 ring-indigo-200' : 'border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-slate-50'}`}>
+                    <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-md border text-xs">{selected ? '✓' : ''}</span>{level.name}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3">
+              <h3 className="font-bold text-slate-900">2. Choose subjects</h3>
+              <p className="mt-1 text-xs text-slate-500">Selecting a subject assigns all matching learning content in that grade.</p>
+            </div>
+            {selectedGrades.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">Choose a grade level to see its subjects.</div>
+            ) : (
+              <div className="space-y-4">
+                {gradeLevels.filter(level => selectedGrades.includes(String(level.id))).map(level => {
+                  const subjects = subjectsByGrade.get(String(level.id)) || [];
+                  return (
+                    <div key={level.id} className="rounded-2xl border border-slate-200 p-4">
+                      <h4 className="mb-3 flex items-center gap-2 text-sm font-black text-slate-800"><MdSchool className="text-indigo-600" />{level.name}</h4>
+                      {subjects.length === 0 ? (
+                        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">No subjects are linked to this grade yet. <Link to="/admin/subjects" className="font-bold underline">Set up subject management</Link>.</p>
+                      ) : (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {subjects.map(subject => {
+                            const key = pairKey(level.id, subject.subject_id);
+                            const matchingCourses = coursesForPair(level.id, subject.subject_id);
+                            const selected = selectedPairs.includes(key);
+                            const unavailable = matchingCourses.length === 0;
+                            return (
+                              <button key={key} type="button" disabled={unavailable} aria-pressed={selected} onClick={() => toggleSubject(level.id, subject.subject_id)} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 ${selected ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200' : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'}`}>
+                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-xs ${selected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'}`}>{selected ? '✓' : ''}</span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-bold">{subject.subject_name}</span>
+                                  <span className="mt-0.5 block text-xs opacity-75">{subject.subject_code} · {unavailable ? 'No learning content yet' : `${matchingCourses.length} ${matchingCourses.length === 1 ? 'learning area' : 'learning areas'}`}</span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
 
-        <form onSubmit={submit} className="p-6 space-y-4">
-          {error && (
-            <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600">⚠️ {error}</div>
-          )}
-
-          {/* Instructor select */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1.5">Instructor <span className="text-red-500">*</span></label>
-            <select
-              required
-              value={form.instructor_id}
-              onChange={e => update('instructor_id', e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Select instructor…</option>
-              {instructors.map(i => (
-                <option key={i.id} value={i.id}>{i.full_name} — {i.email}</option>
-              ))}
-            </select>
+        <footer className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-6 py-4">
+          <p className="text-xs font-medium text-slate-500">{selectedPairs.length} subject{selectedPairs.length === 1 ? '' : 's'} selected</p>
+          <div className="flex gap-2">
+            <button onClick={onClose} disabled={saving} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+            <button onClick={submit} disabled={saving} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'Saving…' : 'Save subject assignments'}</button>
           </div>
-
-          {/* Course select */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1.5">Course <span className="text-red-500">*</span></label>
-            <select
-              required
-              value={form.course_id}
-              onChange={e => update('course_id', e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Select course…</option>
-              {courses.map(c => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Grade level select */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1.5">Grade Level <span className="text-red-500">*</span></label>
-            <select
-              required
-              value={form.grade_level_id}
-              onChange={e => update('grade_level_id', e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">Select grade level…</option>
-              {gradeLevels.map(gl => (
-                <option key={gl.id} value={gl.id}>{gl.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Grade */}
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">Grade</label>
-              <input
-                value={form.grade}
-                onChange={e => update('grade', e.target.value)}
-                placeholder="e.g. Grade 1"
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-
-            {/* Section */}
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">Section</label>
-              <input
-                value={form.section}
-                onChange={e => update('section', e.target.value)}
-                placeholder="e.g. A, B"
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Academic Year */}
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">Academic Year</label>
-              <select
-                value={form.academic_year_id}
-                onChange={e => update('academic_year_id', e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
-              >
-                <option value="">—</option>
-                {academicYears.map(ay => (
-                  <option key={ay.id} value={ay.id}>{ay.label} {ay.is_current ? '(Current)' : ''}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status */}
-            <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1.5">Status</label>
-              <select
-                value={form.status}
-                onChange={e => update('status', e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="pt-2 flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={saving} className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-              <MdSave /> {saving ? 'Saving…' : existing ? 'Update' : 'Create Assignment'}
-            </button>
-          </div>
-        </form>
-      </div>
+        </footer>
+      </section>
     </div>
   );
 }
 
-/* ─── Main Page ─── */
 export default function AdminInstructorAssignments() {
-  const [assignments, setAssignments] = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [search, setSearch]           = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [showForm, setShowForm]       = useState(false);
-  const [editing, setEditing]         = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-  const [error, setError]             = useState('');
+  const [searchParams] = useSearchParams();
+  const requestedInstructorId = searchParams.get('instructor_id') || '';
+  const [instructors, setInstructors] = useState([]);
+  const [gradeLevels, setGradeLevels] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [subjectGradeAssignments, setSubjectGradeAssignments] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [presetOpened, setPresetOpened] = useState(false);
 
-  // Lookup data
-  const [instructors, setInstructors]   = useState([]);
-  const [courses, setCourses]           = useState([]);
-  const [gradeLevels, setGradeLevels]   = useState([]);
-  const [academicYears, setAcademicYears] = useState([]);
+  useEffect(() => { loadData(); }, []);
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    if (loading || !requestedInstructorId || presetOpened) return;
+    const instructor = instructors.find(item => String(item.id) === String(requestedInstructorId));
+    if (instructor) {
+      setEditing(instructor);
+      setPresetOpened(true);
+    }
+  }, [loading, requestedInstructorId, presetOpened, instructors]);
 
-  async function loadAll() {
-    setLoading(true);
+  async function loadData(silent = false) {
+    if (silent) setRefreshing(true); else setLoading(true);
     setError('');
     try {
-      const [aRes, iRes, cRes, glRes, ayRes] = await Promise.all([
-        axiosClient.get('/admin/instructor-assignments'),
-        axiosClient.get('/admin/instructors'),
-        axiosClient.get('/admin/courses'),
+      const [instructorRes, gradeRes, courseRes, subjectGradeRes] = await Promise.all([
+        axiosClient.get('/admin/instructors?limit=500'),
         axiosClient.get('/grades'),
-        axiosClient.get('/admin/academic-years').catch(() => ({ data: { academic_years: [] } })),
+        axiosClient.get('/admin/courses?limit=1000'),
+        axiosClient.get('/subject-grade-assignments'),
       ]);
-      setAssignments(aRes.data.assignments || []);
-      setInstructors(iRes.data.instructors || []);
-      setCourses(cRes.data.courses || []);
-      setGradeLevels(glRes.data.grade_levels || []);
-      setAcademicYears(ayRes.data.academic_years || []);
+      setInstructors(instructorRes.data.instructors || []);
+      setGradeLevels(gradeRes.data.grade_levels || []);
+      setCourses(courseRes.data.courses || []);
+      setSubjectGradeAssignments(subjectGradeRes.data.assignments || []);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load data');
+      setError(err.response?.data?.error || 'Could not load instructor assignments.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
-  async function handleSave(form) {
-    if (editing) {
-      const { data } = await axiosClient.patch(`/admin/instructor-assignments/${editing.id}`, form);
-      setAssignments(prev => prev.map(a => a.id === editing.id ? data.assignment : a));
-    } else {
-      const { data } = await axiosClient.post('/admin/instructor-assignments', form);
-      // Reload to get full join data
-      loadAll();
-    }
+  async function saveAssignments(instructorId, assignments) {
+    await axiosClient.patch(`/admin/instructors/${instructorId}/assignments`, assignments);
+    await loadData(true);
   }
 
-  async function handleDelete(id) {
-    await axiosClient.delete(`/admin/instructor-assignments/${id}`);
-    setAssignments(prev => prev.filter(a => a.id !== id));
-    setConfirmDelete(null);
-  }
-
-  const filtered = assignments.filter(a => {
-    const matchSearch = !search ||
-      a.instructor_name?.toLowerCase().includes(search.toLowerCase()) ||
-      a.course_title?.toLowerCase().includes(search.toLowerCase()) ||
-      a.grade_level_name?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === 'all' || a.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
-
-  const counts = {
-    all:      assignments.length,
-    active:   assignments.filter(a => a.status === 'active').length,
-    inactive: assignments.filter(a => a.status === 'inactive').length,
-    archived: assignments.filter(a => a.status === 'archived').length,
-  };
+  const filteredInstructors = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return instructors.filter(instructor => !query ||
+      instructor.full_name?.toLowerCase().includes(query) ||
+      instructor.email?.toLowerCase().includes(query) ||
+      instructor.assigned_courses?.some(course => course.subject_name?.toLowerCase().includes(query))
+    );
+  }, [instructors, search]);
 
   return (
     <AdminLayout>
-      <div className="space-y-5">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
-              <MdAssignment className="text-indigo-600" /> Instructor Assignments
-            </h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Assign instructors to specific courses, grade levels, grades, and sections.
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-indigo-600">Teaching access</p>
+            <h1 className="mt-1 flex items-center gap-2 text-2xl font-black text-slate-900"><MdAssignment className="text-indigo-600" /> Instructor Subject Assignments</h1>
+            <p className="mt-1 text-sm text-slate-500">Assign several subjects across grade levels in one place.</p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={loadAll}
-              className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
-              title="Refresh"
-            >
-              <MdRefresh className="text-xl" />
-            </button>
-            <button
-              onClick={() => { setEditing(null); setShowForm(true); }}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 active:scale-95 transition shadow-lg"
-            >
-              <MdAdd className="text-lg" /> New Assignment
-            </button>
-          </div>
+          <button onClick={() => loadData(true)} disabled={refreshing} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><MdRefresh className={refreshing ? 'animate-spin' : ''} /> Refresh</button>
+        </header>
+
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+          Select a grade and its subjects. The matching learning areas are included automatically, so you do not need to assign each one separately.
+        </div>
+        {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+
+        <div className="relative">
+          <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-xl text-slate-400" />
+          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instructors or assigned subjects" className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100" />
         </div>
 
-        {/* Info notice */}
-        <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-4 flex items-start gap-3 text-sm text-indigo-700">
-          <MdInfoOutline className="text-indigo-500 text-lg flex-shrink-0 mt-0.5" />
-          <p>
-            Assignments control which instructor can access which course workspace. An instructor
-            only sees students, lessons, and activities within their assigned course, grade level,
-            grade, and section.
-          </p>
-        </div>
-
-        {error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">⚠️ {error}</div>
-        )}
-
-        {/* Search + Filter */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search by instructor, course, or grade level…"
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-            />
-          </div>
-          <div className="flex gap-2">
-            {Object.entries(counts).map(([status, count]) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium border transition ${
-                  filterStatus === status
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${filterStatus === status ? 'bg-white/20' : 'bg-slate-100'}`}>
-                  {count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           {loading ? (
-            <div className="p-8 space-y-3">
-              {[1,2,3,4].map(i => <div key={i} className="h-16 bg-slate-100 rounded-xl animate-pulse" />)}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-16 text-center">
-              <MdSchool className="text-5xl text-slate-300 mx-auto mb-3" />
-              <h3 className="font-semibold text-slate-700">
-                {assignments.length === 0 ? 'No Assignments Yet' : 'No Results Found'}
-              </h3>
-              <p className="text-sm text-slate-400 mt-1">
-                {assignments.length === 0
-                  ? 'Click "New Assignment" to assign an instructor to a course.'
-                  : 'Try a different search or filter.'}
-              </p>
-            </div>
+            <div className="space-y-3 p-6">{[1, 2, 3].map(item => <div key={item} className="h-16 animate-pulse rounded-xl bg-slate-100" />)}</div>
+          ) : filteredInstructors.length === 0 ? (
+            <div className="p-12 text-center text-sm text-slate-500">No instructors match this search.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    {['Instructor', 'Course', 'Grade Level', 'Grade / Sec', 'Academic Year', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filtered.map(a => (
-                    <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-semibold text-slate-800">{a.instructor_name}</p>
-                          <p className="text-xs text-slate-400">{a.instructor_email}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium text-slate-700">{a.course_title}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium border border-indigo-100">
-                          {a.grade_level_name}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {a.grade ? `Grade ${a.grade}` : '—'}
-                        {a.section ? ` · Sec ${a.section}` : ''}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{a.academic_year || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border capitalize ${STATUS_COLORS[a.status] || STATUS_COLORS.inactive}`}>
-                          {a.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => { setEditing(a); setShowForm(true); }}
-                            className="p-1.5 rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition"
-                            title="Edit"
-                          >
-                            <MdEdit className="text-base" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete(a)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition"
-                            title="Delete"
-                          >
-                            <MdDelete className="text-base" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y divide-slate-100">
+              {filteredInstructors.map(instructor => {
+                const pairs = new Map();
+                for (const course of instructor.assigned_courses || []) {
+                  if (!course.subject_id) continue;
+                  const key = pairKey(course.grade_level_id, course.subject_id);
+                  const existing = pairs.get(key) || { subject: course.subject_name, grade: course.grade_level_name };
+                  existing.count = (existing.count || 0) + 1;
+                  pairs.set(key, existing);
+                }
+                return (
+                  <article key={instructor.id} className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 font-black text-indigo-700">{instructor.full_name?.[0] || 'I'}</span>
+                        <div className="min-w-0"><h2 className="truncate font-bold text-slate-900">{instructor.full_name}</h2><p className="truncate text-xs text-slate-500">{instructor.email}</p></div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 pl-1 sm:pl-[52px]">
+                        {[...pairs.entries()].map(([key, pair]) => <span key={key} className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900">{pair.subject} · {pair.grade}</span>)}
+                        {pairs.size === 0 && <span className="text-xs font-medium text-slate-400">No subjects assigned yet</span>}
+                      </div>
+                    </div>
+                    <button onClick={() => setEditing(instructor)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700"><MdEdit /> Assign subjects</button>
+                  </article>
+                );
+              })}
             </div>
           )}
-        </div>
+        </section>
       </div>
 
-      {/* Create / Edit modal */}
-      {showForm && (
-        <AssignmentFormModal
-          existing={editing}
-          instructors={instructors}
-          courses={courses}
-          gradeLevels={gradeLevels}
-          academicYears={academicYears}
-          onSave={handleSave}
-          onClose={() => { setShowForm(false); setEditing(null); }}
-        />
-      )}
-
-      {/* Delete confirm */}
-      {confirmDelete && (
-        <ConfirmModal
-          message={`Remove "${confirmDelete.instructor_name}" from "${confirmDelete.course_title}"?`}
-          onConfirm={() => handleDelete(confirmDelete.id)}
-          onCancel={() => setConfirmDelete(null)}
-        />
-      )}
+      {editing && <AssignmentModal instructor={editing} gradeLevels={gradeLevels} subjectGradeAssignments={subjectGradeAssignments} courses={courses} onSave={saveAssignments} onClose={() => setEditing(null)} />}
     </AdminLayout>
   );
 }

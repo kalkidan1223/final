@@ -1,5 +1,6 @@
-import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom';
+﻿import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ThemeToggle from './ThemeToggle';
 import axiosClient, { setActiveChildId, getActiveChildId } from '../api/axiosClient';
 import { useEffect, useState } from 'react';
 import { pickVoice, readVoicePreference, writeVoicePreference } from '../hooks/useVoiceGuide';
@@ -217,6 +218,9 @@ export default function ChildLayout() {
 
             {/* User Actions */}
             <div className="flex items-center gap-2">
+              {/* Night Mode Toggle */}
+              <ThemeToggle compact={true} />
+
               {/* Sound toggle */}
               <button
                 onClick={() => {

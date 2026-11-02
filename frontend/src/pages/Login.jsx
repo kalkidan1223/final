@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_HOME } from '../utils/roles';
+import ChildLearningAnimation from '../components/ChildLearningAnimation';
+import ThemeToggle from '../components/ThemeToggle';
 
 function MailIcon() {
   return (
@@ -80,6 +82,8 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-violet-600 via-sky-500 to-pink-500 animate-gradient">
+      {/* Ambient Child Learning in Soft Light Animation */}
+      <ChildLearningAnimation mode="login" />
       <style>{`
         @keyframes float { 0%,100%{transform:translateY(0)rotate(0deg)} 50%{transform:translateY(-20px)rotate(5deg)} }
         @keyframes float2 { 0%,100%{transform:translateY(0)rotate(0deg)} 50%{transform:translateY(-15px)rotate(-3deg)} }
@@ -120,7 +124,8 @@ export default function Login() {
             </div>
             </Link>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <ThemeToggle />
             <Link 
               to="/"
               className="hidden sm:flex items-center gap-2 rounded-full bg-white/15 px-5 py-2 text-sm font-medium text-white/90 backdrop-blur-sm border border-white/20 hover:bg-white/25 transition-all"
@@ -152,7 +157,7 @@ export default function Login() {
               <p className="text-lg text-white/80 font-light">Log in to continue your learning journey</p>
             </div>
 
-            <div className="rounded-3xl bg-white/90 backdrop-blur-2xl p-8 md:p-10 shadow-2xl border border-white/30 slide-up-delay-1">
+            <div className="rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl p-8 md:p-10 shadow-2xl border border-white/30 dark:border-slate-800 slide-up-delay-1">
               {error && (
                 <div className="mb-5 rounded-2xl bg-red-50 border border-red-200 p-4 text-sm text-red-600 flex items-start gap-3">
                   <span className="text-xl mt-0.5">⚠️</span>
@@ -162,7 +167,7 @@ export default function Login() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label htmlFor="email" className="mb-2 block text-sm font-bold text-slate-700">
+                  <label htmlFor="email" className="mb-2 block text-sm font-bold text-slate-800 dark:text-slate-100">
                     Email Address
                   </label>
                   <div className="relative group">
@@ -174,14 +179,14 @@ export default function Login() {
                       placeholder="you@school.edu"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 pl-12 pr-4 text-base text-slate-800 transition-all duration-300 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100 hover:border-slate-300"
+                      className="w-full rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-800/90 py-4 pl-12 pr-4 text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-300 focus:border-violet-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-violet-100 dark:focus:ring-violet-900/40 hover:border-slate-300 dark:hover:border-slate-600"
                       autoComplete="email"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="mb-2 block text-sm font-bold text-slate-700">
+                  <label htmlFor="password" className="mb-2 block text-sm font-bold text-slate-800 dark:text-slate-100">
                     Password
                   </label>
                   <div className="relative group">
@@ -193,7 +198,7 @@ export default function Login() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 pl-12 pr-14 text-base text-slate-800 transition-all duration-300 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100 hover:border-slate-300"
+                      className="w-full rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-800/90 py-4 pl-12 pr-14 text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-300 focus:border-violet-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-violet-100 dark:focus:ring-violet-900/40 hover:border-slate-300 dark:hover:border-slate-600"
                       autoComplete="current-password"
                     />
                     <button
@@ -216,9 +221,9 @@ export default function Login() {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
                     />
-                    <span className="text-sm text-slate-600 font-medium">Remember me</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-200 font-medium">Remember me</span>
                   </label>
-                  <Link to="/forgot-password" className="text-sm font-semibold text-violet-600 hover:text-violet-700 transition-colors">
+                  <Link to="/forgot-password" className="text-sm font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors">
                     Forgot password?
                   </Link>
                 </div>
@@ -249,7 +254,7 @@ export default function Login() {
                   const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
                   window.location.href = `${apiBase}/auth/google`;
                 }}
-                className="mt-6 w-full flex items-center justify-center gap-3 rounded-2xl border-2 border-slate-200 bg-white py-4 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-4 focus:ring-slate-200 transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-sm hover:shadow-lg"
+                className="mt-6 w-full flex items-center justify-center gap-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-4 text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 focus:outline-none focus:ring-4 focus:ring-slate-200 dark:focus:ring-slate-700 transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-sm hover:shadow-lg"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

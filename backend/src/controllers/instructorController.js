@@ -516,9 +516,13 @@ async function listCourses(req, res, next) {
          c.description AS course_description,
          c.thumbnail_url,
          c.status AS course_status,
+         c.subject_id,
+         subj.name AS subject_name,
+         subj.code AS subject_code,
          c.created_at,
          c.grade_level_id,
          gl.name AS grade_level_name,
+         gl.lesson_builder_type,
          ay.label AS academic_year,
          ia.grade,
          ia.section,
@@ -527,18 +531,19 @@ async function listCourses(req, res, next) {
          COUNT(DISTINCT l.id)::int AS lesson_count,
          COUNT(DISTINCT m.id)::int AS material_count,
          COUNT(DISTINCT v.id)::int AS video_count,
-         COUNT(DISTINCT s.id)::int AS student_count
+         COUNT(DISTINCT stu.id)::int AS student_count
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
        JOIN grade_levels gl ON gl.id = ia.grade_level_id
+       LEFT JOIN subjects subj ON subj.id = c.subject_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN learning_materials m ON m.lesson_id = l.id
        LEFT JOIN videos v ON v.lesson_id = l.id
-       LEFT JOIN students s ON s.grade_level_id = ia.grade_level_id
+       LEFT JOIN students stu ON stu.grade_level_id = ia.grade_level_id
        WHERE ia.instructor_id = $1 AND ia.status = 'active'
        GROUP BY c.id, c.title, c.description, c.thumbnail_url, c.status,
-                c.created_at, c.grade_level_id, gl.name, ay.label, ia.grade, ia.section,
+                c.subject_id, subj.name, subj.code, c.created_at, c.grade_level_id, gl.name, gl.lesson_builder_type, ay.label, ia.grade, ia.section,
                 ia.status, ia.id
        ORDER BY ia.created_at DESC`,
       [instructorId]
@@ -563,9 +568,11 @@ async function getCourse(req, res, next) {
     const courseRes = await query(
       `SELECT ia.id AS assignment_id, ia.grade, ia.section, ia.academic_year_id,
               ia.status AS assignment_status,
-              c.*, gl.name AS grade_level_name, ay.label AS academic_year
+              c.*, subj.name AS subject_name, subj.code AS subject_code,
+              gl.name AS grade_level_name, gl.lesson_builder_type, ay.label AS academic_year
        FROM instructor_assignments ia
        JOIN courses c ON c.id = ia.course_id
+       LEFT JOIN subjects subj ON subj.id = c.subject_id
        JOIN grade_levels gl ON gl.id = ia.grade_level_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        WHERE c.id = $1 AND ia.instructor_id = $2 AND ia.status = 'active'

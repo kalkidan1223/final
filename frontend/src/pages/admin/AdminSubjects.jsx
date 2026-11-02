@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import AdminLayout from '../../components/AdminLayout';
 import {
@@ -34,8 +35,11 @@ export default function AdminSubjects() {
   });
 
   const [assignmentData, setAssignmentData] = useState({
-    subject_id: null,
-    grade_level_id: null,
+    grade_level_id: '',
+    subject_id: '',
+    subject_ids: [],
+    grade_level_ids: [],
+    mode: 'grade',
   });
 
   useEffect(() => {
@@ -151,7 +155,8 @@ export default function AdminSubjects() {
   };
 
   const handleAssignGrade = () => {
-    setAssignmentData({ subject_id: null, grade_level_id: null });
+    setError('');
+    setAssignmentData({ grade_level_id: '', subject_id: '', subject_ids: [], grade_level_ids: [], mode: 'grade' });
     setShowAssignModal(true);
   };
 
@@ -159,13 +164,23 @@ export default function AdminSubjects() {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    const pairs = assignmentData.mode === 'grade'
+      ? assignmentData.subject_ids.map(subjectId => ({ subject_id: Number(subjectId), grade_level_id: Number(assignmentData.grade_level_id) }))
+      : assignmentData.grade_level_ids.map(gradeId => ({ subject_id: Number(assignmentData.subject_id), grade_level_id: Number(gradeId) }));
+    if (!pairs.length) {
+      setError('Choose at least one subject or grade level.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      await axiosClient.post('/subject-grade-assignments', assignmentData);
-      setSuccess('Subject assigned to grade level successfully');
-      fetchAssignments();
+      await axiosClient.post('/subject-grade-assignments', { assignments: pairs });
+      await fetchAssignments();
       setShowAssignModal(false);
+      setAssignmentData({ grade_level_id: '', subject_id: '', subject_ids: [], grade_level_ids: [], mode: 'grade' });
+      setSuccess(`${pairs.length} subject-grade pairing${pairs.length === 1 ? '' : 's'} saved.`);
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to assign subject to grade level');
@@ -189,6 +204,19 @@ export default function AdminSubjects() {
     }
   };
 
+  const assignedSubjectIdsForGrade = new Set(
+    assignments
+      .filter(assignment => String(assignment.grade_level_id) === String(assignmentData.grade_level_id))
+      .map(assignment => String(assignment.subject_id))
+  );
+  const availableSubjectsForGrade = subjects.filter(subject =>
+    subject.is_active && !assignedSubjectIdsForGrade.has(String(subject.id))
+  );
+  const assignedGradeIdsForSubject = new Set(assignments
+    .filter(assignment => String(assignment.subject_id) === String(assignmentData.subject_id))
+    .map(assignment => String(assignment.grade_level_id)));
+  const availableGradesForSubject = gradeLevels.filter(grade => grade.is_active && !assignedGradeIdsForSubject.has(String(grade.id)));
+
   return (
     <AdminLayout>
       <div className="space-y-6 max-w-7xl mx-auto pb-12">
@@ -197,13 +225,20 @@ export default function AdminSubjects() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
             <MdMenuBook className="text-3xl text-emerald-600" />
-            <span>Subjects</span>
+            <span>Subject Management</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manage subjects (Mathematics, English, Amharic, etc.) for curriculum organization
+            Manage curriculum subjects and the grade levels where they are taught.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/admin/courses"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <MdMenuBook className="text-xl" />
+            <span>Learning Content</span>
+          </Link>
           <button
             onClick={handleAssignGrade}
             className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm rounded-xl shadow-md transition flex items-center gap-2 active:scale-95"
@@ -302,7 +337,7 @@ export default function AdminSubjects() {
         <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
           <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
             <MdSchool className="text-xl text-blue-600" />
-            <span>Subject-Grade Assignments</span>
+            <span>Subjects by Grade</span>
           </h2>
           <p className="text-sm text-slate-500 mt-1">Which subjects are taught in each grade level</p>
         </div>
@@ -459,77 +494,43 @@ export default function AdminSubjects() {
 
       {/* Assign to Grade Modal */}
       {showAssignModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
-            <div className="p-6 border-b border-slate-200">
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                <MdSchool className="text-xl text-blue-600" />
-                <span>Assign Subject to Grade Level</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onClick={() => !submitting && setShowAssignModal(false)}>
+          <section className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={event => event.stopPropagation()} aria-labelledby="assign-grade-title">
+            <header className="shrink-0 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-emerald-50 px-6 py-5">
+              <p className="text-xs font-bold uppercase tracking-wider text-indigo-700">Subject Management</p>
+              <h2 id="assign-grade-title" className="mt-1 flex items-center gap-2 text-xl font-black text-slate-900">
+                <MdSchool className="text-indigo-600" /> Assign subjects and grades
               </h2>
-            </div>
-            <form onSubmit={handleCreateAssignment} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Subject *</label>
-                <select
-                  value={assignmentData.subject_id || ''}
-                  onChange={(e) => setAssignmentData({ ...assignmentData, subject_id: parseInt(e.target.value) })}
-                  required
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select a subject</option>
-                  {subjects.filter(s => s.is_active).map((subject) => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.name} ({subject.code})
-                    </option>
-                  ))}
-                </select>
+              <p className="mt-1 text-sm text-slate-600">Choose one side, then select as many as needed on the other side.</p>
+            </header>
+
+            <form onSubmit={handleCreateAssignment} className="min-h-0 space-y-5 overflow-y-auto p-6">
+              {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
+
+              <div className="flex rounded-xl bg-slate-100 p-1">
+                {[['grade', 'One grade → many subjects'], ['subject', 'One subject → many grades']].map(([mode, label]) => (
+                  <button key={mode} type="button" onClick={() => { setError(''); setAssignmentData(current => ({ ...current, mode, grade_level_id: '', subject_id: '', subject_ids: [], grade_level_ids: [] })); }} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition ${assignmentData.mode === mode ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{label}</button>
+                ))}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Grade Level *</label>
-                <select
-                  value={assignmentData.grade_level_id || ''}
-                  onChange={(e) => setAssignmentData({ ...assignmentData, grade_level_id: parseInt(e.target.value) })}
-                  required
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select a grade level</option>
-                  {gradeLevels.filter(gl => gl.is_active).map((grade) => (
-                    <option key={grade.id} value={grade.id}>
-                      {grade.name} ({grade.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {assignmentData.mode === 'grade' ? <>
+                <label className="block text-sm font-bold text-slate-800">1. Choose one grade<select value={assignmentData.grade_level_id} onChange={event => { setError(''); setAssignmentData(current => ({ ...current, grade_level_id: event.target.value, subject_ids: [] })); }} required className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"><option value="">Select a grade level</option>{gradeLevels.filter(grade => grade.is_active).map(grade => <option key={grade.id} value={grade.id}>{grade.name} ({grade.code})</option>)}</select></label>
+                <fieldset disabled={!assignmentData.grade_level_id} className="space-y-2"><legend className="mb-2 text-sm font-bold text-slate-800">2. Select subjects <span className="font-medium text-slate-500">({assignmentData.subject_ids.length} selected)</span></legend>{availableSubjectsForGrade.length ? availableSubjectsForGrade.map(subject => <label key={subject.id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 hover:border-indigo-300 hover:bg-indigo-50/50"><input type="checkbox" checked={assignmentData.subject_ids.includes(String(subject.id))} onChange={event => setAssignmentData(current => ({ ...current, subject_ids: event.target.checked ? [...current.subject_ids, String(subject.id)] : current.subject_ids.filter(id => id !== String(subject.id)) }))} className="h-4 w-4 accent-indigo-600"/><span className="text-sm font-semibold text-slate-800">{subject.name}</span><span className="ml-auto text-xs text-slate-500">{subject.code}</span></label>) : <p className="text-sm text-slate-500">Choose a grade to see available subjects, or all subjects may already be assigned.</p>}</fieldset>
+              </> : <>
+                <label className="block text-sm font-bold text-slate-800">1. Choose one subject<select value={assignmentData.subject_id} onChange={event => { setError(''); setAssignmentData(current => ({ ...current, subject_id: event.target.value, grade_level_ids: [] })); }} required className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"><option value="">Select a subject</option>{subjects.filter(subject => subject.is_active).map(subject => <option key={subject.id} value={subject.id}>{subject.name} ({subject.code})</option>)}</select></label>
+                <fieldset disabled={!assignmentData.subject_id} className="space-y-2"><legend className="mb-2 text-sm font-bold text-slate-800">2. Select grade levels <span className="font-medium text-slate-500">({assignmentData.grade_level_ids.length} selected)</span></legend>{availableGradesForSubject.length ? availableGradesForSubject.map(grade => <label key={grade.id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 hover:border-indigo-300 hover:bg-indigo-50/50"><input type="checkbox" checked={assignmentData.grade_level_ids.includes(String(grade.id))} onChange={event => setAssignmentData(current => ({ ...current, grade_level_ids: event.target.checked ? [...current.grade_level_ids, String(grade.id)] : current.grade_level_ids.filter(id => id !== String(grade.id)) }))} className="h-4 w-4 accent-indigo-600"/><span className="text-sm font-semibold text-slate-800">{grade.name}</span><span className="ml-auto text-xs text-slate-500">{grade.code}</span></label>) : <p className="text-sm text-slate-500">Choose a subject to see grade levels where it is not assigned yet.</p>}</fieldset>
+              </>}
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAssignModal(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-sm rounded-xl hover:bg-slate-200 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
-                >
-                  {submitting ? (
-                    <>
-                      <span className="animate-spin">⏳</span>
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <MdSave className="text-lg" />
-                      <span>Assign</span>
-                    </>
-                  )}
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Pairings to save</p><p className="mt-1 text-sm font-semibold text-slate-800">{assignmentData.mode === 'grade' ? `${assignmentData.subject_ids.length} subject(s) × 1 grade` : `1 subject × ${assignmentData.grade_level_ids.length} grade(s)`}</p><p className="mt-1 text-xs text-slate-500">Each selected item creates one subject-grade pairing.</p></div>
+
+              <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-white py-3">
+                <button type="button" onClick={() => setShowAssignModal(false)} disabled={submitting} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={submitting || !(assignmentData.mode === 'grade' ? assignmentData.grade_level_id && assignmentData.subject_ids.length : assignmentData.subject_id && assignmentData.grade_level_ids.length)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  {submitting ? <><span className="animate-spin">⏳</span> Saving pairings…</> : <><MdSave className="text-lg" /> Save pairings</>}
                 </button>
               </div>
             </form>
-          </div>
+          </section>
         </div>
       )}
       </div>

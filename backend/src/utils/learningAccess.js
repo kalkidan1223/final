@@ -62,15 +62,21 @@ async function resolveStudentId(req) {
  */
 async function getLessonAccess(studentId, lessonId) {
   const lessonRes = await query(
-    `SELECT l.id, l.course_id, c.sequential_learning
+    `SELECT l.id, l.course_id, c.sequential_learning, c.status AS course_status,
+            c.grade_level_id, l.status AS lesson_status, s.grade_level_id AS student_grade_level_id
      FROM lessons l
      JOIN courses c ON c.id = l.course_id
+     JOIN students s ON s.id = $2
      WHERE l.id = $1`,
-    [lessonId]
+    [lessonId, studentId]
   );
   if (lessonRes.rows.length === 0) return { exists: false, courseId: null, isLocked: true };
 
   const lesson = lessonRes.rows[0];
+  if (lesson.course_status !== 'published' || lesson.lesson_status !== 'active' ||
+      String(lesson.grade_level_id) !== String(lesson.student_grade_level_id)) {
+    return { exists: false, courseId: lesson.course_id, isLocked: true };
+  }
   if (!lesson.sequential_learning) {
     return { exists: true, courseId: lesson.course_id, isLocked: false };
   }
@@ -109,7 +115,7 @@ async function getResourceAccess(studentId, resourceType, resourceId) {
     `SELECT t.lesson_id, l.course_id
      FROM ${table} t
      JOIN lessons l ON l.id = t.lesson_id
-     WHERE t.id = $1`,
+     WHERE t.id = $1 AND t.status = 'active'`,
     [resourceId]
   );
   if (srcRes.rows.length === 0) return { exists: false, isLocked: true };

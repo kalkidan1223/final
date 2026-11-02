@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const { gradeAnswer } = require('../utils/quizGrading');
+const { getLessonAccess } = require('../utils/learningAccess');
 
 // Helper: Get student record from user
 async function getStudentFromUser(userId) {
@@ -50,7 +51,7 @@ async function getDashboard(req, res, next) {
         (SELECT COUNT(DISTINCT l.id)::int 
          FROM lessons l 
          JOIN courses c ON c.id = l.course_id 
-         WHERE c.grade_level_id = $2 AND c.status = 'published') as total_lessons,
+         WHERE c.grade_level_id = $2 AND c.status = 'published' AND l.status = 'active') as total_lessons,
         (SELECT COUNT(*)::int 
          FROM activity_submissions 
          WHERE student_id = $1) as completed_activities,
@@ -73,7 +74,7 @@ async function getDashboard(req, res, next) {
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
        JOIN grade_levels ag ON ag.id = c.grade_level_id
-       WHERE c.grade_level_id = $1 AND c.status = 'published'
+       WHERE c.grade_level_id = $1 AND c.status = 'published' AND l.status = 'active'
        ORDER BY l.created_at DESC
        LIMIT 1`,
       [student.grade_level_id]
@@ -88,7 +89,7 @@ async function getDashboard(req, res, next) {
        JOIN grade_levels ag ON ag.id = c.grade_level_id
        JOIN instructors i ON i.id = c.instructor_id
        JOIN users u ON u.id = i.user_id
-       LEFT JOIN lessons l ON l.course_id = c.id
+       LEFT JOIN lessons l ON l.course_id = c.id AND l.status = 'active'
        WHERE c.grade_level_id = $1 AND c.status = 'published'
        GROUP BY c.id, ag.name, u.full_name
        ORDER BY c.created_at DESC
@@ -217,7 +218,7 @@ async function getLesson(req, res, next) {
       `SELECT l.*, c.grade_level_id, c.title as course_title, c.id as course_id
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
-       WHERE l.id = $1`,
+       WHERE l.id = $1 AND l.status = 'active' AND c.status = 'published'`,
       [id]
     );
 
@@ -226,11 +227,15 @@ async function getLesson(req, res, next) {
     }
 
     const lesson = lessonResult.rows[0];
+    const { teacher_notes, ...studentLesson } = lesson;
 
     // Verify student has access (same grade level)
     if (lesson.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'You do not have access to this lesson' });
     }
+    const lessonAccess = await getLessonAccess(student.id, id);
+    if (!lessonAccess.exists) return res.status(404).json({ error: 'Lesson not found' });
+    if (lessonAccess.isLocked) return res.status(403).json({ error: 'Complete the previous lesson before opening this one' });
 
     // Get learning materials (all types in one table)
     const materials = await query(
@@ -250,7 +255,7 @@ async function getLesson(req, res, next) {
               asub.score, asub.feedback
        FROM activities a
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $2
-       WHERE a.lesson_id = $1
+       WHERE a.lesson_id = $1 AND a.status = 'active'
        ORDER BY a.created_at`,
       [id, student.id]
     );
@@ -261,13 +266,13 @@ async function getLesson(req, res, next) {
               qr.id as result_id, qr.score, qr.total_points, qr.submitted_at as result_submitted_at
        FROM quizzes q
        LEFT JOIN quiz_results qr ON qr.quiz_id = q.id AND qr.student_id = $2
-       WHERE q.lesson_id = $1
+       WHERE q.lesson_id = $1 AND q.status = 'active'
        ORDER BY q.created_at`,
       [id, student.id]
     );
 
     res.json({
-      lesson,
+      lesson: studentLesson,
       materials: materials.rows,
       activities: activities.rows,
       quizzes: quizzes.rows,
@@ -297,6 +302,7 @@ async function listAllQuizzes(req, res, next) {
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
        WHERE c.grade_level_id = $2 AND c.status = 'published'
+         AND l.status = 'active' AND q.status = 'active'
        ORDER BY c.created_at DESC, l.order_index, q.created_at`,
       [student.id, student.grade_level_id]
     );
@@ -322,8 +328,9 @@ async function getMaterial(req, res, next) {
        FROM learning_materials lm
        JOIN lessons l ON l.id = lm.lesson_id
        JOIN courses c ON c.id = l.course_id
-       WHERE lm.id = $1`,
-      [id, student.id]
+       WHERE lm.id = $1 AND lm.status = 'active' AND l.status = 'active'
+         AND c.status = 'published' AND c.grade_level_id = $3`,
+      [id, student.id, student.grade_level_id]
     );
 
     if (result.rows.length === 0) {
@@ -335,6 +342,9 @@ async function getMaterial(req, res, next) {
     if (material.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
+    const materialLessonAccess = await getLessonAccess(student.id, material.lesson_id);
+    if (!materialLessonAccess.exists) return res.status(404).json({ error: 'Material not found' });
+    if (materialLessonAccess.isLocked) return res.status(403).json({ error: 'Complete the previous lesson before opening this material' });
 
     res.json({ material });
   } catch (err) {
@@ -473,8 +483,9 @@ async function getActivity(req, res, next) {
        JOIN lessons l ON l.id = a.lesson_id
        JOIN courses c ON c.id = l.course_id
        LEFT JOIN activity_submissions asub ON asub.activity_id = a.id AND asub.student_id = $2
-       WHERE a.id = $1`,
-      [id, student.id]
+       WHERE a.id = $1 AND a.status = 'active' AND l.status = 'active'
+         AND c.status = 'published' AND c.grade_level_id = $3`,
+      [id, student.id, student.grade_level_id]
     );
 
     if (result.rows.length === 0) {
@@ -487,6 +498,9 @@ async function getActivity(req, res, next) {
     if (activity.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
+    const activityLessonAccess = await getLessonAccess(student.id, activity.lesson_id);
+    if (!activityLessonAccess.exists) return res.status(404).json({ error: 'Activity not found' });
+    if (activityLessonAccess.isLocked) return res.status(403).json({ error: 'Complete the previous lesson before opening this activity' });
 
     res.json({ activity });
   } catch (err) {
@@ -574,8 +588,9 @@ async function getQuiz(req, res, next) {
        FROM quizzes q
        JOIN lessons l ON l.id = q.lesson_id
        JOIN courses c ON c.id = l.course_id
-       WHERE q.id = $1`,
-      [id]
+       WHERE q.id = $1 AND q.status = 'active' AND l.status = 'active'
+         AND c.status = 'published' AND c.grade_level_id = $2`,
+      [id, student.grade_level_id]
     );
 
     if (quizResult.rows.length === 0) {
@@ -588,6 +603,9 @@ async function getQuiz(req, res, next) {
     if (quiz.grade_level_id !== student.grade_level_id) {
       return res.status(403).json({ error: 'Access denied' });
     }
+    const quizLessonAccess = await getLessonAccess(student.id, quiz.lesson_id);
+    if (!quizLessonAccess.exists) return res.status(404).json({ error: 'Quiz not found' });
+    if (quizLessonAccess.isLocked) return res.status(403).json({ error: 'Complete the previous lesson before opening this quiz' });
 
     // Get questions
     const questions = await query(

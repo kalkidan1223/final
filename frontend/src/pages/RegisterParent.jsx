@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DateOfBirthField from '../components/DateOfBirthField';
 import axiosClient from '../api/axiosClient';
+import ThemeToggle from '../components/ThemeToggle';
 
 function calculateAge(dob) {
   if (!dob) return null;
@@ -238,6 +239,8 @@ export default function RegisterParent() {
             <span className="text-3xl">🎓</span>
             <span className="text-lg font-bold text-white/90">Children Learning Hub</span>
           </Link>
+          <div className="flex items-center gap-3">
+          <ThemeToggle />
           <Link
             to="/signup"
             className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm border border-white/20 hover:bg-white/25 transition-all"
@@ -247,6 +250,7 @@ export default function RegisterParent() {
             </svg>
             <span className="hidden sm:inline">Back</span>
           </Link>
+          </div>
         </header>
 
         <main className="flex-1 flex items-center justify-center px-4 py-8">

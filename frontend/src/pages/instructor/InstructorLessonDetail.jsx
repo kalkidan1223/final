@@ -175,6 +175,18 @@ export default function InstructorLessonDetail() {
               <p className="mt-1 text-sm text-slate-700">{lesson.learning_objectives}</p>
             </div>
           )}
+          {lesson.prerequisites && (
+            <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-700">Prerequisites</h3>
+              <p className="mt-1 text-sm text-slate-700">{lesson.prerequisites}</p>
+            </div>
+          )}
+          {lesson.teacher_notes && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Teacher Notes · Instructor only</h3>
+              <p className="mt-1 text-sm text-slate-700">{lesson.teacher_notes}</p>
+            </div>
+          )}
         </div>
 
         {error && (
