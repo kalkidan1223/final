@@ -3,7 +3,7 @@
  * API endpoints for grade levels, subjects, and curriculum management
  */
 
-const { query } = require('../config/db');
+const { pool, query } = require('../config/db');
 
 // ============================================================================
 // GRADE LEVELS
@@ -53,17 +53,20 @@ async function getGradeLevel(req, res, next) {
  */
 async function createGradeLevel(req, res, next) {
   try {
-    const { code, name, level_type, sequence_order, description, is_active } = req.body;
+    const { code, name, level_type, sequence_order, description, lesson_builder_type, is_active } = req.body;
 
     if (!code || !name || !level_type || sequence_order === undefined) {
       return res.status(400).json({ error: 'Code, name, level type, and sequence order are required' });
     }
+    if (lesson_builder_type !== undefined && !['visual', 'structured'].includes(lesson_builder_type)) {
+      return res.status(400).json({ error: 'lesson_builder_type must be visual or structured' });
+    }
 
     const result = await query(
-      `INSERT INTO grade_levels (code, name, level_type, sequence_order, description, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO grade_levels (code, name, level_type, sequence_order, description, lesson_builder_type, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [code, name, level_type, sequence_order, description || null, is_active !== false]
+      [code, name, level_type, sequence_order, description || null, lesson_builder_type || 'structured', is_active !== false]
     );
 
     res.status(201).json({ grade_level: result.rows[0], message: 'Grade level created successfully' });
@@ -82,7 +85,10 @@ async function createGradeLevel(req, res, next) {
 async function updateGradeLevel(req, res, next) {
   try {
     const { id } = req.params;
-    const { code, name, level_type, sequence_order, description, is_active } = req.body;
+    const { code, name, level_type, sequence_order, description, lesson_builder_type, is_active } = req.body;
+    if (lesson_builder_type !== undefined && !['visual', 'structured'].includes(lesson_builder_type)) {
+      return res.status(400).json({ error: 'lesson_builder_type must be visual or structured' });
+    }
 
     const result = await query(
       `UPDATE grade_levels
@@ -91,11 +97,12 @@ async function updateGradeLevel(req, res, next) {
            level_type = COALESCE($3, level_type),
            sequence_order = COALESCE($4, sequence_order),
            description = COALESCE($5, description),
-           is_active = COALESCE($6, is_active),
+           lesson_builder_type = COALESCE($6, lesson_builder_type),
+           is_active = COALESCE($7, is_active),
            updated_at = now()
-       WHERE id = $7
+       WHERE id = $8
        RETURNING *`,
-      [code, name, level_type, sequence_order, description, is_active, id]
+      [code, name, level_type, sequence_order, description, lesson_builder_type, is_active, id]
     );
 
     if (result.rows.length === 0) {
@@ -336,39 +343,52 @@ async function getSubjectGradeAssignments(req, res, next) {
  * Assign a subject to a grade level (Admin only)
  */
 async function createSubjectGradeAssignment(req, res, next) {
+  let client;
   try {
-    const { subject_id, grade_level_id } = req.body;
-
-    if (!subject_id || !grade_level_id) {
-      return res.status(400).json({ error: 'subject_id and grade_level_id are required' });
+    const pairs = Array.isArray(req.body.assignments)
+      ? req.body.assignments
+      : [{ subject_id: req.body.subject_id, grade_level_id: req.body.grade_level_id }];
+    if (!pairs.length || pairs.some(pair => !Number.isInteger(Number(pair.subject_id)) || Number(pair.subject_id) <= 0 || !Number.isInteger(Number(pair.grade_level_id)) || Number(pair.grade_level_id) <= 0)) {
+      return res.status(400).json({ error: 'Provide valid subject_id and grade_level_id values for each assignment' });
     }
+    const normalizedPairs = [...new Map(pairs.map(pair => [`${Number(pair.subject_id)}:${Number(pair.grade_level_id)}`, {
+      subject_id: Number(pair.subject_id), grade_level_id: Number(pair.grade_level_id),
+    }])).values()];
+    const subjectIds = [...new Set(normalizedPairs.map(pair => pair.subject_id))];
+    const gradeIds = [...new Set(normalizedPairs.map(pair => pair.grade_level_id))];
 
-    // Validate subject exists
-    const subjectCheck = await query('SELECT id FROM subjects WHERE id = $1', [subject_id]);
-    if (!subjectCheck.rows.length) {
+    const subjectCheck = await query('SELECT id FROM subjects WHERE id = ANY($1::int[])', [subjectIds]);
+    if (subjectCheck.rows.length !== subjectIds.length) {
       return res.status(404).json({ error: 'Subject not found' });
     }
-
-    // Validate grade level exists
-    const gradeCheck = await query('SELECT id FROM grade_levels WHERE id = $1', [grade_level_id]);
-    if (!gradeCheck.rows.length) {
+    const gradeCheck = await query('SELECT id FROM grade_levels WHERE id = ANY($1::int[])', [gradeIds]);
+    if (gradeCheck.rows.length !== gradeIds.length) {
       return res.status(404).json({ error: 'Grade level not found' });
     }
 
-    const result = await query(
-      `INSERT INTO subject_grade_assignments (subject_id, grade_level_id, assigned_by)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (subject_id, grade_level_id) DO UPDATE SET
-         is_active = TRUE,
-         assigned_by = $3,
-         assigned_at = now()
-       RETURNING *`,
-      [subject_id, grade_level_id, req.user.id]
-    );
-
-    res.status(201).json({ assignment: result.rows[0], message: 'Subject assigned to grade level successfully' });
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const results = [];
+    for (const pair of normalizedPairs) {
+      const result = await client.query(
+        `INSERT INTO subject_grade_assignments (subject_id, grade_level_id, assigned_by)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (subject_id, grade_level_id) DO UPDATE SET
+           is_active = TRUE,
+           assigned_by = $3,
+           assigned_at = now()
+         RETURNING *`,
+        [pair.subject_id, pair.grade_level_id, req.user.id]
+      );
+      results.push(result.rows[0]);
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ assignments: results, assignment: results[0], message: `${results.length} subject-grade pairing(s) saved successfully` });
   } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
     next(err);
+  } finally {
+    client?.release();
   }
 }
 
@@ -379,6 +399,24 @@ async function createSubjectGradeAssignment(req, res, next) {
 async function deleteSubjectGradeAssignment(req, res, next) {
   try {
     const { id } = req.params;
+
+    const assignment = await query(
+      'SELECT subject_id, grade_level_id FROM subject_grade_assignments WHERE id = $1',
+      [id]
+    );
+    if (!assignment.rows.length) {
+      return res.status(404).json({ error: 'Subject-grade assignment not found' });
+    }
+
+    const courseCount = await query(
+      'SELECT COUNT(*)::int AS count FROM courses WHERE subject_id = $1 AND grade_level_id = $2',
+      [assignment.rows[0].subject_id, assignment.rows[0].grade_level_id]
+    );
+    if (courseCount.rows[0].count > 0) {
+      return res.status(409).json({
+        error: `This subject is still used by ${courseCount.rows[0].count} course(s) in this grade. Reassign those courses first.`,
+      });
+    }
 
     await query('DELETE FROM subject_grade_assignments WHERE id = $1', [id]);
 

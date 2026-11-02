@@ -81,6 +81,8 @@ async function createLesson(req, res, next) {
       title,
       description,
       learning_objectives,
+      prerequisites,
+      teacher_notes,
       instructions,
       estimated_duration_minutes,
       difficulty_level,
@@ -135,10 +137,10 @@ async function createLesson(req, res, next) {
 
       const result = await client.query(
         `INSERT INTO lessons (course_id, title, description, order_index,
-                              learning_objectives, instructions,
+                              learning_objectives, prerequisites, teacher_notes, instructions,
                               estimated_duration_minutes, difficulty_level,
                               grade, section, academic_year_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
         [
           courseId,
@@ -146,6 +148,8 @@ async function createLesson(req, res, next) {
           description || null,
           nextOrder,
           learning_objectives || null,
+          prerequisites || null,
+          teacher_notes || null,
           instructions || null,
           estimated_duration_minutes ? Number(estimated_duration_minutes) : null,
           difficulty_level || 'beginner',
@@ -199,6 +203,8 @@ async function updateLesson(req, res, next) {
       title,
       description,
       learning_objectives,
+      prerequisites,
+      teacher_notes,
       instructions,
       estimated_duration_minutes,
       difficulty_level,
@@ -219,16 +225,20 @@ async function updateLesson(req, res, next) {
        SET title = COALESCE($1, title),
            description = COALESCE($2, description),
            learning_objectives = COALESCE($3, learning_objectives),
-           instructions = COALESCE($4, instructions),
-           estimated_duration_minutes = COALESCE($5, estimated_duration_minutes),
-           difficulty_level = COALESCE($6, difficulty_level),
+           prerequisites = COALESCE($4, prerequisites),
+           teacher_notes = COALESCE($5, teacher_notes),
+           instructions = COALESCE($6, instructions),
+           estimated_duration_minutes = COALESCE($7, estimated_duration_minutes),
+           difficulty_level = COALESCE($8, difficulty_level),
            updated_at = now()
-       WHERE id = $7
+       WHERE id = $9
        RETURNING *`,
       [
         title,
         description,
         learning_objectives,
+        prerequisites,
+        teacher_notes,
         instructions,
         estimated_duration_minutes !== undefined && estimated_duration_minutes !== null
           ? Number(estimated_duration_minutes)

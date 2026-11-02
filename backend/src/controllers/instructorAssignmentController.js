@@ -7,16 +7,18 @@ const { query } = require('../config/db');
 async function listInstructorAssignments(req, res, next) {
   try {
     const { rows } = await query(
-      `SELECT ia.id, ia.status, ia.grade, ia.section, ia.created_at,
+      `SELECT ia.id, ia.instructor_id, ia.status, ia.grade, ia.section, ia.created_at,
               u.full_name AS instructor_name, u.email AS instructor_email,
-              c.title AS course_title,
-              ag.name AS grade_level_name,
+              c.id AS course_id, c.title AS course_title, c.subject_id,
+              s.name AS subject_name, s.code AS subject_code,
+              ag.id AS grade_level_id, ag.name AS grade_level_name,
               ay.label AS academic_year
        FROM instructor_assignments ia
        JOIN instructors i ON i.id = ia.instructor_id
        JOIN users u ON u.id = i.user_id
        JOIN courses c ON c.id = ia.course_id
        JOIN grade_levels ag ON ag.id = ia.grade_level_id
+       LEFT JOIN subjects s ON s.id = c.subject_id
        LEFT JOIN academic_years ay ON ay.id = ia.academic_year_id
        ORDER BY ia.created_at DESC`
     );
@@ -34,11 +36,26 @@ async function createInstructorAssignment(req, res, next) {
     }
 
     const course = await query(
-      'SELECT id, grade_level_id FROM courses WHERE id = $1 AND grade_level_id = $2',
+      `SELECT c.id, c.grade_level_id, c.subject_id
+       FROM courses c
+       WHERE c.id = $1 AND c.grade_level_id = $2`,
       [course_id, grade_level_id]
     );
     if (!course.rows.length) {
       return res.status(400).json({ error: 'The selected course does not belong to this grade level' });
+    }
+
+    if (!course.rows[0].subject_id) {
+      return res.status(400).json({ error: 'Assign this course to a subject before assigning it to an instructor' });
+    }
+
+    const subjectGrade = await query(
+      `SELECT 1 FROM subject_grade_assignments
+       WHERE subject_id = $1 AND grade_level_id = $2 AND is_active = TRUE`,
+      [course.rows[0].subject_id, course.rows[0].grade_level_id]
+    );
+    if (!subjectGrade.rows.length) {
+      return res.status(400).json({ error: 'This subject is not assigned to the course grade level' });
     }
 
     const { rows } = await query(

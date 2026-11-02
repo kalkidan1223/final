@@ -201,8 +201,9 @@ async function getCourseOverview(req, res, next) {
        JOIN instructors i ON c.instructor_id = i.id
        JOIN users u ON i.user_id = u.id
        LEFT JOIN grade_levels gl ON c.grade_level_id = gl.id
-       WHERE c.id = $1 AND c.status = 'published'`,
-      [courseId]
+       WHERE c.id = $1 AND c.status = 'published'
+         AND c.grade_level_id = (SELECT grade_level_id FROM students WHERE id = $2)`,
+      [courseId, studentId]
     );
     
     if (courseResult.rows.length === 0) {
@@ -221,12 +222,12 @@ async function getCourseOverview(req, res, next) {
               slp.total_required_resources
        FROM lessons l
        LEFT JOIN student_lesson_progress slp ON slp.lesson_id = l.id AND slp.student_id = $1
-       WHERE l.course_id = $2
+       WHERE l.course_id = $2 AND l.status = 'active'
        ORDER BY l.order_index`,
       [studentId, courseId]
     );
     
-    const lessons = lessonsResult.rows.map(lesson => ({
+    const lessons = lessonsResult.rows.map(({ teacher_notes, ...lesson }) => ({
       ...lesson,
       status: lesson.progress_status || 'not_started',
       progress_percentage: lesson.progress_percentage || 0,
@@ -317,9 +318,6 @@ async function getLessonJourney(req, res, next) {
     
     const { lessonId } = req.params;
 
-    // Guarantee this lesson's content has a database-backed order to display.
-    await ensureLessonResources(lessonId);
-    
     // Get lesson info
     const lessonResult = await query(
       `SELECT l.*, c.title as course_title, c.id as course_id, c.sequential_learning
@@ -344,6 +342,9 @@ async function getLessonJourney(req, res, next) {
         code: 'LESSON_LOCKED',
       });
     }
+
+    // Only create missing journey rows after confirming this child may open it.
+    await ensureLessonResources(lessonId);
     
     // Get lesson progress
     const progressResult = await query(
@@ -367,6 +368,13 @@ async function getLessonJourney(req, res, next) {
        FROM lesson_resources lr
        LEFT JOIN student_resource_progress srp ON srp.lesson_resource_id = lr.id AND srp.student_id = $1
        WHERE lr.lesson_id = $2
+         AND (
+           (lr.resource_type = 'material' AND EXISTS (SELECT 1 FROM learning_materials x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
+           (lr.resource_type = 'video' AND EXISTS (SELECT 1 FROM videos x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
+           (lr.resource_type = 'activity' AND EXISTS (SELECT 1 FROM activities x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
+           (lr.resource_type = 'quiz' AND EXISTS (SELECT 1 FROM quizzes x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
+           lr.resource_type NOT IN ('material', 'video', 'activity', 'quiz')
+         )
        ORDER BY lr.display_order`,
       [studentId, lessonId]
     );
@@ -399,6 +407,8 @@ async function getLessonJourney(req, res, next) {
         id: lesson.id,
         title: lesson.title,
         description: lesson.description,
+        learning_objectives: lesson.learning_objectives,
+        estimated_duration_minutes: lesson.estimated_duration_minutes,
         course_id: lesson.course_id,
         course_title: lesson.course_title,
         order_index: lesson.order_index

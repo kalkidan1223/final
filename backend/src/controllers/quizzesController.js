@@ -3,6 +3,7 @@ const { getInstructorIdForUser } = require('../utils/roleHelpers');
 const { canReadCourse, canManageCourse, canManageLesson } = require('../utils/courseAccess');
 const { upsertLessonProgress } = require('../utils/progress');
 const { gradeAnswer } = require('../utils/quizGrading');
+const { getLessonAccess } = require('../utils/learningAccess');
 
 async function assertLessonOwnership(req, res, lessonId) {
   const lessonCheck = await query('SELECT id FROM lessons WHERE id = $1', [lessonId]);
@@ -26,7 +27,8 @@ async function loadQuizWithOwner(quizId) {
             c.instructor_id AS instructor_id,
             c.status AS course_status,
             c.grade_level_id,
-            l.course_id
+            l.course_id,
+            l.status AS lesson_status
      FROM quizzes q
      JOIN lessons l ON l.id = q.lesson_id
      JOIN courses c ON c.id = l.course_id
@@ -438,12 +440,21 @@ const { id } = req.params;
     if (!quiz || !(await canReadCourse(req.user, quiz))) {
       return res.status(404).json({ error: 'Quiz not found' });
     }
+    if (quiz.status !== 'active' || quiz.lesson_status !== 'active' || quiz.course_status !== 'published') {
+      return res.status(404).json({ error: 'Quiz not found' });
+    }
 
-    const studentResult = await query('SELECT id FROM students WHERE user_id = $1', [req.user.id]);
+    const studentResult = await query('SELECT id, grade_level_id FROM students WHERE user_id = $1', [req.user.id]);
     if (studentResult.rows.length === 0) {
       return res.status(403).json({ error: 'No student profile linked to this account' });
     }
     const studentId = studentResult.rows[0].id;
+    if (String(studentResult.rows[0].grade_level_id) !== String(quiz.grade_level_id)) {
+      return res.status(403).json({ error: 'Quiz is not available for this student' });
+    }
+    const lessonAccess = await getLessonAccess(studentId, quiz.lesson_id);
+    if (!lessonAccess.exists) return res.status(404).json({ error: 'Quiz not found' });
+    if (lessonAccess.isLocked) return res.status(403).json({ error: 'Complete the previous lesson before submitting this quiz' });
 
     const questionsResult = await query(
       'SELECT id, question_type, options, correct_answer, points FROM quiz_questions WHERE quiz_id = $1',

@@ -4,6 +4,7 @@ const { loadActivityWithContext } = require('./activitiesController');
 const { upsertLessonProgress } = require('../utils/progress');
 const { createNotification } = require('./notificationsController');
 const { canReadCourse, canManageCourse } = require('../utils/courseAccess');
+const { getLessonAccess } = require('../utils/learningAccess');
 
 // ----------------------------------------------------------------------------
 // POST /api/activities/:id/submissions
@@ -23,6 +24,9 @@ async function createSubmission(req, res, next) {
     const activity = await loadActivityWithContext(activityId);
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
     if (!(await canReadCourse(req.user, { ...activity, grade_level_id: activity.course_grade_level_id }))) {
+      return res.status(404).json({ error: 'Activity not found' });
+    }
+    if (activity.status !== 'active' || activity.lesson_status !== 'active' || activity.course_status !== 'published') {
       return res.status(404).json({ error: 'Activity not found' });
     }
 
@@ -64,6 +68,9 @@ async function createSubmission(req, res, next) {
     if (eligibleStudent.rows.length === 0) {
       return res.status(403).json({ error: 'This activity is not available for this student' });
     }
+    const lessonAccess = await getLessonAccess(studentId, activity.lesson_id);
+    if (!lessonAccess.exists) return res.status(404).json({ error: 'Activity not found' });
+    if (lessonAccess.isLocked) return res.status(403).json({ error: 'Complete the previous lesson before submitting this activity' });
 
     const result = await query(
       `INSERT INTO activity_submissions

@@ -68,6 +68,17 @@ async function createFidelLesson(req, res, next) {
       return res.status(403).json({ error: 'You do not have permission to manage this course' });
     }
 
+    const courseSubject = await client.query(
+      `SELECT s.name, s.code
+       FROM courses c JOIN subjects s ON s.id = c.subject_id
+       WHERE c.id = $1`,
+      [courseId]
+    );
+    const subject = courseSubject.rows[0];
+    if (!subject || (!/^amharic$/i.test(subject.name?.trim() || '') && !/^amh$/i.test(subject.code?.trim() || ''))) {
+      return res.status(400).json({ error: 'Fidel lessons can only be created in an Amharic subject course' });
+    }
+
     const {
       title,
       description,

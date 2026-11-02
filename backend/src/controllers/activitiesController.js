@@ -38,6 +38,7 @@ async function loadActivityWithContext(activityId) {
             c.instructor_id AS owner_instructor_id,
             c.instructor_id AS instructor_id,
             c.status AS course_status,
+            l.status AS lesson_status,
             c.grade_level_id AS course_grade_level_id
      FROM activities a
      JOIN lessons l ON l.id = a.lesson_id
