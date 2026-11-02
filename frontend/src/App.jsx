@@ -32,7 +32,7 @@ import AdminAIRecommendations from './pages/admin/AdminAIRecommendations';
 import AdminAnnouncements from './pages/admin/AdminAnnouncements';
 import AdminInstructorAssignments from './pages/admin/AdminInstructorAssignments';
 import AdminReferenceData from './pages/admin/AdminReferenceData';
-import InstructorCourses from './pages/instructor/InstructorCourses';
+import InstructorSubjects from './pages/instructor/InstructorSubjects';
 import InstructorDashboard from './pages/instructor/InstructorDashboard';
 import InstructorCourseDetail from './pages/instructor/InstructorCourseDetail';
 import InstructorLessonDetail from './pages/instructor/InstructorLessonDetail';
@@ -317,10 +317,18 @@ export default function App() {
         }
       />
       <Route
+        path="/instructor/subjects"
+        element={
+          <ProtectedRoute roles={['instructor']}>
+            <InstructorSubjects />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/instructor/courses"
         element={
           <ProtectedRoute roles={['instructor']}>
-            <InstructorCourses />
+            <Navigate to="/instructor/subjects" replace />
           </ProtectedRoute>
         }
       />

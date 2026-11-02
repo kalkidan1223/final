@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -10,6 +10,7 @@ import {
   MdGrading, MdTrendingUp, MdQuestionAnswer
 } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
+import ThemeToggle from './ThemeToggle';
 
 const NAV_GROUPS = [
   {
@@ -21,7 +22,7 @@ const NAV_GROUPS = [
   {
     title: 'Teaching & Content',
     items: [
-      { label: 'Courses', to: '/instructor/courses', icon: MdMenuBook },
+      { label: 'My Subject Assignments', to: '/instructor/subjects', icon: MdMenuBook },
       { label: 'Lessons', to: '/instructor/lessons', icon: MdAutoStories },
       { label: 'Fidel Family Lessons', to: '/instructor/fidel-lessons', icon: MdTranslate },
       { label: 'Materials', to: '/instructor/materials', icon: MdLibraryBooks },
@@ -226,6 +227,7 @@ export default function InstructorLayout({ children }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Link
               to="/instructor/notifications"
               className="relative p-2 rounded-lg hover:bg-slate-100 text-slate-500"

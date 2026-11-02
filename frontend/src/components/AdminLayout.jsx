@@ -1,15 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   MdDashboard, MdFamilyRestroom, MdPeople, MdSchool, MdMenuBook,
-  MdBook, MdAssignment, MdQuiz, MdBarChart, MdSmartToy,
+  MdAssignment, MdQuiz, MdBarChart, MdSmartToy,
   MdCampaign, MdNotifications, MdAssessment, MdSecurity,
   MdSettings, MdLogout, MdMenu, MdClose, MdSearch,
   MdCheckCircle, MdClass, MdGroups, MdLibraryBooks,
   MdVideoLibrary, MdTrendingUp, MdMessage, MdTranslate
 } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
+import ThemeToggle from './ThemeToggle';
 
 const NAV_GROUPS = [
   {
@@ -25,6 +26,7 @@ const NAV_GROUPS = [
       { to: '/admin/parents', label: 'Parents & Guardians', icon: MdFamilyRestroom },
       { to: '/admin/students', label: 'Students', icon: MdSchool },
       { to: '/admin/instructors', label: 'Instructors', icon: MdGroups },
+      { to: '/admin/instructor-assignments', label: 'Instructor Assignments', icon: MdAssignment },
       { to: '/admin/users', label: 'All Users', icon: MdPeople },
     ],
   },
@@ -32,8 +34,7 @@ const NAV_GROUPS = [
     label: 'Academic',
     items: [
       { to: '/admin/grade-levels', label: 'Grade Levels', icon: MdClass },
-      { to: '/admin/subjects', label: 'Subjects', icon: MdMenuBook },
-      { to: '/admin/courses', label: 'Courses', icon: MdBook },
+      { to: '/admin/subjects', label: 'Subject Management', icon: MdMenuBook },
       { to: '/admin/lessons', label: 'Lessons', icon: MdAssignment },
       { to: '/admin/reference', label: 'Early Childhood Data', icon: MdTranslate },
     ],
@@ -138,7 +139,7 @@ export default function AdminLayout({ children }) {
     searchDebounce.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
-        const [users, courses] = await Promise.all([
+        const [users, learningAreas] = await Promise.all([
           axiosClient.get(`/admin/users?search=${encodeURIComponent(search)}`),
           axiosClient.get(`/admin/courses?search=${encodeURIComponent(search)}`),
         ]);
@@ -147,8 +148,8 @@ export default function AdminLayout({ children }) {
             label: u.full_name, sub: u.email, tag: u.role,
             to: u.role === 'parent' ? '/admin/parents' : u.role === 'instructor' ? '/admin/instructors' : u.role === 'student' ? '/admin/students' : '/admin/users',
           })),
-          ...(courses.data.courses || []).slice(0, 3).map(c => ({
-            label: c.title, sub: c.instructor_name, tag: 'course', to: '/admin/courses',
+          ...(learningAreas.data.courses || []).slice(0, 3).map(c => ({
+            label: c.subject_name || c.title, sub: c.grade_level_name, tag: 'subject', to: '/admin/subjects',
           })),
         ];
         setSearchResults(results);
@@ -317,7 +318,7 @@ export default function AdminLayout({ children }) {
               <MdSearch className="text-slate-400 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Search users, courses…"
+                placeholder="Search users and subjects…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setShowSearch(true); }}
                 onFocus={() => setShowSearch(true)}
@@ -450,6 +451,9 @@ export default function AdminLayout({ children }) {
                 </div>
               )}
             </div>
+
+            {/* Night Mode Toggle */}
+            <ThemeToggle />
 
             {/* Admin avatar */}
             <div className="flex items-center gap-2 rounded-lg px-2 py-1 bg-slate-50 border border-slate-200">

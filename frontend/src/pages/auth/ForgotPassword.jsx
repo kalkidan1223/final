@@ -1,6 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
+import ThemeToggle from '../../components/ThemeToggle';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -45,7 +46,7 @@ export default function ForgotPassword() {
           <p className="text-white/60">Enter your email and we'll send you a reset link.</p>
         </div>
 
-        <div className="rounded-3xl bg-white/95 backdrop-blur-2xl p-8 shadow-2xl border border-white/30">
+        <div className="rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl p-8 shadow-2xl border border-white/30 dark:border-slate-800">
           {/* Success state */}
           {sent ? (
             <div className="text-center py-4">
@@ -72,14 +73,14 @@ export default function ForgotPassword() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Email Address</label>
+                  <label className="block text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">Email Address</label>
                   <input
                     type="email"
                     required
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 px-4 text-base text-slate-800 transition-all focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100"
+                    className="w-full rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-800/90 py-4 px-4 text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all focus:border-violet-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-violet-100 dark:focus:ring-violet-900/40"
                     autoComplete="email"
                   />
                 </div>

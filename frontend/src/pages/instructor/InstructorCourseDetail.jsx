@@ -165,7 +165,7 @@ export default function InstructorCourseDetail() {
             <MdMenuBook className="text-indigo-500" /> Lessons
           </h2>
           <div className="flex items-center gap-2">
-            {(course?.subject_id === 2 || /english/i.test(course?.title || '')) && (
+            {(/^english$/i.test(course?.subject_name?.trim() || '') || /^eng$/i.test(course?.subject_code?.trim() || '')) && (
               <button
                 onClick={() => navigate(`/instructor/english-lessons/create?courseId=${id}`)}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-blue-500 hover:bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition"
@@ -174,7 +174,7 @@ export default function InstructorCourseDetail() {
                 <span>🔤</span> CREATE LETTER LESSON
               </button>
             )}
-            {(course?.subject_id === 3 || /amharic|ፊደል/i.test(course?.title || '')) && (
+            {(/^amharic$/i.test(course?.subject_name?.trim() || '') || /^amh$/i.test(course?.subject_code?.trim() || '')) && (
 <button
               onClick={() => navigate(`/instructor/fidel-lessons/create?courseId=${id}`)}
               className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition"

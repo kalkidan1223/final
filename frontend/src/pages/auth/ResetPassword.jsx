@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
+import ThemeToggle from '../../components/ThemeToggle';
 
 function PasswordStrength({ password }) {
   const checks = [
@@ -152,7 +153,7 @@ export default function ResetPassword() {
           <p className="text-white/60">Choose a strong password for your account.</p>
         </div>
 
-        <div className="rounded-3xl bg-white/95 backdrop-blur-2xl p-8 shadow-2xl border border-white/30">
+        <div className="rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl p-8 shadow-2xl border border-white/30 dark:border-slate-800">
           {error && (
             <div className="mb-5 rounded-2xl bg-red-50 border border-red-200 p-4 text-sm text-red-600 flex items-start gap-2">
               <span className="text-lg">⚠️</span>
@@ -163,7 +164,7 @@ export default function ResetPassword() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* New Password */}
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">New Password</label>
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">New Password</label>
               <div className="relative">
                 <input
                   type={showPw ? 'text' : 'password'}
@@ -171,7 +172,7 @@ export default function ResetPassword() {
                   placeholder="Create a strong password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 py-4 pl-4 pr-12 text-base text-slate-800 transition-all focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-violet-100"
+                  className="w-full rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-800/90 py-4 pl-4 pr-12 text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all focus:border-violet-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-violet-100 dark:focus:ring-violet-900/40"
                 />
                 <button
                   type="button"
@@ -186,7 +187,7 @@ export default function ResetPassword() {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Confirm Password</label>
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-100 mb-2">Confirm Password</label>
               <div className="relative">
                 <input
                   type={showConfirm ? 'text' : 'password'}

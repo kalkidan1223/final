@@ -28,6 +28,7 @@ export default function AdminGradeLevels() {
     level_type: 'kindergarten',
     sequence_order: '',
     description: '',
+    lesson_builder_type: 'structured',
     is_active: true,
   });
 
@@ -65,6 +66,7 @@ export default function AdminGradeLevels() {
       level_type: 'kindergarten',
       sequence_order: '',
       description: '',
+      lesson_builder_type: 'structured',
       is_active: true,
     });
     setShowAddModal(true);
@@ -78,6 +80,7 @@ export default function AdminGradeLevels() {
       level_type: grade.level_type,
       sequence_order: grade.sequence_order,
       description: grade.description || '',
+      lesson_builder_type: grade.lesson_builder_type || 'structured',
       is_active: grade.is_active,
     });
     setShowEditModal(true);
@@ -184,6 +187,7 @@ export default function AdminGradeLevels() {
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Lesson Builder</th>
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Sequence</th>
                   <th className="px-6 py-3 text-left text-xs font-black text-slate-600 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-right text-xs font-black text-slate-600 uppercase tracking-wider">Actions</th>
@@ -203,6 +207,7 @@ export default function AdminGradeLevels() {
                         {grade.level_type}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-sm text-slate-700">{grade.lesson_builder_type === 'visual' ? 'Visual & guided' : 'Structured'}</td>
                     <td className="px-6 py-4 text-sm text-slate-700">{grade.sequence_order}</td>
                     <td className="px-6 py-4">
                       <button
@@ -300,6 +305,20 @@ export default function AdminGradeLevels() {
                   <option value="kindergarten">Kindergarten</option>
                   <option value="primary">Primary School</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Instructor Lesson Builder *</label>
+                <select
+                  value={formData.lesson_builder_type}
+                  onChange={(e) => setFormData({ ...formData, lesson_builder_type: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="visual">Visual & guided</option>
+                  <option value="structured">Structured</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500">Controls the lesson authoring experience for courses at this level.</p>
               </div>
 
               <div>

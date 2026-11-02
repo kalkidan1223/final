@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function GoogleRoleSelection() {
   const navigate = useNavigate();
@@ -64,7 +65,8 @@ export default function GoogleRoleSelection() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 px-4">
+      <div className="absolute top-5 right-6 z-20"><ThemeToggle /></div>
       <div className="max-w-2xl w-full">
         <div className="bg-white rounded-3xl shadow-2xl p-8 sm:p-12 text-center">
           {/* Success Icon */}

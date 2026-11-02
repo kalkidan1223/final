@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ThemeToggle from './ThemeToggle';
 import {
   MdDashboard,
   MdFamilyRestroom,
@@ -136,10 +137,10 @@ export default function ParentLayout() {
   const selectedChild = childrenList.find((c) => c.id.toString() === selectedChildId.toString()) || childrenList[0];
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans overflow-hidden transition-colors">
       {/* ── Desktop Sidebar ── */}
       <aside
-        className={`hidden md:flex flex-col bg-slate-900 text-slate-200 transition-all duration-300 z-30 shadow-xl border-r border-slate-800 ${
+        className={`hidden md:flex flex-col bg-slate-900 dark:bg-slate-950 text-slate-200 transition-all duration-300 z-30 shadow-xl border-r border-slate-800 dark:border-slate-800/80 ${
           collapsed ? 'w-20' : 'w-64'
         }`}
       >
@@ -245,50 +246,50 @@ export default function ParentLayout() {
       {/* ── Main Content Wrapper ── */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         {/* Top Navbar */}
-        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between z-20 shadow-sm flex-shrink-0">
+        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between z-20 shadow-sm flex-shrink-0 transition-colors">
           {/* Left: Mobile Toggle & Greeting */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+              className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
             >
               <MdMenu className="text-2xl" />
             </button>
 
             <div>
-              <h2 className="text-base sm:text-lg font-extrabold text-slate-800 tracking-tight">
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-800 dark:text-white tracking-tight">
                 Welcome, {user?.full_name || 'Parent'} 👋
               </h2>
-              <p className="text-xs text-slate-500 hidden sm:block">
+              <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
                 Children Learning Hub • Family Learning Space
               </p>
             </div>
           </div>
 
-          {/* Right: Child Selector & Quick Portal Launch & Notifications */}
-          <div className="flex items-center gap-2.5 sm:gap-4">
+          {/* Right: Child Selector & ThemeToggle & Quick Portal Launch & Notifications */}
+          <div className="flex items-center gap-2 sm:gap-3.5">
             {/* Multi-Child Quick Switcher */}
             {childrenList.length > 0 && (
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setChildDropdownOpen(!childDropdownOpen)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 text-xs sm:text-sm font-bold text-slate-800 transition"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 transition shadow-sm"
                 >
                   <span className="text-base">🧒</span>
-                  <span className="max-w-[110px] sm:max-w-[150px] truncate">
+                  <span className="max-w-[110px] sm:max-w-[150px] truncate text-slate-900 dark:text-slate-100">
                     {selectedChild ? selectedChild.full_name : 'Select Child'}
                   </span>
-                  <MdArrowDropDown className="text-lg text-slate-500" />
+                  <MdArrowDropDown className="text-lg text-slate-500 dark:text-slate-400" />
                 </button>
 
                 {/* Dropdown Menu */}
                 {childDropdownOpen && (
                   <div
-                    className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-fade-in"
+                    className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-50 animate-fade-in"
                     onMouseLeave={() => setChildDropdownOpen(false)}
                   >
-                    <div className="px-3 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    <div className="px-3 py-2 text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
                       Switch Child
                     </div>
                     <div className="max-h-56 overflow-y-auto py-1 space-y-1">
@@ -299,7 +300,9 @@ export default function ParentLayout() {
                             key={c.id}
                             onClick={() => handleSelectChild(c.id.toString())}
                             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs sm:text-sm font-semibold transition ${
-                              isSelected ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100'
+                              isSelected
+                                ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                                : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
                             }`}
                           >
                             <div className="flex items-center gap-2 truncate">
@@ -307,22 +310,22 @@ export default function ParentLayout() {
                                 {c.gender === 'female' ? '👧' : '👦'}
                               </span>
                               <div className="truncate">
-                                <div className="font-bold truncate">{c.full_name}</div>
-                                <div className="text-[11px] text-slate-400">
+                                <div className="font-bold truncate text-slate-900 dark:text-white">{c.full_name}</div>
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400">
                                   {c.grade_level_name || 'Age 5-12'} • {c.user_id ? 'Independent' : 'Parent-Managed'}
                                 </div>
                               </div>
                             </div>
-                            {isSelected && <MdCheckCircle className="text-blue-600 text-base flex-shrink-0" />}
+                            {isSelected && <MdCheckCircle className="text-blue-600 dark:text-blue-400 text-base flex-shrink-0" />}
                           </button>
                         );
                       })}
                     </div>
-                    <div className="pt-2 border-t border-slate-100">
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
                       <Link
                         to="/parent/children"
                         onClick={() => setChildDropdownOpen(false)}
-                        className="block text-center py-1.5 text-xs font-bold text-blue-600 hover:underline"
+                        className="block text-center py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         Manage All Children ➔
                       </Link>
@@ -337,7 +340,7 @@ export default function ParentLayout() {
               <button
                 type="button"
                 onClick={() => handleLaunchChildPortal()}
-                className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 rounded-xl font-black text-xs shadow-sm transition"
+                className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 rounded-xl font-black text-xs shadow-sm transition active:scale-95"
                 title={`Launch interactive learning portal with ${selectedChild.full_name}`}
               >
                 <MdPlayCircleFilled className="text-base" />
@@ -345,15 +348,18 @@ export default function ParentLayout() {
               </button>
             )}
 
+            {/* Night / Day Mode Toggle */}
+            <ThemeToggle />
+
             {/* Notifications Bell */}
             <Link
               to="/parent/notifications"
-              className="relative p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+              className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               title="Notifications"
             >
               <MdNotifications className="text-2xl" />
               {unreadNotifications > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white animate-pulse" />
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900 animate-pulse" />
               )}
             </Link>
 
@@ -369,7 +375,7 @@ export default function ParentLayout() {
         </header>
 
         {/* Page Content Body */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar bg-slate-50 dark:bg-slate-950 transition-colors">
           <Outlet
             context={{
               selectedChildId,

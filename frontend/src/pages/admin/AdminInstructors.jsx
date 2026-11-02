@@ -26,6 +26,19 @@ function ViewModal({ instructor, onClose }) {
       .finally(() => setLoadingCourses(false));
   }, [instructor.id]);
 
+  const subjectAssignments = [...new Map(courses
+    .filter(course => course.subject_id)
+    .map(course => [`${course.grade_level_id}:${course.subject_id}`, {
+      key: `${course.grade_level_id}:${course.subject_id}`,
+      subject_name: course.subject_name,
+      grade_level_name: course.grade_level_name,
+      content_count: 0,
+    }])
+  )].map(([key, assignment]) => ({
+    ...assignment,
+    content_count: courses.filter(course => `${course.grade_level_id}:${course.subject_id}` === key).length,
+  }));
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -65,220 +78,22 @@ function ViewModal({ instructor, onClose }) {
           </section>
 
           <section>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Assigned Courses ({courses.length})</h4>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Assigned Subjects ({subjectAssignments.length})</h4>
             {loadingCourses ? (
               <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-8 bg-slate-100 rounded-xl animate-pulse" />)}</div>
-            ) : courses.length === 0 ? (
-              <p className="text-sm text-slate-400">No courses assigned yet.</p>
+            ) : subjectAssignments.length === 0 ? (
+              <p className="text-sm text-slate-400">No subjects assigned yet.</p>
             ) : (
               <div className="space-y-2">
-                {courses.map(c => (
-                  <div key={c.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                    <span className="text-sm font-medium text-slate-700">{c.title}</span>
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${c.status === 'published' ? 'bg-emerald-100 text-emerald-700' : c.status === 'draft' ? 'bg-slate-100 text-slate-500' : 'bg-violet-100 text-violet-600'}`}>{c.status}</span>
+                {subjectAssignments.map(assignment => (
+                  <div key={assignment.key} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                    <span className="text-sm font-medium text-slate-700">{assignment.subject_name} · {assignment.grade_level_name}</span>
+                    <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">{assignment.content_count} learning areas</span>
                   </div>
                 ))}
               </div>
             )}
           </section>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditAssignmentsModal({ instructor, onClose, onSave, gradeLevels }) {
-  const [assignedGradeLevels, setAssignedGradeLevels] = useState(
-    instructor.assigned_grade_levels?.map(gl => gl.id) || []
-  );
-  const [assignedCourses, setAssignedCourses] = useState(
-    instructor.assigned_courses?.map(c => c.id) || []
-  );
-  const [availableCourses, setAvailableCourses] = useState([]);
-  const [loadingCourses, setLoadingCourses] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  // Load available courses when grade levels change
-  useEffect(() => {
-    async function loadAvailableCoursesForSelectedGradeLevels() {
-      if (assignedGradeLevels.length === 0) {
-        setAvailableCourses([]);
-        return;
-      }
-
-      setLoadingCourses(true);
-      try {
-        const coursePromises = assignedGradeLevels.map(gradeLevelId =>
-          axiosClient.get(`/admin/courses?grade_level_id=${gradeLevelId}`)
-        );
-        const responses = await Promise.all(coursePromises);
-
-        const allAvailableCourses = responses.flatMap((res, idx) =>
-          (res.data.courses || [])
-            .filter(c => c.status !== 'archived')
-            .map(c => ({
-              id: c.id,
-              grade_level_id: assignedGradeLevels[idx],
-              title: c.title,
-              description: c.description,
-              subject_name: c.subject_name,
-              subject_id: c.subject_id,
-            }))
-        );
-        setAvailableCourses(allAvailableCourses);
-      } catch (err) {
-        console.error('Failed to load available courses:', err);
-      } finally {
-        setLoadingCourses(false);
-      }
-    }
-
-    loadAvailableCoursesForSelectedGradeLevels();
-  }, [assignedGradeLevels]);
-
-  async function handleSave() {
-    setSaving(true);
-    setError('');
-    try {
-      await onSave(instructor.id, { assigned_grade_levels: assignedGradeLevels, assigned_courses: assignedCourses });
-      onClose();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to update assignments');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const toggleGradeLevel = (levelId) => {
-    setAssignedGradeLevels(prev =>
-      prev.includes(levelId)
-        ? prev.filter(id => id !== levelId)
-        : [...prev, levelId]
-    );
-  };
-
-  const toggleCourse = (courseId) => {
-    setAssignedCourses(prev =>
-      prev.includes(courseId)
-        ? prev.filter(id => id !== courseId)
-        : [...prev, courseId]
-    );
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div>
-            <h3 className="font-semibold text-slate-800">Edit Assignments: {instructor.full_name}</h3>
-            <p className="text-xs text-slate-500">Assign grade levels and courses to this instructor</p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {error && (
-            <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">
-              {error}
-            </div>
-          )}
-
-          {/* Grade Levels Selection */}
-          <div>
-            <h4 className="text-sm font-semibold text-slate-700 mb-3">Assigned Grade Levels</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {gradeLevels?.map(level => {
-                const isSelected = assignedGradeLevels.includes(level.id);
-                return (
-                  <button
-                    key={level.id}
-                    type="button"
-                    onClick={() => toggleGradeLevel(level.id)}
-                    className={`flex items-center gap-2 p-3 rounded-xl border text-left text-sm transition ${
-                      isSelected
-                        ? 'border-violet-600 bg-violet-50 text-violet-900 font-medium'
-                        : 'border-slate-200 hover:border-slate-300 text-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      readOnly
-                      className="rounded text-violet-600 focus:ring-violet-500"
-                    />
-                    <span className="truncate">{level.name || level.title}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Available Courses */}
-          <div>
-            <h4 className="text-sm font-semibold text-slate-700 mb-3">
-              Available Courses {loadingCourses && <span className="text-xs font-normal text-slate-400">(Loading...)</span>}
-            </h4>
-            {assignedGradeLevels.length === 0 ? (
-              <p className="text-sm text-slate-400 bg-slate-50 p-4 rounded-xl text-center">
-                Select one or more grade levels to view and assign courses.
-              </p>
-            ) : availableCourses.length === 0 && !loadingCourses ? (
-              <p className="text-sm text-slate-400 bg-slate-50 p-4 rounded-xl text-center">
-                No courses found for the selected grade levels.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {availableCourses.map(course => {
-                  const isSelected = assignedCourses.map(String).includes(String(course.id));
-                  return (
-                    <div
-                      key={course.id}
-                      onClick={() => toggleCourse(course.id)}
-                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                        isSelected
-                          ? 'border-violet-600 bg-violet-50 text-violet-900'
-                          : 'border-slate-200 hover:border-slate-300 text-slate-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        readOnly
-                        className="mt-1 rounded text-violet-600 focus:ring-violet-500"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{course.title}</p>
-                        {course.subject_name && <p className="text-xs text-slate-400">{course.subject_name}</p>}
-                        {course.description && (
-                          <p className="text-xs text-slate-500 truncate mt-0.5">{course.description}</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-xl transition"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="px-5 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Assignments'}
-          </button>
         </div>
       </div>
     </div>
@@ -296,28 +111,7 @@ export default function AdminInstructors() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [viewInst, setViewInst] = useState(null);
-  const [editInst, setEditInst] = useState(null);
   const debounce = useRef(null);
-  
-  // For edit assignments modal
-  const [gradeLevels, setGradeLevels] = useState([]);
-
-  // Load the configurable grade levels when editing assignments.
-  useEffect(() => {
-    if (editInst) {
-      loadOptions();
-    }
-  }, [editInst]);
-
-  async function loadOptions() {
-    try {
-      const gradeLevelsRes = await axiosClient.get('/grades');
-      setGradeLevels(gradeLevelsRes.data.grade_levels || []);
-    } catch (err) {
-      console.error('Failed to load options:', err);
-      setError('Failed to load grade levels');
-    }
-  }
 
   const loadInstructors = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
@@ -357,17 +151,6 @@ export default function AdminInstructors() {
       setTimeout(() => setSuccess(''), 2500);
       loadInstructors(true);
     } catch (err) { setError(err.response?.data?.error || 'Action failed'); }
-  }
-
-  async function handleEditAssignments(instructorId, assignments) {
-    try {
-      await axiosClient.patch(`/admin/instructors/${instructorId}/assignments`, assignments);
-      setSuccess('Instructor assignments updated successfully');
-      setTimeout(() => setSuccess(''), 3000);
-      loadInstructors(true);
-    } catch (err) {
-      throw err; // Let the modal handle the error
-    }
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -454,9 +237,9 @@ export default function AdminInstructors() {
                   <button onClick={() => setViewInst(inst)} className="flex-1 rounded-lg bg-slate-100 hover:bg-violet-100 hover:text-violet-700 text-slate-600 py-1.5 text-xs font-medium transition flex items-center justify-center gap-1">
                     <MdPerson className="text-sm" /> View
                   </button>
-                  <button onClick={() => setEditInst(inst)} className="flex-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 py-1.5 text-xs font-medium transition flex items-center justify-center gap-1">
-                    <MdEdit className="text-sm" /> Edit
-                  </button>
+                  <Link to={`/admin/instructor-assignments?instructor_id=${inst.id}`} className="flex-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 py-1.5 text-xs font-medium transition flex items-center justify-center gap-1">
+                    <MdEdit className="text-sm" /> Assign subjects
+                  </Link>
                   <button onClick={() => handleToggle(inst.id, inst.is_active)}
                     className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition flex items-center justify-center gap-1 ${inst.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
                     {inst.is_active ? <><MdPause className="text-sm" />Deactivate</> : <><MdPlayArrow className="text-sm" />Activate</>}
@@ -479,14 +262,6 @@ export default function AdminInstructors() {
         )}
       </div>
       {viewInst && <ViewModal instructor={viewInst} onClose={() => setViewInst(null)} />}
-      {editInst && (
-        <EditAssignmentsModal 
-          instructor={editInst} 
-          onClose={() => setEditInst(null)} 
-          onSave={handleEditAssignments}
-          gradeLevels={gradeLevels}
-        />
-      )}
     </AdminLayout>
   );
 }

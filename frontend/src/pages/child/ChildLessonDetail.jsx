@@ -312,6 +312,12 @@ export default function ChildLessonDetail() {
               {lesson.description}
             </p>
           )}
+          {lesson.learning_objectives && (
+            <div className="max-w-2xl rounded-2xl border border-white/30 bg-white/15 px-4 py-3 backdrop-blur-sm">
+              <p className="text-xs font-black uppercase tracking-wider text-white/75">What you will learn</p>
+              <p className="mt-1 text-sm font-bold leading-relaxed text-white">{lesson.learning_objectives}</p>
+            </div>
+          )}
 
           {/* Progress Bar - More Colorful */}
           <div className="bg-white/30 backdrop-blur-md rounded-2xl p-5 border-2 border-white/30 shadow-lg">

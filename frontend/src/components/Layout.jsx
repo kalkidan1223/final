@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ThemeToggle from './ThemeToggle';
 
 const ROLE_LINKS = {
   admin: [
@@ -8,17 +9,15 @@ const ROLE_LINKS = {
     { label: 'Students',    to: '/admin/students' },
     { label: 'Parents',     to: '/admin/parents' },
     { label: 'Instructors', to: '/admin/instructors' },
-    { label: 'Assignments', to: '/admin/instructor-assignments' },
-    { label: 'Courses',     to: '/admin/courses' },
+    { label: 'Instructor Assignments', to: '/admin/instructor-assignments' },
+    { label: 'Subject Management', to: '/admin/subjects' },
     { label: 'Grade Levels', to: '/admin/grade-levels' },
     { label: 'Reports',     to: '/admin/reports' },
     { label: 'Notifications', to: '/admin/notifications' },
-    { label: 'Analytics',   to: '/admin/analytics' },
-    { label: 'Approvals',   to: '/admin/approval' },
   ],
   instructor: [
     { label: 'Dashboard',   to: '/instructor/dashboard' },
-    { label: 'Courses',     to: '/instructor/courses' },
+    { label: 'My Subject Assignments', to: '/instructor/subjects' },
     { label: 'Students',    to: '/instructor/students' },
   ],
   parent: [
@@ -50,7 +49,7 @@ export default function Layout({ children }) {
   }
 
   const links  = user ? ROLE_LINKS[user.role]  || [] : [];
-  const accent = user ? ROLE_ACCENT[user.role] || 'bg-slate-500' : 'bg-slate-500';
+  const accent = user ? (ROLE_ACCENT[user.role] || 'bg-slate-500') : 'bg-slate-500';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -74,17 +73,20 @@ export default function Layout({ children }) {
             </nav>
           </div>
 
-          {user && (
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <span className="text-sm text-slate-500 hidden sm:block">{user.full_name}</span>
-              <button
-                onClick={handleLogout}
-                className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-200 transition-colors"
-              >
-                Log out
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <ThemeToggle />
+            {user && (
+              <>
+                <span className="text-sm text-slate-500 hidden sm:block">{user.full_name}</span>
+                <button
+                  onClick={handleLogout}
+                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-200 transition-colors"
+                >
+                  Log out
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 

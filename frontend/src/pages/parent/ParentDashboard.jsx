@@ -167,26 +167,26 @@ export default function ParentDashboard() {
       {announcements.length > 0 && (
         <section aria-label="School Announcements" className="space-y-3">
           <div className="flex items-center gap-2 px-1">
-            <span className="p-1.5 rounded-xl bg-amber-100 text-amber-700 text-lg">
+            <span className="p-1.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-lg">
               <MdCampaign />
             </span>
             <div>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+              <h2 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">
                 School Announcements
               </h2>
-              <p className="text-xs text-slate-500">Official notices from school administration</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Official notices from school administration</p>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {announcements.map((ann) => (
               <div
                 key={ann.id}
-                className={`bg-white rounded-2xl border p-5 shadow-sm transition hover:shadow-md flex flex-col justify-between ${
+                className={`bg-white dark:bg-slate-900 rounded-2xl border p-5 shadow-sm transition hover:shadow-md flex flex-col justify-between ${
                   ann.priority === 'urgent'
-                    ? 'border-rose-200 bg-rose-50/30'
+                    ? 'border-rose-200 dark:border-rose-800/60 bg-rose-50/30 dark:bg-rose-950/20'
                     : ann.priority === 'important'
-                    ? 'border-amber-200 bg-amber-50/30'
-                    : 'border-slate-200'
+                    ? 'border-amber-200 dark:border-amber-800/60 bg-amber-50/30 dark:bg-amber-950/20'
+                    : 'border-slate-200 dark:border-slate-800'
                 }`}
               >
                 <div>
@@ -194,22 +194,22 @@ export default function ParentDashboard() {
                     <span
                       className={`text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                         ann.priority === 'urgent'
-                          ? 'bg-rose-100 text-rose-700'
+                          ? 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-200'
                           : ann.priority === 'important'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-slate-100 text-slate-600'
+                          ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {ann.priority === 'urgent' ? 'Urgent Notice' : ann.priority === 'important' ? 'Important' : 'Announcement'}
                     </span>
-                    <span className="text-xs text-slate-400 font-medium">
+                    <span className="text-xs text-slate-400 dark:text-slate-400 font-medium">
                       {new Date(ann.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <h3 className="text-base font-bold text-slate-900 leading-snug">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
                     {ann.title}
                   </h3>
-                  <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                  <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                     {ann.message || ann.content}
                   </p>
                 </div>
@@ -219,86 +219,114 @@ export default function ParentDashboard() {
         </section>
       )}
 
-      {/* ── KPI Summary Cards ── */}
+      {/* ── KPI Summary Cards (Interactive with Hover Lift) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Children Card */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-2xl flex-shrink-0">
+        <Link
+          to="/parent/children"
+          className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-blue-400 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex items-center gap-4 cursor-pointer group"
+          title="Click to view all children"
+        >
+          <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
             <MdFamilyRestroom />
           </div>
           <div>
-            <div className="text-2xl font-black text-slate-800">{totalChildren}</div>
-            <div className="text-xs font-bold text-slate-500">My Children</div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+              {totalChildren}
+            </div>
+            <div className="text-xs font-bold text-slate-500 dark:text-slate-400">My Children</div>
           </div>
-        </div>
+        </Link>
 
         {/* Lessons Completed */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl flex-shrink-0">
+        <Link
+          to="/parent/progress"
+          className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-400 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex items-center gap-4 cursor-pointer group"
+          title="Click to view progress records"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
             <MdCheckCircle />
           </div>
           <div>
-            <div className="text-2xl font-black text-slate-800">{completedLessons}</div>
-            <div className="text-xs font-bold text-slate-500">Lessons Done</div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+              {completedLessons}
+            </div>
+            <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Lessons Done</div>
           </div>
-        </div>
+        </Link>
 
         {/* Pending Activities */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-2xl flex-shrink-0">
+        <Link
+          to="/parent/activities"
+          className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-amber-500 dark:hover:border-amber-400 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex items-center gap-4 cursor-pointer group"
+          title="Click to view activities awaiting review"
+        >
+          <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
             <MdPendingActions />
           </div>
           <div>
-            <div className="text-2xl font-black text-slate-800">{pendingActivities}</div>
-            <div className="text-xs font-bold text-slate-500">Pending Review</div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+              {pendingActivities}
+            </div>
+            <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Pending Review</div>
           </div>
-        </div>
+        </Link>
 
         {/* Overall Progress */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-2xl flex-shrink-0">
+        <Link
+          to="/parent/progress"
+          className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-purple-500 dark:hover:border-purple-400 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex items-center gap-4 cursor-pointer group"
+          title="Click to view detailed curriculum progress"
+        >
+          <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-2xl flex-shrink-0 group-hover:scale-110 transition-transform">
             <MdTrendingUp />
           </div>
           <div>
-            <div className="text-2xl font-black text-purple-700">{avgProgress}%</div>
-            <div className="text-xs font-bold text-slate-500">Overall Progress</div>
+            <div className="text-2xl font-black text-purple-600 dark:text-purple-400">
+              {avgProgress}%
+            </div>
+            <div className="text-xs font-bold text-slate-500 dark:text-slate-400">Overall Progress</div>
           </div>
-        </div>
+        </Link>
 
         {/* Parent-Managed Guidance */}
-        <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 p-4 sm:p-5 rounded-2xl shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-xl flex-shrink-0">
+        <Link
+          to="/parent/children"
+          className="col-span-2 lg:col-span-1 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-950/40 dark:to-indigo-950/40 border border-purple-200 dark:border-purple-800/60 hover:border-purple-400 dark:hover:border-purple-600 p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex items-center gap-3 cursor-pointer group"
+          title="Click to manage children"
+        >
+          <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-xl flex-shrink-0 group-hover:scale-110 transition-transform">
             <MdLightbulb />
           </div>
           <div>
-            <div className="text-xs font-extrabold text-purple-950 uppercase tracking-wide">
+            <div className="text-xs font-extrabold text-purple-950 dark:text-purple-200 uppercase tracking-wide">
               Parent-Managed
             </div>
-            <div className="text-xs text-purple-800 font-medium">
+            <div className="text-xs text-purple-800 dark:text-purple-300 font-medium">
               {parentManagedCount} {parentManagedCount === 1 ? 'child' : 'children'} under 10
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* ── MY CHILDREN (Section 5, 12, 13) ── */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
               <span>MY CHILDREN</span>
-              <span className="text-xs px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold">
+              <span className="text-xs px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full font-bold">
                 {children.length}
               </span>
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               Manage your children's profiles and launch their learning portal
             </p>
           </div>
 
           <Link
             to="/parent/children"
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 transition"
           >
             <span>View All Children</span>
             <MdArrowForward />
@@ -306,10 +334,10 @@ export default function ParentDashboard() {
         </div>
 
         {children.length === 0 ? (
-          <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center shadow-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 text-center shadow-sm space-y-4">
             <div className="text-5xl">🧒</div>
-            <h3 className="text-lg font-bold text-slate-800">You haven't added a child yet</h3>
-            <p className="text-sm text-slate-500 max-w-md mx-auto">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">You haven't added a child yet</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
               Add your child to enroll them in age-appropriate courses, interactive lessons, worksheets, and quizzes.
             </p>
             <Link
@@ -331,12 +359,12 @@ export default function ParentDashboard() {
               return (
                 <div
                   key={child.id}
-                  className="bg-white rounded-3xl border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between space-y-5"
+                  className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-500 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 p-6 flex flex-col justify-between space-y-5 group"
                 >
                   {/* Card Header: Avatar & Info */}
                   <div>
                     <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-md flex-shrink-0 overflow-hidden">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-md flex-shrink-0 overflow-hidden group-hover:scale-105 transition-transform">
                         {child.profile_picture ? (
                           <img
                             src={child.profile_picture}
@@ -350,36 +378,36 @@ export default function ParentDashboard() {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="font-extrabold text-base text-slate-900 truncate">
+                          <h3 className="font-extrabold text-base text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                             {child.full_name}
                           </h3>
                         </div>
 
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          Age: <strong className="text-slate-700">{age ?? '—'}</strong> •{' '}
-                          <span>{child.grade_level_name || 'Primary'}</span>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Age: <strong className="text-slate-700 dark:text-slate-200">{age ?? '—'}</strong> •{' '}
+                          <span className="text-slate-600 dark:text-slate-300">{child.grade_level_name || 'Primary'}</span>
                         </div>
 
                         {/* Account Type & Status Badges */}
                         <div className="flex flex-wrap items-center gap-1.5 mt-2">
                           {isParentManaged ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
                               <span>🧸</span> Parent Managed
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
                               <span>🎓</span> Independent Student
                             </span>
                           )}
 
                           {isPending && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200">
                               ⏳ Pending Admin Review
                             </span>
                           )}
 
                           {isRejected && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-800">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200">
                               ❌ Rejected
                             </span>
                           )}
@@ -388,12 +416,12 @@ export default function ParentDashboard() {
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="mt-4 pt-4 border-t border-slate-100 space-y-1.5">
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-600">Learning Progress</span>
-                        <span className="font-black text-blue-600">{child.avg_progress || 0}%</span>
+                        <span className="font-bold text-slate-600 dark:text-slate-300">Learning Progress</span>
+                        <span className="font-black text-blue-600 dark:text-blue-400">{child.avg_progress || 0}%</span>
                       </div>
-                      <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
                           style={{ width: `${child.avg_progress || 0}%` }}
@@ -401,27 +429,35 @@ export default function ParentDashboard() {
                       </div>
                     </div>
 
-                    {/* Quick Stats Grid */}
-                    <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-100 text-center">
-                      <div className="bg-slate-50 p-2.5 rounded-xl">
-                        <div className="text-base font-black text-slate-800">
+                    {/* Quick Stats Grid (Interactive Links) */}
+                    <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                      <Link
+                        to="/parent/progress"
+                        className="bg-slate-50 dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-slate-800 p-2.5 rounded-xl border border-transparent hover:border-blue-200 dark:hover:border-slate-700 transition cursor-pointer"
+                        title="View enrolled courses and topics"
+                      >
+                        <div className="text-base font-black text-slate-800 dark:text-white">
                           {child.courses_count || 0}
                         </div>
-                        <div className="text-[11px] font-bold text-slate-500">Courses</div>
-                      </div>
-                      <div className="bg-slate-50 p-2.5 rounded-xl">
-                        <div className="text-base font-black text-emerald-600">
+                        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Courses</div>
+                      </Link>
+                      <Link
+                        to="/parent/progress"
+                        className="bg-slate-50 dark:bg-slate-800/80 hover:bg-emerald-50 dark:hover:bg-slate-800 p-2.5 rounded-xl border border-transparent hover:border-emerald-200 dark:hover:border-slate-700 transition cursor-pointer"
+                        title="View completed lessons"
+                      >
+                        <div className="text-base font-black text-emerald-600 dark:text-emerald-400">
                           {child.completed_lessons || 0}
                         </div>
-                        <div className="text-[11px] font-bold text-slate-500">Lessons Done</div>
-                      </div>
+                        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Lessons Done</div>
+                      </Link>
                     </div>
                   </div>
 
                   {/* Dual Action Buttons */}
                   <div className="space-y-2 pt-2">
                     {isPending ? (
-                      <div className="w-full py-2.5 px-3 bg-amber-50 border border-amber-300 text-amber-800 font-bold text-xs rounded-xl flex items-center justify-center gap-2 text-center select-none">
+                      <div className="w-full py-2.5 px-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-200 font-bold text-xs rounded-xl flex items-center justify-center gap-2 text-center select-none">
                         <span className="animate-pulse">⏳</span>
                         <span>Waiting for Admin Approval</span>
                       </div>
@@ -431,17 +467,17 @@ export default function ParentDashboard() {
                           <button
                             type="button"
                             onClick={() => handleLaunchChildPortal(child.id)}
-                            className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2 active:scale-95"
+                            className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 active:scale-95"
                           >
                             <MdPlayCircleFilled className="text-base text-slate-900" />
                             <span>Learn with Child (Ages 5–9)</span>
                           </button>
                         ) : (
-                          <div className="p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-[11px] text-blue-900 flex items-start gap-2">
+                          <div className="p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-xl text-[11px] text-blue-900 dark:text-blue-200 flex items-start gap-2">
                             <span className="text-base">🎓</span>
                             <div>
                               <strong className="block font-bold">Independent Student (Age 10–12)</strong>
-                              <span>Learns independently using their own student credentials.</span>
+                              <span className="text-slate-600 dark:text-slate-300">Learns independently using their own student credentials.</span>
                             </div>
                           </div>
                         )}
@@ -449,10 +485,10 @@ export default function ParentDashboard() {
                         <button
                           type="button"
                           onClick={() => navigate(`/parent/children/${child.id}`)}
-                          className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5"
+                          className="w-full py-2 px-3 bg-slate-100 hover:bg-blue-600 hover:text-white dark:bg-slate-800 dark:hover:bg-blue-600 text-slate-800 dark:text-slate-100 dark:hover:text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
                         >
                           <span>View Detailed Records</span>
-                          <MdArrowForward className="text-sm text-slate-500" />
+                          <MdArrowForward className="text-sm opacity-70 group-hover:translate-x-0.5 transition-transform" />
                         </button>
                       </>
                     )}
@@ -467,52 +503,54 @@ export default function ParentDashboard() {
       {/* ── Bottom 2 Columns: Recent Instructor Feedback & Support Alerts ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Instructor Feedback */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <MdFeedback className="text-blue-600 text-xl" />
+            <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              <MdFeedback className="text-blue-600 dark:text-blue-400 text-xl" />
               <span>Recent Instructor Feedback</span>
             </h2>
-            <Link to="/parent/feedback" className="text-xs font-bold text-blue-600 hover:underline">
+            <Link to="/parent/feedback" className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
               View All ➔
             </Link>
           </div>
 
           {recentFeedback.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 text-sm">
+            <div className="text-center py-8 text-slate-500 dark:text-slate-400 text-sm">
               <span className="text-3xl block mb-1">📝</span>
               No instructor feedback received yet.
             </div>
           ) : (
             <div className="space-y-3">
               {recentFeedback.map((fb, idx) => (
-                <div
+                <Link
                   key={idx}
-                  className="p-4 rounded-2xl border border-slate-100 bg-slate-50 space-y-2 hover:bg-blue-50/40 transition"
+                  to="/parent/feedback"
+                  className="block p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 space-y-2 hover:bg-blue-50/50 dark:hover:bg-slate-800 hover:border-blue-200 dark:hover:border-slate-700 transition cursor-pointer"
+                  title="Click to view feedback details"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="font-bold text-sm text-slate-800">
-                      {fb.child_name} • <span className="text-blue-600">{fb.activity_title}</span>
+                    <div className="font-bold text-sm text-slate-800 dark:text-white">
+                      {fb.child_name} • <span className="text-blue-600 dark:text-blue-400">{fb.activity_title}</span>
                     </div>
                     {fb.score !== null && fb.score !== undefined && (
-                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-black text-xs">
+                      <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 rounded-full font-black text-xs">
                         Score: {fb.score}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-600 italic">"{fb.feedback}"</p>
-                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 italic">"{fb.feedback}"</p>
+                  <div className="text-[11px] text-slate-400 dark:text-slate-400 flex items-center justify-between">
                     <span>Teacher: {fb.instructor_name || 'Instructor'}</span>
                     <span>{fb.date ? new Date(fb.date).toLocaleDateString() : ''}</span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
         </div>
 
         {/* Parent Guidance & Quick Support Card */}
-        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-3xl p-6 shadow-sm border border-indigo-800/40 flex flex-col justify-between space-y-4">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-indigo-300">
               <MdInfo className="text-sm" />
@@ -531,7 +569,7 @@ export default function ParentDashboard() {
             </div>
             <Link
               to="/parent/help"
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition"
             >
               Help & Support Guide ➔
             </Link>

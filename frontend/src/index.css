@@ -326,3 +326,218 @@ input::-ms-clear {
     animation: confetti-fall linear forwards;
   }
 }
+
+
+/* ── Professional Night Mode Styles ── */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0b0f19;
+  color: #f1f5f9;
+}
+
+/* Dark mode scrollbars */
+html.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* High-contrast, clean input text rules for both Light and Dark modes */
+input, select, textarea {
+  color: #0f172a;
+}
+input::placeholder, select::placeholder, textarea::placeholder {
+  color: #94a3b8;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  color: #f8fafc !important;
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+html.dark input::placeholder,
+html.dark select::placeholder,
+html.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Glass cards in dark mode turn into dark glass surfaces */
+html.dark .bg-white\/90,
+html.dark .bg-white\/92,
+html.dark .bg-white\/95,
+html.dark .bg-white\/80 {
+  background-color: rgba(15, 23, 42, 0.94) !important;
+  border-color: rgba(51, 65, 85, 0.75) !important;
+  color: #f8fafc;
+}
+
+/* Inside dark glass cards, ensure labels, spans, and paragraphs are bright and visible */
+html.dark .bg-white\/90 label,
+html.dark .bg-white\/92 label,
+html.dark .bg-white\/95 label,
+html.dark .bg-white\/80 label,
+html.dark [class*="bg-white/"] label {
+  color: #f8fafc !important;
+}
+
+html.dark .bg-white\/90 p,
+html.dark .bg-white\/92 p,
+html.dark .bg-white\/95 p,
+html.dark .bg-white\/80 p,
+html.dark [class*="bg-white/"] p {
+  color: #cbd5e1 !important;
+}
+
+html.dark .bg-white\/90 span,
+html.dark .bg-white\/95 span {
+  color: inherit;
+}
+
+html.dark .bg-white\/90 .text-violet-600,
+html.dark .bg-white\/95 .text-violet-600 {
+  color: #a78bfa !important;
+}
+
+/* Dark Card & Surface overrides */
+html.dark .card,
+html.dark .card-child {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+}
+
+html.dark .input-field {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+html.dark .input-field:focus {
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+}
+
+/* Dark Mode Global Backgrounds & Borders */
+html.dark .bg-white:not(button):not(.btn-primary):not([class*="bg-gradient"]) {
+  background-color: #1e293b !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-gray-50 {
+  background-color: #0b0f19 !important;
+}
+
+html.dark .bg-slate-100,
+html.dark .bg-gray-100 {
+  background-color: #1e293b !important;
+}
+
+html.dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-gray-100,
+html.dark .border-gray-200 {
+  border-color: #334155 !important;
+}
+
+/* Tables in Dark Mode */
+html.dark table thead th {
+  background-color: #1e293b !important;
+  color: #94a3b8 !important;
+  border-color: #334155 !important;
+}
+
+html.dark table tbody tr {
+  border-color: #334155 !important;
+}
+
+html.dark table tbody tr:hover {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+/* Modals & Dialogs in Dark Mode */
+html.dark .modal-content,
+html.dark [role="dialog"] {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+/* ── Global Dark Mode Typography & Contrast Enhancements ── */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0b0f19;
+  color: #f8fafc;
+}
+
+/* Headings in Dark Mode */
+html.dark h1:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
+html.dark h2:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
+html.dark h3:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
+html.dark h4:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
+html.dark h5:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
+html.dark h6:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]) {
+  color: #f8fafc;
+}
+
+/* Slate text mappings inside dark mode (excluding bright buttons/badges) */
+html.dark .text-slate-950:not(button):not([class*="from-amber"]):not([class*="bg-amber"]):not([class*="bg-yellow"]),
+html.dark .text-slate-900:not(button):not([class*="from-amber"]):not([class*="bg-amber"]):not([class*="bg-yellow"]),
+html.dark .text-slate-800:not(button):not([class*="from-amber"]):not([class*="bg-amber"]):not([class*="bg-yellow"]) {
+  color: #f8fafc;
+}
+
+html.dark .text-slate-700:not(button):not([class*="from-amber"]):not([class*="bg-amber"]) {
+  color: #e2e8f0;
+}
+
+html.dark .text-slate-600:not(button):not([class*="from-amber"]):not([class*="bg-amber"]) {
+  color: #cbd5e1;
+}
+
+html.dark .text-slate-500:not(button):not([class*="from-amber"]):not([class*="bg-amber"]) {
+  color: #94a3b8;
+}
+
+html.dark .text-slate-400:not(button):not([class*="from-amber"]):not([class*="bg-amber"]) {
+  color: #94a3b8;
+}
+
+/* Form inputs & controls in Dark Mode */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not(.keep-light),
+html.dark select:not(.keep-light),
+html.dark textarea:not(.keep-light) {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* Keep dark text on bright yellow/amber buttons */
+html.dark button[class*="from-amber"],
+html.dark button[class*="to-yellow"],
+html.dark [class*="bg-amber-400"],
+html.dark [class*="bg-yellow-400"],
+html.dark [class*="from-amber-400"] * {
+  color: #0f172a !important;
+}
