@@ -196,10 +196,10 @@ async function getCourseOverview(req, res, next) {
     // Get course info
     const courseResult = await query(
       `SELECT c.*, i.user_id as instructor_user_id, u.full_name as instructor_name,
-              gl.name as grade_level_name
+              gl.name as grade_level_name, gl.code as grade_level_code, gl.lesson_builder_type
        FROM courses c
-       JOIN instructors i ON c.instructor_id = i.id
-       JOIN users u ON i.user_id = u.id
+       LEFT JOIN instructors i ON c.instructor_id = i.id
+       LEFT JOIN users u ON i.user_id = u.id
        LEFT JOIN grade_levels gl ON c.grade_level_id = gl.id
        WHERE c.id = $1 AND c.status = 'published'`,
       [courseId]
@@ -256,6 +256,8 @@ async function getCourseOverview(req, res, next) {
         thumbnail_url: course.thumbnail_url,
         instructor_name: course.instructor_name,
         grade_level_name: course.grade_level_name,
+        grade_level_code: course.grade_level_code,
+        lesson_builder_type: course.lesson_builder_type || (course.grade_level_id <= 4 ? 'visual' : 'structured'),
         sequential_learning: course.sequential_learning,
         certificate_enabled: course.certificate_enabled
       },
@@ -317,14 +319,21 @@ async function getLessonJourney(req, res, next) {
     
     const { lessonId } = req.params;
 
+<<<<<<< Updated upstream
     // Guarantee this lesson's content has a database-backed order to display.
     await ensureLessonResources(lessonId);
     
     // Get lesson info
+=======
+    // Get lesson info with grade metadata and lesson_builder_type
+>>>>>>> Stashed changes
     const lessonResult = await query(
-      `SELECT l.*, c.title as course_title, c.id as course_id, c.sequential_learning
+      `SELECT l.*, c.title as course_title, c.id as course_id, c.sequential_learning,
+              c.grade_level_id, gl.name as grade_level_name, gl.code as grade_level_code,
+              gl.lesson_builder_type
        FROM lessons l
        JOIN courses c ON l.course_id = c.id
+       LEFT JOIN grade_levels gl ON gl.id = c.grade_level_id
        WHERE l.id = $1`,
       [lessonId]
     );
@@ -357,23 +366,99 @@ async function getLessonJourney(req, res, next) {
       total_required_resources: 0
     };
     
-    // Get all resources for this lesson
+    // Get all resources for this lesson with full joined concrete content
     const resourcesResult = await query(
       `SELECT lr.*,
               srp.status as progress_status,
               srp.progress_percentage,
               srp.completed_at,
-              srp.time_spent_seconds
+              srp.time_spent_seconds,
+              -- Material fields
+              lm.type as material_type,
+              lm.file_url as material_file_url,
+              lm.thumbnail_url as material_thumbnail_url,
+              lm.content as material_text_content,
+              lm.metadata as material_metadata,
+              -- Video fields
+              v.video_url,
+              v.source_type as video_source_type,
+              v.duration_seconds as video_duration_seconds,
+              -- Activity fields
+              a.activity_type,
+              a.instructions as activity_instructions,
+              a.activity_config,
+              a.resource_url as activity_resource_url,
+              a.max_score as activity_max_score,
+              a.auto_gradable as activity_auto_gradable,
+              asub.id as submission_id,
+              asub.status as submission_status,
+              asub.score as submission_score,
+              asub.submission_text,
+              asub.submission_url,
+              -- Quiz fields
+              q.passing_score as quiz_passing_score,
+              q.max_score as quiz_max_score,
+              q.time_limit_seconds as quiz_time_limit_seconds,
+              q.attempt_limit as quiz_attempt_limit,
+              q.show_result_immediately as quiz_show_result_immediately,
+              qa.score as quiz_score,
+              qa.percentage as quiz_percentage,
+              qa.is_passed as quiz_is_passed
        FROM lesson_resources lr
        LEFT JOIN student_resource_progress srp ON srp.lesson_resource_id = lr.id AND srp.student_id = $1
+       LEFT JOIN learning_materials lm ON lr.resource_type = 'material' AND lm.id = lr.resource_id
+       LEFT JOIN videos v ON lr.resource_type = 'video' AND v.id = lr.resource_id
+       LEFT JOIN activities a ON lr.resource_type = 'activity' AND a.id = lr.resource_id
+       LEFT JOIN activity_submissions asub ON lr.resource_type = 'activity' AND asub.activity_id = a.id AND asub.student_id = $1
+       LEFT JOIN quizzes q ON lr.resource_type = 'quiz' AND q.id = lr.resource_id
+       LEFT JOIN LATERAL (
+         SELECT qa_inner.score, qa_inner.percentage, qa_inner.passed as is_passed
+         FROM quiz_attempts qa_inner
+         WHERE qa_inner.quiz_id = q.id AND qa_inner.student_id = $1
+         ORDER BY qa_inner.created_at DESC
+         LIMIT 1
+       ) qa ON lr.resource_type = 'quiz'
        WHERE lr.lesson_id = $2
+<<<<<<< Updated upstream
+=======
+         AND (
+           (lr.resource_type = 'material' AND lm.status = 'active') OR
+           (lr.resource_type = 'video' AND v.status = 'active') OR
+           (lr.resource_type = 'activity' AND a.status IN ('active', 'published')) OR
+           (lr.resource_type = 'quiz' AND q.status = 'active') OR
+           lr.resource_type NOT IN ('material', 'video', 'activity', 'quiz')
+         )
+>>>>>>> Stashed changes
        ORDER BY lr.display_order`,
       [studentId, lessonId]
     );
+
+    // Fetch questions for any quizzes in this lesson
+    const quizIds = resourcesResult.rows
+      .filter(r => r.resource_type === 'quiz')
+      .map(r => r.resource_id);
+
+    const questionsByQuiz = new Map();
+    if (quizIds.length > 0) {
+      const qRes = await query(
+        `SELECT qq.id, qq.quiz_id, qq.question_text, qq.question_type, qq.options,
+                qq.points, qq.order_index, qq.explanation, qq.question_config,
+                qq.instruction_text, qq.image_url, qq.audio_url, qq.hint
+         FROM quiz_questions qq
+         WHERE qq.quiz_id = ANY($1::bigint[])
+         ORDER BY qq.order_index ASC, qq.id ASC`,
+        [quizIds]
+      );
+      for (const row of qRes.rows) {
+        const list = questionsByQuiz.get(String(row.quiz_id)) || [];
+        list.push(row);
+        questionsByQuiz.set(String(row.quiz_id), list);
+      }
+    }
     
-    const resources = resourcesResult.rows.map((resource, index) => {
-      const status = resource.progress_status || 'not_started';
-      const isLocked = false; // a resource inside an open lesson is never locked
+    const resources = resourcesResult.rows.map((resource) => {
+      const status = resource.progress_status || (resource.submission_status === 'graded' ? 'completed' : 'not_started');
+      const isLocked = false;
       
       return {
         id: resource.id,
@@ -384,10 +469,67 @@ async function getLessonJourney(req, res, next) {
         display_order: resource.display_order,
         is_required: resource.is_required,
         status,
-        progress_percentage: resource.progress_percentage || 0,
+        progress_percentage: resource.progress_percentage || (status === 'completed' ? 100 : 0),
         completed_at: resource.completed_at,
         time_spent_seconds: resource.time_spent_seconds || 0,
-        is_locked: isLocked
+        is_locked: isLocked,
+        material_type: resource.material_type,
+        file_url: resource.material_file_url,
+        thumbnail_url: resource.material_thumbnail_url,
+        text_content: resource.material_text_content,
+        metadata: resource.material_metadata,
+        video_url: resource.video_url,
+        source_type: resource.video_source_type,
+        duration_seconds: resource.video_duration_seconds,
+        activity_type: resource.activity_type,
+        instructions: resource.activity_instructions,
+        activity_config: resource.activity_config,
+        resource_url: resource.activity_resource_url,
+        max_score: resource.activity_max_score,
+        auto_gradable: resource.activity_auto_gradable,
+        submission: resource.submission_id ? {
+          id: resource.submission_id,
+          status: resource.submission_status,
+          score: resource.submission_score,
+          submission_text: resource.submission_text,
+          submission_url: resource.submission_url,
+        } : null,
+        content: {
+          material_type: resource.material_type,
+          file_url: resource.material_file_url,
+          thumbnail_url: resource.material_thumbnail_url,
+          text_content: resource.material_text_content,
+          metadata: resource.material_metadata,
+          video_url: resource.video_url,
+          source_type: resource.video_source_type,
+          duration_seconds: resource.video_duration_seconds,
+          activity_type: resource.activity_type,
+          instructions: resource.activity_instructions,
+          activity_config: resource.activity_config,
+          resource_url: resource.activity_resource_url,
+          max_score: resource.activity_max_score,
+          auto_gradable: resource.activity_auto_gradable,
+          submission: resource.submission_id ? {
+            id: resource.submission_id,
+            status: resource.submission_status,
+            score: resource.submission_score,
+            submission_text: resource.submission_text,
+            submission_url: resource.submission_url
+          } : null,
+          quiz: resource.resource_type === 'quiz' ? {
+            passing_score: resource.quiz_passing_score,
+            max_score: resource.quiz_max_score,
+            time_limit_seconds: resource.quiz_time_limit_seconds,
+            attempt_limit: resource.quiz_attempt_limit,
+            show_result_immediately: resource.quiz_show_result_immediately,
+            last_attempt: resource.quiz_score !== null ? {
+              score: resource.quiz_score,
+              percentage: resource.quiz_percentage,
+              is_passed: resource.quiz_is_passed
+            } : null,
+            questions: questionsByQuiz.get(String(resource.resource_id)) || []
+          } : null
+        }
       };
     });
     
@@ -399,9 +541,21 @@ async function getLessonJourney(req, res, next) {
         id: lesson.id,
         title: lesson.title,
         description: lesson.description,
+<<<<<<< Updated upstream
+=======
+        learning_objectives: lesson.learning_objectives,
+        prerequisites: lesson.prerequisites,
+        teacher_notes: lesson.teacher_notes,
+        instructions: lesson.instructions,
+        estimated_duration_minutes: lesson.estimated_duration_minutes,
+>>>>>>> Stashed changes
         course_id: lesson.course_id,
         course_title: lesson.course_title,
-        order_index: lesson.order_index
+        order_index: lesson.order_index,
+        grade_level_id: lesson.grade_level_id,
+        grade_level_name: lesson.grade_level_name,
+        grade_level_code: lesson.grade_level_code,
+        lesson_builder_type: lesson.lesson_builder_type || (lesson.grade_level_id <= 4 ? 'visual' : 'structured')
       },
       progress: lessonProgress,
       resources,
@@ -728,6 +882,7 @@ async function updateMaterialProgress(req, res, next) {
     }
     const status = isCompleted ? 'completed' : viewPct > 0 ? 'in_progress' : 'not_started';
 
+    let materialProgress = null;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -751,7 +906,7 @@ async function updateMaterialProgress(req, res, next) {
         [studentId, materialId, pages, total || 1, viewPct, viewPct, isCompleted, status]
       );
 
-      const materialProgress = result.rows[0];
+      materialProgress = result.rows[0];
 
       await updateResourceProgressFromMaterial(client, studentId, materialId, isCompleted);
       await updateLearningStreak(client, studentId);

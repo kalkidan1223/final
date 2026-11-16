@@ -92,7 +92,33 @@ async function createQuiz(req, res, next) {
       ]
     );
 
-    res.status(201).json({ quiz: result.rows[0] });
+    const quiz = result.rows[0];
+
+    // Synchronize into lesson_resources
+    try {
+      const resourceOrderRes = await query(
+        'SELECT COALESCE(MAX(display_order), -1) + 1 as next_order FROM lesson_resources WHERE lesson_id = $1',
+        [lessonId]
+      );
+
+      await query(
+        `INSERT INTO lesson_resources (lesson_id, resource_type, resource_id, display_order, is_required, title, description)
+         VALUES ($1, 'quiz', $2, $3, true, $4, $5)
+         ON CONFLICT (lesson_id, resource_type, resource_id) DO UPDATE
+           SET title = EXCLUDED.title, description = EXCLUDED.description`,
+        [
+          lessonId,
+          quiz.id,
+          resourceOrderRes.rows[0].next_order,
+          title,
+          instructions || description || null,
+        ]
+      );
+    } catch (lrErr) {
+      console.warn('Could not sync quiz to lesson_resources:', lrErr.message);
+    }
+
+    res.status(201).json({ quiz });
   } catch (err) {
     next(err);
   }
@@ -242,6 +268,7 @@ async function deleteQuiz(req, res, next) {
     }
 
     await query('DELETE FROM quizzes WHERE id = $1', [quiz.id]);
+    await query('DELETE FROM lesson_resources WHERE resource_type = \'quiz\' AND resource_id = $1', [quiz.id]);
     res.status(204).send();
   } catch (err) {
     next(err);

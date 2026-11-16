@@ -1,3 +1,4 @@
+const { canManageLesson } = require('../utils/courseAccess');
 const { query, pool } = require('../config/db');
 
 // ============================================================================
@@ -9,15 +10,8 @@ async function getLessonResources(req, res, next) {
     const { lessonId } = req.params;
     
     // Verify instructor has access to this lesson's course
-    const accessCheck = await query(
-      `SELECT c.id FROM courses c
-       JOIN lessons l ON l.course_id = c.id
-       JOIN instructors i ON c.instructor_id = i.id
-       WHERE l.id = $1 AND i.user_id = $2`,
-      [lessonId, req.user.id]
-    );
-    
-    if (accessCheck.rows.length === 0 && req.user.role !== 'admin') {
+    const allowed = await canManageLesson(req.user, lessonId);
+    if (!allowed) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -134,15 +128,8 @@ async function addLessonResource(req, res, next) {
     }
     
     // Verify instructor has access
-    const accessCheck = await query(
-      `SELECT c.id FROM courses c
-       JOIN lessons l ON l.course_id = c.id
-       JOIN instructors i ON c.instructor_id = i.id
-       WHERE l.id = $1 AND i.user_id = $2`,
-      [lessonId, req.user.id]
-    );
-    
-    if (accessCheck.rows.length === 0 && req.user.role !== 'admin') {
+    const allowed = await canManageLesson(req.user, lessonId);
+    if (!allowed) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -210,17 +197,9 @@ async function updateLessonResource(req, res, next) {
   try {
     const { lessonId, resourceId } = req.params;
     const { display_order, is_required, title, description } = req.body;
-    
     // Verify instructor has access
-    const accessCheck = await query(
-      `SELECT c.id FROM courses c
-       JOIN lessons l ON l.course_id = c.id
-       JOIN instructors i ON c.instructor_id = i.id
-       WHERE l.id = $1 AND i.user_id = $2`,
-      [lessonId, req.user.id]
-    );
-    
-    if (accessCheck.rows.length === 0 && req.user.role !== 'admin') {
+    const allowed = await canManageLesson(req.user, lessonId);
+    if (!allowed) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -285,17 +264,9 @@ async function reorderLessonResources(req, res, next) {
     if (!Array.isArray(resources)) {
       return res.status(400).json({ error: 'resources must be an array' });
     }
-    
     // Verify instructor has access
-    const accessCheck = await query(
-      `SELECT c.id FROM courses c
-       JOIN lessons l ON l.course_id = c.id
-       JOIN instructors i ON c.instructor_id = i.id
-       WHERE l.id = $1 AND i.user_id = $2`,
-      [lessonId, req.user.id]
-    );
-    
-    if (accessCheck.rows.length === 0 && req.user.role !== 'admin') {
+    const allowed = await canManageLesson(req.user, lessonId);
+    if (!allowed) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -332,17 +303,9 @@ async function reorderLessonResources(req, res, next) {
 async function removeLessonResource(req, res, next) {
   try {
     const { lessonId, resourceId } = req.params;
-    
     // Verify instructor has access
-    const accessCheck = await query(
-      `SELECT c.id FROM courses c
-       JOIN lessons l ON l.course_id = c.id
-       JOIN instructors i ON c.instructor_id = i.id
-       WHERE l.id = $1 AND i.user_id = $2`,
-      [lessonId, req.user.id]
-    );
-    
-    if (accessCheck.rows.length === 0 && req.user.role !== 'admin') {
+    const allowed = await canManageLesson(req.user, lessonId);
+    if (!allowed) {
       return res.status(403).json({ error: 'Access denied' });
     }
     

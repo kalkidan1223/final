@@ -193,8 +193,8 @@ async function getDashboard(req, res, next) {
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
        JOIN grade_levels gl ON gl.id = c.grade_level_id
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        LEFT JOIN progress p ON p.lesson_id = l.id AND p.student_id = $1
        WHERE c.grade_level_id = $2 AND c.status = 'published'
          AND (p.status IS NULL OR p.status != 'completed')
@@ -217,8 +217,8 @@ async function getDashboard(req, res, next) {
               )::int as overall_progress
        FROM courses c
        JOIN grade_levels gl ON gl.id = c.grade_level_id
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN activities a ON a.lesson_id = l.id AND a.status IN ('active', 'published')
        LEFT JOIN quizzes q ON q.lesson_id = l.id
@@ -359,8 +359,8 @@ async function listCourses(req, res, next) {
               )::int as overall_progress
        FROM courses c
        JOIN grade_levels gl ON gl.id = c.grade_level_id
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        LEFT JOIN lessons l ON l.course_id = c.id
        LEFT JOIN activities a ON a.lesson_id = l.id AND a.status = 'active'
        LEFT JOIN quizzes q ON q.lesson_id = l.id
@@ -390,8 +390,8 @@ async function getCourse(req, res, next) {
               ia.grade as assigned_grade, ia.section as assigned_section
        FROM courses c
        JOIN grade_levels gl ON gl.id = c.grade_level_id
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        LEFT JOIN instructor_assignments ia ON ia.course_id = c.id AND ia.instructor_id = i.id
        WHERE c.id = $1 AND c.grade_level_id = $2 AND c.status = 'published'`,
       [courseId, child.grade_level_id]
@@ -480,8 +480,8 @@ async function getLesson(req, res, next) {
        FROM lessons l
        JOIN courses c ON c.id = l.course_id
        JOIN grade_levels gl ON gl.id = c.grade_level_id
-       JOIN instructors i ON i.id = c.instructor_id
-       JOIN users u ON u.id = i.user_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       LEFT JOIN users u ON u.id = i.user_id
        WHERE l.id = $1 AND c.status = 'published'`,
       [lessonId]
     );
@@ -729,18 +729,27 @@ async function submitActivity(req, res, next) {
 
     const submittedBy = req.user.role === 'parent' ? 'parent' : 'student';
 
-    // Auto-grading for auto_gradable activities (e.g. matching)
+    // Auto-grading for auto_gradable activities (matching, MCQ, counting, etc.)
     let autoScore = null;
     let initialStatus = 'pending';
-    if (activity.auto_gradable && activity.activity_type === 'matching') {
+    if (body.score !== undefined && body.score !== null) {
+      autoScore = Number(body.score);
+      initialStatus = 'graded';
+    } else if (activity.auto_gradable) {
       try {
         const payload = JSON.parse(submitted_content || '{}');
         if (payload.score !== undefined) {
           autoScore = Number(payload.score);
           initialStatus = 'graded';
+        } else if (body.auto_graded || activity.activity_type === 'matching') {
+          autoScore = Number(activity.max_score || 100);
+          initialStatus = 'graded';
         }
       } catch (e) {
-        // fallback
+        if (body.auto_graded) {
+          autoScore = Number(activity.max_score || 100);
+          initialStatus = 'graded';
+        }
       }
     }
 
@@ -794,6 +803,28 @@ async function submitActivity(req, res, next) {
           initialStatus === 'graded' ? new Date() : null,
         ]
       );
+
+      // Also record in student_resource_progress so lesson journey advances
+      const lrRes = await query(
+        'SELECT id FROM lesson_resources WHERE lesson_id = $1 AND resource_type = $2 AND resource_id = $3',
+        [activity.lesson_id, 'activity', activityId]
+      );
+      if (lrRes.rows.length > 0) {
+        await query(
+          `INSERT INTO student_resource_progress (
+            student_id, lesson_resource_id, status, progress_percentage,
+            started_at, completed_at, last_accessed_at, updated_at
+          ) VALUES ($1, $2, 'completed', 100, now(), now(), now(), now())
+          ON CONFLICT (student_id, lesson_resource_id)
+          DO UPDATE SET
+            status = 'completed',
+            progress_percentage = 100,
+            completed_at = COALESCE(student_resource_progress.completed_at, now()),
+            last_accessed_at = now(),
+            updated_at = now()`,
+          [child.id, lrRes.rows[0].id]
+        );
+      }
 
       // Update overall lesson progress
       await updateLessonProgress(child.id, activity.course_id, activity.lesson_id);

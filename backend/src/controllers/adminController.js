@@ -621,7 +621,7 @@ async function activateInstructor(req, res, next) {
 async function updateInstructorAssignments(req, res, next) {
   try {
     const { id } = req.params;
-    const { assigned_grade_levels, assigned_courses } = req.body;
+    const { assigned_grade_levels = [], assigned_courses = [], assigned_pairs = [] } = req.body;
 
     if (!Array.isArray(assigned_grade_levels) || !Array.isArray(assigned_courses)) {
       return res.status(400).json({ error: 'assigned_grade_levels and assigned_courses must be arrays' });
@@ -636,8 +636,75 @@ async function updateInstructorAssignments(req, res, next) {
     try {
       await client.query('BEGIN');
 
+      // Process assigned pairs: [{ grade_level_id, subject_id }] or ["grade:subject"]
+      const pairs = (Array.isArray(assigned_pairs) ? assigned_pairs : []).map(p => {
+        if (typeof p === 'string') {
+          const parts = p.split(':');
+          return { grade_level_id: parseInt(parts[0], 10), subject_id: parseInt(parts[1], 10) };
+        }
+        return { grade_level_id: parseInt(p.grade_level_id, 10), subject_id: parseInt(p.subject_id, 10) };
+      }).filter(p => !isNaN(p.grade_level_id) && !isNaN(p.subject_id));
+
+      const allCourseIds = new Set(assigned_courses.map(c => String(c)));
+      const allGradeLevelIds = new Set(assigned_grade_levels.map(g => parseInt(g, 10)).filter(g => !isNaN(g)));
+
+      for (const pair of pairs) {
+        allGradeLevelIds.add(pair.grade_level_id);
+
+        const sgaRes = await client.query(
+          `SELECT sga.id, s.name AS subject_name, gl.name AS grade_level_name
+           FROM subject_grade_assignments sga
+           JOIN subjects s ON s.id = sga.subject_id
+           JOIN grade_levels gl ON gl.id = sga.grade_level_id
+           WHERE sga.subject_id = $1 AND sga.grade_level_id = $2 AND sga.is_active = TRUE`,
+          [pair.subject_id, pair.grade_level_id]
+        );
+        if (!sgaRes.rows.length) {
+          const error = new Error(`Subject ${pair.subject_id} is not linked to grade level ${pair.grade_level_id}`);
+          error.status = 400;
+          throw error;
+        }
+
+        const { subject_name, grade_level_name } = sgaRes.rows[0];
+
+        // Check if an active course already exists for this grade and subject
+        const existingCourse = await client.query(
+          `SELECT id, instructor_id FROM courses
+           WHERE grade_level_id = $1 AND subject_id = $2 AND status != 'archived'
+           ORDER BY id ASC LIMIT 1`,
+          [pair.grade_level_id, pair.subject_id]
+        );
+
+        let courseId;
+        if (existingCourse.rows.length > 0) {
+          courseId = existingCourse.rows[0].id;
+          if (!existingCourse.rows[0].instructor_id) {
+            await client.query('UPDATE courses SET instructor_id = $1, updated_at = now() WHERE id = $2', [id, courseId]);
+          }
+        } else {
+          // Auto-create course for this grade level and subject
+          const newCourse = await client.query(
+            `INSERT INTO courses (instructor_id, grade_level_id, subject_id, title, description, status)
+             VALUES ($1, $2, $3, $4, $5, 'published')
+             RETURNING id`,
+            [
+              id,
+              pair.grade_level_id,
+              pair.subject_id,
+              `${grade_level_name} - ${subject_name}`,
+              `Curriculum and learning materials for ${subject_name} (${grade_level_name})`
+            ]
+          );
+          courseId = newCourse.rows[0].id;
+        }
+        allCourseIds.add(String(courseId));
+      }
+
+      const finalGradeLevels = [...allGradeLevelIds];
+      const finalCourseIds = [...allCourseIds].map(c => parseInt(c, 10));
+
       await client.query('DELETE FROM instructor_grade_levels WHERE instructor_id = $1', [id]);
-      for (const gradeLevelId of assigned_grade_levels) {
+      for (const gradeLevelId of finalGradeLevels) {
         const validGrade = await client.query(
           'SELECT id FROM grade_levels WHERE id = $1 AND is_active = TRUE', [gradeLevelId]
         );
@@ -653,8 +720,9 @@ async function updateInstructorAssignments(req, res, next) {
         );
       }
 
-      const allowedCourses = assigned_courses.length
+      const allowedCourses = finalCourseIds.length
         ? await client.query(
+<<<<<<< Updated upstream
           `SELECT id, grade_level_id FROM courses
            WHERE id = ANY($1::bigint[]) AND grade_level_id = ANY($2::int[])`,
           [assigned_courses, assigned_grade_levels]
@@ -667,6 +735,20 @@ async function updateInstructorAssignments(req, res, next) {
         throw error;
       }
 
+=======
+          `SELECT c.id, c.grade_level_id FROM courses c
+           JOIN subject_grade_assignments sga
+             ON sga.subject_id = c.subject_id
+            AND sga.grade_level_id = c.grade_level_id
+            AND sga.is_active = TRUE
+           WHERE c.id = ANY($1::bigint[])
+             AND c.grade_level_id = ANY($2::int[])
+             AND c.subject_id IS NOT NULL`,
+          [finalCourseIds, finalGradeLevels]
+        )
+        : { rows: [] };
+
+>>>>>>> Stashed changes
       await client.query(
         `UPDATE instructor_assignments SET status = 'inactive', updated_at = now()
          WHERE instructor_id = $1 AND status = 'active'`, [id]
@@ -674,7 +756,7 @@ async function updateInstructorAssignments(req, res, next) {
       await client.query(
         `DELETE FROM course_instructor_assignments
          WHERE instructor_id = $1 AND NOT (course_id = ANY($2::bigint[]))`,
-        [id, assigned_courses]
+        [id, finalCourseIds.length ? finalCourseIds : [-1]]
       );
       for (const course of allowedCourses.rows) {
         const previous = await client.query(
@@ -706,8 +788,8 @@ async function updateInstructorAssignments(req, res, next) {
       res.json({ 
         success: true, 
         message: 'Instructor assignments updated successfully',
-        assigned_grade_levels,
-        assigned_courses
+        assigned_grade_levels: finalGradeLevels,
+        assigned_courses: finalCourseIds
       });
     } catch (err) {
       await client.query('ROLLBACK');

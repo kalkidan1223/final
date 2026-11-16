@@ -2,6 +2,7 @@ const { query, pool } = require('../config/db');
 const { getInstructorIdForUser } = require('../utils/roleHelpers');
 const { canReadCourse, canManageCourse, canManageLesson } = require('../utils/courseAccess');
 const { isValidVideoUrl } = require('../utils/videoValidation');
+const { ensureLessonResources } = require('../utils/learningAccess');
 
 const VALID_STATUSES = ['active', 'inactive', 'archived'];
 const VALID_MATERIAL_TYPES = ['video', 'image', 'pdf', 'document', 'presentation', 'audio', 'other'];
@@ -95,6 +96,7 @@ async function getLessonDetail(req, res, next) {
       videos: videos.rows,
       quizzes: quizzes.rows,
       activities: activities.rows,
+      resources: resourcesRes.rows,
       summary: {
         materials: materials.rows.length,
         videos: videos.rows.length,
@@ -118,9 +120,9 @@ async function createMaterial(req, res, next) {
     const ok = await assertLessonOwnership(req, res, lessonId);
     if (!ok) return;
 
-    const { type, title, file_url, description, thumbnail_url, display_order } = req.body;
-    if (!VALID_MATERIAL_TYPES.includes(type) || !title || !file_url) {
-      return res.status(400).json({ error: `title, file_url and a valid type (one of ${VALID_MATERIAL_TYPES.join(', ')}) are required` });
+    const { type, title, file_url, description, thumbnail_url, display_order, content, metadata } = req.body;
+    if (!VALID_MATERIAL_TYPES.includes(type) || !title) {
+      return res.status(400).json({ error: `title and a valid type (one of ${VALID_MATERIAL_TYPES.join(', ')}) are required` });
     }
 
     const maxOrder = await query(
@@ -130,17 +132,19 @@ async function createMaterial(req, res, next) {
 
     const instructorId = await getInstructorIdForUser(req.user.id);
     const result = await query(
-      `INSERT INTO learning_materials (lesson_id, type, title, file_url, description, display_order, thumbnail_url, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO learning_materials (lesson_id, type, title, file_url, description, display_order, thumbnail_url, uploaded_by, content, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         lessonId,
         type,
         title,
-        file_url,
+        file_url || null,
         description || null,
         display_order ?? maxOrder.rows[0].max_order + 1,
         thumbnail_url || null,
         instructorId,
+        content || null,
+        metadata ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata)) : null
       ]
     );
     
@@ -179,7 +183,7 @@ async function updateMaterial(req, res, next) {
     const material = await loadOwnedContent(req, res, 'learning_materials');
     if (!material) return;
 
-    const { type, title, file_url, description, display_order, thumbnail_url } = req.body;
+    const { type, title, file_url, description, display_order, thumbnail_url, content, metadata } = req.body;
     if (type && !VALID_MATERIAL_TYPES.includes(type)) {
       return res.status(400).json({ error: `type must be one of ${VALID_MATERIAL_TYPES.join(', ')}` });
     }
@@ -191,11 +195,32 @@ async function updateMaterial(req, res, next) {
            file_url = COALESCE($3, file_url),
            description = COALESCE($4, description),
            display_order = COALESCE($5, display_order),
-           thumbnail_url = COALESCE($6, thumbnail_url)
-       WHERE id = $7
+           thumbnail_url = COALESCE($6, thumbnail_url),
+           content = COALESCE($7, content),
+           metadata = COALESCE($8, metadata)
+       WHERE id = $9
        RETURNING *`,
-      [type || null, title || null, file_url || null, description || null, display_order || null, thumbnail_url || null, material.id]
+      [
+        type || null,
+        title || null,
+        file_url || null,
+        description || null,
+        display_order || null,
+        thumbnail_url || null,
+        content !== undefined ? content : null,
+        metadata !== undefined ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata)) : null,
+        material.id
+      ]
     );
+
+    if (title || description) {
+      await query(
+        `UPDATE lesson_resources
+         SET title = COALESCE($1, title), description = COALESCE($2, description)
+         WHERE resource_type = 'material' AND resource_id = $3`,
+        [title || null, description || null, material.id]
+      );
+    }
     res.json({ material: result.rows[0] });
   } catch (err) {
     next(err);
