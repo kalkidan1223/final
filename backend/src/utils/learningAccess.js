@@ -110,20 +110,15 @@ async function getLessonAccess(studentId, lessonId) {
 async function getResourceAccess(studentId, resourceType, resourceId) {
   const table = RESOURCE_TABLES[resourceType];
   if (!table) return { exists: false, isLocked: true };
+  const statusCondition = resourceType === 'activity'
+    ? "AND t.status IN ('active', 'published')"
+    : "AND t.status = 'active'";
 
   const srcRes = await query(
     `SELECT t.lesson_id, l.course_id
      FROM ${table} t
      JOIN lessons l ON l.id = t.lesson_id
-<<<<<<< HEAD
-     WHERE t.id = $1 AND t.status = 'active'`,
-=======
-<<<<<<< Updated upstream
-     WHERE t.id = $1`,
-=======
-     WHERE t.id = $1 AND (t.status = 'active' OR t.status = 'published')`,
->>>>>>> Stashed changes
->>>>>>> backend
+     WHERE t.id = $1 ${statusCondition}`,
     [resourceId]
   );
   if (srcRes.rows.length === 0) return { exists: false, isLocked: true };

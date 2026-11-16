@@ -732,31 +732,6 @@ async function updateInstructorAssignments(req, res, next) {
 
       const allowedCourses = finalCourseIds.length
         ? await client.query(
-<<<<<<< HEAD
-          `SELECT c.id, c.grade_level_id FROM courses c
-           JOIN subject_grade_assignments sga
-             ON sga.subject_id = c.subject_id
-            AND sga.grade_level_id = c.grade_level_id
-            AND sga.is_active = TRUE
-           WHERE c.id = ANY($1::bigint[])
-             AND c.grade_level_id = ANY($2::int[])
-             AND c.subject_id IS NOT NULL`,
-=======
-<<<<<<< Updated upstream
-          `SELECT id, grade_level_id FROM courses
-           WHERE id = ANY($1::bigint[]) AND grade_level_id = ANY($2::int[])`,
->>>>>>> backend
-          [assigned_courses, assigned_grade_levels]
-        )
-        : { rows: [] };
-
-      if (allowedCourses.rows.length !== new Set(assigned_courses.map(String)).size) {
-        const error = new Error('Every assigned course must match a selected grade level and an active subject-grade pairing');
-        error.status = 400;
-        throw error;
-      }
-
-=======
           `SELECT c.id, c.grade_level_id FROM courses c
            JOIN subject_grade_assignments sga
              ON sga.subject_id = c.subject_id
@@ -769,7 +744,12 @@ async function updateInstructorAssignments(req, res, next) {
         )
         : { rows: [] };
 
->>>>>>> Stashed changes
+      if (allowedCourses.rows.length !== new Set(finalCourseIds.map(String)).size) {
+        const error = new Error('Every assigned course must match a selected grade level and an active subject-grade pairing');
+        error.status = 400;
+        throw error;
+      }
+
       await client.query(
         `UPDATE instructor_assignments SET status = 'inactive', updated_at = now()
          WHERE instructor_id = $1 AND status = 'active'`, [id]

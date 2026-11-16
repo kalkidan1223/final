@@ -320,17 +320,7 @@ async function getLessonJourney(req, res, next) {
     
     const { lessonId } = req.params;
 
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
-    // Guarantee this lesson's content has a database-backed order to display.
-    await ensureLessonResources(lessonId);
-    
->>>>>>> backend
-    // Get lesson info
-=======
     // Get lesson info with grade metadata and lesson_builder_type
->>>>>>> Stashed changes
     const lessonResult = await query(
       `SELECT l.*, c.title as course_title, c.id as course_id, c.sequential_learning,
               c.grade_level_id, gl.name as grade_level_name, gl.code as grade_level_code,
@@ -426,26 +416,13 @@ async function getLessonJourney(req, res, next) {
          LIMIT 1
        ) qa ON lr.resource_type = 'quiz'
        WHERE lr.lesson_id = $2
-<<<<<<< HEAD
          AND (
            (lr.resource_type = 'material' AND EXISTS (SELECT 1 FROM learning_materials x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
            (lr.resource_type = 'video' AND EXISTS (SELECT 1 FROM videos x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
-           (lr.resource_type = 'activity' AND EXISTS (SELECT 1 FROM activities x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
+           (lr.resource_type = 'activity' AND EXISTS (SELECT 1 FROM activities x WHERE x.id = lr.resource_id AND x.status IN ('active', 'published'))) OR
            (lr.resource_type = 'quiz' AND EXISTS (SELECT 1 FROM quizzes x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
            lr.resource_type NOT IN ('material', 'video', 'activity', 'quiz')
          )
-=======
-<<<<<<< Updated upstream
-=======
-         AND (
-           (lr.resource_type = 'material' AND lm.status = 'active') OR
-           (lr.resource_type = 'video' AND v.status = 'active') OR
-           (lr.resource_type = 'activity' AND a.status IN ('active', 'published')) OR
-           (lr.resource_type = 'quiz' AND q.status = 'active') OR
-           lr.resource_type NOT IN ('material', 'video', 'activity', 'quiz')
-         )
->>>>>>> Stashed changes
->>>>>>> backend
        ORDER BY lr.display_order`,
       [studentId, lessonId]
     );
@@ -558,19 +535,11 @@ async function getLessonJourney(req, res, next) {
         id: lesson.id,
         title: lesson.title,
         description: lesson.description,
-<<<<<<< HEAD
-        learning_objectives: lesson.learning_objectives,
-        estimated_duration_minutes: lesson.estimated_duration_minutes,
-=======
-<<<<<<< Updated upstream
-=======
         learning_objectives: lesson.learning_objectives,
         prerequisites: lesson.prerequisites,
         teacher_notes: lesson.teacher_notes,
         instructions: lesson.instructions,
         estimated_duration_minutes: lesson.estimated_duration_minutes,
->>>>>>> Stashed changes
->>>>>>> backend
         course_id: lesson.course_id,
         course_title: lesson.course_title,
         order_index: lesson.order_index,
