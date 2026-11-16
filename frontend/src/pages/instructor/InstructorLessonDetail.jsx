@@ -11,6 +11,9 @@ import MaterialModal from '../../components/instructor/MaterialModal';
 import VideoModal from '../../components/instructor/VideoModal';
 import ActivityBuilder from '../../components/instructor/ActivityBuilder';
 import QuizBuilder from '../../components/instructor/QuizBuilder';
+import Modal from '../../components/Modal';
+import BasicChildLessonExperience from '../../components/child/BasicChildLessonExperience';
+import { MdArrowUpward, MdArrowDownward, MdVisibility, MdStyle, MdTextFields, MdAudiotrack, MdStar } from 'react-icons/md';
 
 const STATUS_BADGE = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -53,7 +56,10 @@ export default function InstructorLessonDetail() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState('journey');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [cardForm, setCardForm] = useState({ symbol: '', word: '', translation: '', audio_url: '', description: '' });
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState({ type: null, item: null });
 
@@ -74,6 +80,86 @@ export default function InstructorLessonDetail() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonParam]);
+
+  async function moveResource(index, direction) {
+    const list = [...(data?.resources || [])];
+    const targetIdx = index + direction;
+    if (targetIdx < 0 || targetIdx >= list.length) return;
+
+    const [moved] = list.splice(index, 1);
+    list.splice(targetIdx, 0, moved);
+
+    const reordered = list.map((r, idx) => ({ id: r.id, display_order: idx }));
+    setBusy(true);
+    try {
+      await axiosClient.post(`/instructor/lessons/${lessonParam}/resources/reorder`, {
+        resources: reordered,
+      });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to reorder step');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleRequired(resItem) {
+    setBusy(true);
+    try {
+      await axiosClient.put(`/instructor/lessons/${lessonParam}/resources/${resItem.id}`, {
+        is_required: !resItem.is_required,
+      });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update requirement');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeResourceFromJourney(resItem) {
+    if (!window.confirm(`Remove "${resItem.resource_title || 'this step'}" from the learning journey?`)) return;
+    setBusy(true);
+    try {
+      await axiosClient.delete(`/instructor/lessons/${lessonParam}/resources/${resItem.id}`);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to remove from journey');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCreateCard(e) {
+    e.preventDefault();
+    if (!cardForm.symbol && !cardForm.word) {
+      alert('Please enter at least a symbol, letter, number, or word');
+      return;
+    }
+    setBusy(true);
+    try {
+      await axiosClient.post(`/lessons/${lessonParam}/materials`, {
+        title: `Card: ${cardForm.symbol || cardForm.word}`,
+        description: cardForm.description || null,
+        type: 'other',
+        content: cardForm.description || `${cardForm.symbol || ''} - ${cardForm.word || ''} - ${cardForm.translation || ''}`,
+        metadata: {
+          type: 'learning_card',
+          symbol: cardForm.symbol,
+          word: cardForm.word,
+          translation: cardForm.translation,
+          audio_url: cardForm.audio_url,
+        },
+      });
+      setCardModalOpen(false);
+      setCardForm({ symbol: '', word: '', translation: '', audio_url: '', description: '' });
+      await load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to add learning card');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function patchStatus(url, status) {
     setBusy(true);
