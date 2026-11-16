@@ -115,7 +115,15 @@ async function getResourceAccess(studentId, resourceType, resourceId) {
     `SELECT t.lesson_id, l.course_id
      FROM ${table} t
      JOIN lessons l ON l.id = t.lesson_id
+<<<<<<< HEAD
      WHERE t.id = $1 AND t.status = 'active'`,
+=======
+<<<<<<< Updated upstream
+     WHERE t.id = $1`,
+=======
+     WHERE t.id = $1 AND (t.status = 'active' OR t.status = 'published')`,
+>>>>>>> Stashed changes
+>>>>>>> backend
     [resourceId]
   );
   if (srcRes.rows.length === 0) return { exists: false, isLocked: true };
@@ -150,24 +158,33 @@ async function getResourceAccess(studentId, resourceType, resourceId) {
  * order always comes from the database.
  *
  * This is idempotent and self-healing: every call appends any content that is
- * not yet part of the journey (a PDF/material, video, activity or quiz added
- * after the journey was first built) while leaving already-registered rows and
- * the instructor's saved order untouched. Without this, content created through
- * a path that does not register itself (e.g. a legacy material) would be
- * permanently invisible to children because the journey is read purely from
- * `lesson_resources`.
+ * not yet part of the journey while leaving already-registered rows and
+ * the instructor's saved order untouched. Also purges archived/deleted rows.
  */
 async function ensureLessonResources(lessonId) {
   const sources = [
-    ['activity', 'activities', 'Complete this activity to practice'],
-    ['video', 'videos', 'Watch this video to learn'],
     ['material', 'learning_materials', 'Read and learn from this material'],
+    ['video', 'videos', 'Watch this video to learn'],
+    ['activity', 'activities', 'Complete this activity to practice'],
     ['quiz', 'quizzes', 'Test your knowledge with this quiz'],
   ];
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Clean up lesson_resources entries whose target has been deleted or archived
+    await client.query(
+      `DELETE FROM lesson_resources lr
+       WHERE lr.lesson_id = $1
+         AND (
+           (lr.resource_type = 'material' AND NOT EXISTS (SELECT 1 FROM learning_materials lm WHERE lm.id = lr.resource_id AND lm.status = 'active')) OR
+           (lr.resource_type = 'video' AND NOT EXISTS (SELECT 1 FROM videos v WHERE v.id = lr.resource_id AND v.status = 'active')) OR
+           (lr.resource_type = 'activity' AND NOT EXISTS (SELECT 1 FROM activities a WHERE a.id = lr.resource_id AND a.status IN ('active', 'published'))) OR
+           (lr.resource_type = 'quiz' AND NOT EXISTS (SELECT 1 FROM quizzes q WHERE q.id = lr.resource_id AND q.status = 'active'))
+         )`,
+      [lessonId]
+    );
 
     // Continue numbering after the last saved position; existing rows keep the
     // order the instructor arranged them in.
@@ -177,18 +194,20 @@ async function ensureLessonResources(lessonId) {
     );
     let displayOrder = orderRes.rows[0].next_order;
 
-    for (const [type, table, description] of sources) {
+    for (const [type, table, defaultDesc] of sources) {
+      const statusFilter = table === 'activities' ? "status IN ('active', 'published')" : "status = 'active'";
       const rows = await client.query(
-        `SELECT ct.id, ct.title
+        `SELECT ct.id, ct.title, ${table === 'learning_materials' ? 'ct.description' : table === 'activities' ? 'ct.instructions' : table === 'quizzes' ? 'COALESCE(ct.instructions, ct.description)' : 'NULL'} as item_desc
          FROM ${table} ct
          WHERE ct.lesson_id = $1
+           AND ${statusFilter}
            AND NOT EXISTS (
              SELECT 1 FROM lesson_resources lr
              WHERE lr.lesson_id = ct.lesson_id
                AND lr.resource_type = $2
                AND lr.resource_id = ct.id
            )
-         ORDER BY ct.created_at, ct.id`,
+         ORDER BY ${table === 'learning_materials' || table === 'activities' ? 'ct.display_order ASC,' : ''} ct.created_at ASC, ct.id ASC`,
         [lessonId, type]
       );
       for (const row of rows.rows) {
@@ -196,8 +215,10 @@ async function ensureLessonResources(lessonId) {
           `INSERT INTO lesson_resources
              (lesson_id, resource_type, resource_id, display_order, is_required, title, description)
            VALUES ($1, $2, $3, $4, TRUE, $5, $6)
-           ON CONFLICT (lesson_id, resource_type, resource_id) DO NOTHING`,
-          [lessonId, type, row.id, displayOrder++, row.title, description]
+           ON CONFLICT (lesson_id, resource_type, resource_id) DO UPDATE
+             SET title = EXCLUDED.title,
+                 description = COALESCE(EXCLUDED.description, lesson_resources.description)`,
+          [lessonId, type, row.id, displayOrder++, row.title, row.item_desc || defaultDesc]
         );
       }
     }
