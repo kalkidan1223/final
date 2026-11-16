@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { MdArrowBack, MdSave } from 'react-icons/md';
 import InstructorLayout from '../../components/InstructorLayout';
+import BasicGuidedLessonBuilder from '../../components/instructor/BasicGuidedLessonBuilder';
 import axiosClient from '../../api/axiosClient';
 
 const DIFFICULTIES = ['beginner', 'intermediate', 'advanced'];
@@ -26,6 +27,7 @@ export default function InstructorLessonCreate() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [courseTitle, setCourseTitle] = useState('');
   const [lessonBuilderType, setLessonBuilderType] = useState('structured');
+  const [useGuidedBuilder, setUseGuidedBuilder] = useState(false);
   const [targetCourseId, setTargetCourseId] = useState(courseId || '');
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(isEdit);
@@ -44,6 +46,7 @@ export default function InstructorLessonCreate() {
         const { data } = await axiosClient.get(`/instructor/courses/${courseId}`);
         setCourseTitle(data.course?.title || '');
         setLessonBuilderType(data.course?.lesson_builder_type || 'structured');
+        if (data.course?.lesson_builder_type === 'visual') setUseGuidedBuilder(true);
         setTargetCourseId(courseId);
       } else if (!isEdit) {
         const { data } = await axiosClient.get('/instructor/courses');
@@ -52,6 +55,7 @@ export default function InstructorLessonCreate() {
           setTargetCourseId(data.courses[0].course_id);
           setCourseTitle(data.courses[0].course_title);
           setLessonBuilderType(data.courses[0].lesson_builder_type || 'structured');
+          if (data.courses[0].lesson_builder_type === 'visual') setUseGuidedBuilder(true);
         }
       }
       if (isEdit) {
@@ -135,6 +139,32 @@ export default function InstructorLessonCreate() {
   }
 
   const backTo = courseId ? `/instructor/courses/${courseId}` : '/instructor/lessons';
+
+  if (useGuidedBuilder && !isEdit) {
+    return (
+      <InstructorLayout>
+        <div className="pb-12 max-w-5xl mx-auto">
+          <div className="mb-4 flex flex-wrap justify-between items-center gap-2">
+            <Link to={backTo} className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:underline">
+              <MdArrowBack /> Back {courseTitle ? `to ${courseTitle}` : 'to Lessons'}
+            </Link>
+            <button
+              type="button"
+              onClick={() => setUseGuidedBuilder(false)}
+              className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl border border-slate-300 transition"
+            >
+              Switch to Standard Structured Form
+            </button>
+          </div>
+          <BasicGuidedLessonBuilder
+            initialCourseId={courseId || targetCourseId}
+            courses={courses.length > 0 ? courses : [{ course_id: courseId, course_title: courseTitle }]}
+            onCancel={() => navigate(backTo)}
+          />
+        </div>
+      </InstructorLayout>
+    );
+  }
 
   return (
     <InstructorLayout>

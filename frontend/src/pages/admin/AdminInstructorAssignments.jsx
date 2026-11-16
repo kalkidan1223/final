@@ -59,14 +59,25 @@ function AssignmentModal({ instructor, gradeLevels, subjectGradeAssignments, cou
     setSaving(true);
     setError('');
     try {
+      const assignedPairs = selectedPairs.map(key => {
+        const [gradeId, subjectId] = key.split(':');
+        return {
+          grade_level_id: Number(gradeId),
+          subject_id: Number(subjectId),
+        };
+      });
       const assignedCourses = [...new Set(selectedPairs.flatMap(key => {
         const [gradeId, subjectId] = key.split(':');
         return coursesForPair(gradeId, subjectId).map(course => course.id);
       }))];
-      const assignedGradeLevels = [...new Set(selectedPairs.map(key => key.split(':')[0]))];
+      const assignedGradeLevels = [...new Set([
+        ...selectedGrades.map(Number),
+        ...selectedPairs.map(key => Number(key.split(':')[0]))
+      ])];
       await onSave(instructor.id, {
         assigned_grade_levels: assignedGradeLevels,
         assigned_courses: assignedCourses,
+        assigned_pairs: assignedPairs,
       });
       onClose();
     } catch (err) {
@@ -133,13 +144,32 @@ function AssignmentModal({ instructor, gradeLevels, subjectGradeAssignments, cou
                             const key = pairKey(level.id, subject.subject_id);
                             const matchingCourses = coursesForPair(level.id, subject.subject_id);
                             const selected = selectedPairs.includes(key);
-                            const unavailable = matchingCourses.length === 0;
                             return (
-                              <button key={key} type="button" disabled={unavailable} aria-pressed={selected} onClick={() => toggleSubject(level.id, subject.subject_id)} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 ${selected ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200' : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'}`}>
-                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-xs ${selected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'}`}>{selected ? '✓' : ''}</span>
+                              <button
+                                key={key}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => toggleSubject(level.id, subject.subject_id)}
+                                className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                                  selected
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-200'
+                                    : 'border-slate-200 text-slate-700 hover:border-emerald-300 hover:bg-slate-50'
+                                }`}
+                              >
+                                <span
+                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-xs font-bold ${
+                                    selected
+                                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                                      : 'border-slate-300 bg-white text-transparent'
+                                  }`}
+                                >
+                                  {selected ? '✓' : ''}
+                                </span>
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-bold">{subject.subject_name}</span>
-                                  <span className="mt-0.5 block text-xs opacity-75">{subject.subject_code} · {unavailable ? 'No learning content yet' : `${matchingCourses.length} ${matchingCourses.length === 1 ? 'learning area' : 'learning areas'}`}</span>
+                                  <span className="block truncate text-sm font-bold text-slate-800">{subject.subject_name}</span>
+                                  <span className="mt-0.5 block text-xs text-slate-500">
+                                    {subject.subject_code} · {matchingCourses.length > 0 ? `${matchingCourses.length} ${matchingCourses.length === 1 ? 'learning area' : 'learning areas'}` : 'Ready to assign'}
+                                  </span>
                                 </span>
                               </button>
                             );

@@ -487,12 +487,12 @@ html.dark body {
 }
 
 /* Headings in Dark Mode */
-html.dark h1:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
-html.dark h2:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
-html.dark h3:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
-html.dark h4:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
-html.dark h5:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]),
-html.dark h6:not([class*="text-amber"]):not([class*="text-yellow"]):not([class*="text-white"]) {
+html.dark h1:not([class*="text-"]),
+html.dark h2:not([class*="text-"]),
+html.dark h3:not([class*="text-"]),
+html.dark h4:not([class*="text-"]),
+html.dark h5:not([class*="text-"]),
+html.dark h6:not([class*="text-"]) {
   color: #f8fafc;
 }
 
