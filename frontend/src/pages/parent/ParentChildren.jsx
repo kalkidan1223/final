@@ -19,6 +19,8 @@ import {
   MdLock,
   MdInfo,
   MdLightbulb,
+  MdVisibility,
+  MdVisibilityOff,
 } from 'react-icons/md';
 
 function calculateAge(dateOfBirth) {
@@ -48,6 +50,8 @@ export default function ParentChildren() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+  const [showChildPassword, setShowChildPassword] = useState(false);
+  const [showChildConfirmPassword, setShowChildConfirmPassword] = useState(false);
 
   // Form fields
   const [formData, setFormData] = useState({
@@ -730,30 +734,52 @@ export default function ParentChildren() {
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Child Password <span className="text-red-500">*</span>
                         </label>
-                        <input
-                          type="password"
-                          name="password"
-                          value={formData.password}
-                          onChange={handleFormChange}
-                          placeholder="Min. 8 characters"
-                          required
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showChildPassword ? 'text' : 'password'}
+                            name="password"
+                            value={formData.password}
+                            onChange={handleFormChange}
+                            placeholder="Min. 8 characters"
+                            required
+                            className="w-full px-3 py-2 pr-10 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowChildPassword(!showChildPassword)}
+                            aria-label={showChildPassword ? 'Hide password' : 'Show password'}
+                            title={showChildPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-1"
+                          >
+                            {showChildPassword ? <MdVisibilityOff className="w-4 h-4" /> : <MdVisibility className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
                           Confirm Password <span className="text-red-500">*</span>
                         </label>
-                        <input
-                          type="password"
-                          name="confirm_password"
-                          value={formData.confirm_password}
-                          onChange={handleFormChange}
-                          placeholder="Repeat password"
-                          required
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showChildConfirmPassword ? 'text' : 'password'}
+                            name="confirm_password"
+                            value={formData.confirm_password}
+                            onChange={handleFormChange}
+                            placeholder="Repeat password"
+                            required
+                            className="w-full px-3 py-2 pr-10 bg-white border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowChildConfirmPassword(!showChildConfirmPassword)}
+                            aria-label={showChildConfirmPassword ? 'Hide password' : 'Show password'}
+                            title={showChildConfirmPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-1"
+                          >
+                            {showChildConfirmPassword ? <MdVisibilityOff className="w-4 h-4" /> : <MdVisibility className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

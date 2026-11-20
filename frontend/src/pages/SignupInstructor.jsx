@@ -4,6 +4,25 @@ import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
 import ThemeToggle from '../components/ThemeToggle';
 
+function EyeIcon({ off }) {
+  if (off) {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+        <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+        <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+        <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+        <line x1="2" y1="2" x2="22" y2="22" />
+      </svg>
+    );
+  }
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 function PasswordStrength({ password }) {
   let score = 0;
   if (password.length >= 8) score++;
@@ -78,6 +97,8 @@ export default function SignupInstructor() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [isGoogleUser, setIsGoogleUser] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     // Check if user is authenticated via Google
@@ -297,27 +318,49 @@ export default function SignupInstructor() {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-slate-600 mb-1">Password *</label>
-                        <input
-                          required
-                          type="password"
-                          placeholder="Create a strong password"
-                          value={form.password}
-                          onChange={update('password')}
-                          className="input-field"
-                        />
+                        <div className="relative">
+                          <input
+                            required
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="Create a strong password"
+                            value={form.password}
+                            onChange={update('password')}
+                            className="input-field pr-11"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            title={showPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none p-1 rounded-lg transition-colors"
+                          >
+                            <EyeIcon off={showPassword} />
+                          </button>
+                        </div>
                         {form.password && <PasswordStrength password={form.password} />}
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-slate-600 mb-1">Confirm Password *</label>
-                        <input
-                          required
-                          type="password"
-                          placeholder="Repeat your password"
-                          value={form.confirm_password}
-                          onChange={update('confirm_password')}
-                          className="input-field"
-                        />
+                        <div className="relative">
+                          <input
+                            required
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            placeholder="Repeat your password"
+                            value={form.confirm_password}
+                            onChange={update('confirm_password')}
+                            className="input-field pr-11"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                            title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none p-1 rounded-lg transition-colors"
+                          >
+                            <EyeIcon off={showConfirmPassword} />
+                          </button>
+                        </div>
                       </div>
                     </>
                   )}
