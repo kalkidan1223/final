@@ -722,20 +722,6 @@ async function updateInstructorAssignments(req, res, next) {
 
       const allowedCourses = finalCourseIds.length
         ? await client.query(
-<<<<<<< Updated upstream
-          `SELECT id, grade_level_id FROM courses
-           WHERE id = ANY($1::bigint[]) AND grade_level_id = ANY($2::int[])`,
-          [assigned_courses, assigned_grade_levels]
-        )
-        : { rows: [] };
-
-      if (allowedCourses.rows.length !== new Set(assigned_courses.map(String)).size) {
-        const error = new Error('Every assigned course must exist and belong to one of the selected grade levels');
-        error.status = 400;
-        throw error;
-      }
-
-=======
           `SELECT c.id, c.grade_level_id FROM courses c
            JOIN subject_grade_assignments sga
              ON sga.subject_id = c.subject_id
@@ -748,7 +734,11 @@ async function updateInstructorAssignments(req, res, next) {
         )
         : { rows: [] };
 
->>>>>>> Stashed changes
+      if (allowedCourses.rows.length !== new Set(finalCourseIds.map(String)).size) {
+        const error = new Error('Every assigned course must exist and belong to one of the selected grade levels');
+        error.status = 400;
+        throw error;
+      }
       await client.query(
         `UPDATE instructor_assignments SET status = 'inactive', updated_at = now()
          WHERE instructor_id = $1 AND status = 'active'`, [id]
