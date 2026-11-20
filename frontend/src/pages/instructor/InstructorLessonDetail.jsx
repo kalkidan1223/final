@@ -27,6 +27,7 @@ const TABS = [
   { id: 'videos', label: 'Videos' },
   { id: 'activities', label: 'Activities' },
   { id: 'quizzes', label: 'Quizzes' },
+  { id: 'journey', label: 'Learning Journey' },
 ];
 
 function toEmbedUrl(url) {
@@ -56,7 +57,7 @@ export default function InstructorLessonDetail() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState('journey');
+  const [tab, setTab] = useState('overview');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [cardForm, setCardForm] = useState({ symbol: '', word: '', translation: '', audio_url: '', description: '' });
@@ -193,13 +194,45 @@ export default function InstructorLessonDetail() {
     setModal({ type, item });
   }
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <InstructorLayout>
         <div className="mx-auto max-w-5xl space-y-4">
           <div className="h-8 w-1/2 bg-slate-200 rounded-lg animate-pulse" />
           <div className="h-28 bg-slate-100 rounded-2xl animate-pulse" />
           <div className="h-72 bg-slate-100 rounded-2xl animate-pulse" />
+        </div>
+      </InstructorLayout>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <InstructorLayout>
+        <div className="mx-auto max-w-2xl py-16 text-center">
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-2xl text-amber-500">
+              ⚠️
+            </div>
+            <h2 className="mt-4 text-xl font-bold text-slate-800">Lesson Not Found</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {error || 'The requested lesson could not be loaded or may have been deleted.'}
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <Link
+                to="/instructor/courses"
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 shadow-sm transition"
+              >
+                Back to Courses
+              </Link>
+              <Link
+                to="/instructor/lessons"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+              >
+                All Lessons
+              </Link>
+            </div>
+          </div>
         </div>
       </InstructorLayout>
     );
@@ -393,8 +426,8 @@ export default function InstructorLessonDetail() {
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5">
-                        <button onClick={() => { const arr = [...materials]; const i = index; const j = i - 1; if (j < 0) return; [arr[i], arr[j]] = [arr[j], arr[i]]; setData({ ...data, materials: arr }); axiosClient.put(`/lessons/${lessonParam}/materials/reorder`, { ordered_material_ids: arr.map((x) => x.id) }).catch(() => load()); }} disabled={index === 0 || busy} className={`${actionBtnCls} text-lg`} aria-label="Move up">↑</button>
-                        <button onClick={() => { const arr = [...materials]; const i = index; const j = i + 1; if (j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; setData({ ...data, materials: arr }); axiosClient.put(`/lessons/${lessonParam}/materials/reorder`, { ordered_material_ids: arr.map((x) => x.id) }).catch(() => load()); }} disabled={index === materials.length - 1 || busy} className={`${actionBtnCls} text-lg`} aria-label="Move down">↓</button>
+                        <button onClick={() => { const arr = [...materials]; const i = index; const j = i - 1; if (j < 0) return;[arr[i], arr[j]] = [arr[j], arr[i]]; setData({ ...data, materials: arr }); axiosClient.put(`/lessons/${lessonParam}/materials/reorder`, { ordered_material_ids: arr.map((x) => x.id) }).catch(() => load()); }} disabled={index === 0 || busy} className={`${actionBtnCls} text-lg`} aria-label="Move up">↑</button>
+                        <button onClick={() => { const arr = [...materials]; const i = index; const j = i + 1; if (j >= arr.length) return;[arr[i], arr[j]] = [arr[j], arr[i]]; setData({ ...data, materials: arr }); axiosClient.put(`/lessons/${lessonParam}/materials/reorder`, { ordered_material_ids: arr.map((x) => x.id) }).catch(() => load()); }} disabled={index === materials.length - 1 || busy} className={`${actionBtnCls} text-lg`} aria-label="Move down">↓</button>
                         <a href={resolveFileUrl(m.file_url)} target="_blank" rel="noreferrer" className={`${actionBtnCls} inline-flex items-center gap-1 text-slate-600`}><MdLink /> Preview</a>
                         <button onClick={() => openModal('material', m)} className={`${actionBtnCls} text-slate-600`}>Edit</button>
                         {m.status === 'inactive' ? (
@@ -587,6 +620,129 @@ export default function InstructorLessonDetail() {
           </section>
         )}
 
+        {/* Learning Journey */}
+        {tab === 'journey' && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">Sequential Learning Journey</h2>
+                <p className="text-xs text-slate-500">Ordered sequence of learning steps students will experience in this lesson.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCardModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                >
+                  <MdStyle /> + Add Flashcard
+                </button>
+                <button
+                  onClick={() => setPreviewOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-700"
+                >
+                  <MdVisibility /> Child View Preview
+                </button>
+              </div>
+            </div>
+
+            {(!data.resources || data.resources.length === 0) ? (
+              <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
+                <p className="text-sm text-slate-500">No ordered journey items yet.</p>
+                <p className="mt-1 text-xs text-slate-400">Add materials, videos, activities, or flashcards, and they will form the learning path.</p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <button onClick={() => setCardModalOpen(true)} className="rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
+                    + Add Learning Card
+                  </button>
+                  <button onClick={() => openModal('material')} className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    + Material
+                  </button>
+                  <button onClick={() => openModal('video')} className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    + Video
+                  </button>
+                  <button onClick={() => openModal('activity')} className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    + Activity
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {data.resources.map((resItem, index) => {
+                  const typeColors = {
+                    card: 'bg-amber-100 text-amber-800 border-amber-300',
+                    material: 'bg-blue-100 text-blue-800 border-blue-300',
+                    video: 'bg-rose-100 text-rose-800 border-rose-300',
+                    activity: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                    quiz: 'bg-purple-100 text-purple-800 border-purple-300',
+                  };
+                  return (
+                    <div
+                      key={resItem.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 hover:border-indigo-300 transition"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
+                          {index + 1}
+                        </span>
+                        <span className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${typeColors[resItem.resource_type] || 'bg-slate-100 text-slate-700'}`}>
+                          {resItem.resource_type}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800">
+                            {resItem.resource_title || `Item #${resItem.id}`}
+                          </p>
+                          {resItem.resource_detail && (
+                            <p className="truncate text-xs text-slate-400">{resItem.resource_detail}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleRequired(resItem)}
+                          className={`rounded-lg px-2 py-1 text-xs font-medium transition ${
+                            resItem.is_required
+                              ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                          }`}
+                          title="Click to toggle required vs optional"
+                        >
+                          {resItem.is_required ? '★ Required' : 'Optional'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === 0 || busy}
+                          onClick={() => moveResource(index, -1)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                          title="Move up"
+                        >
+                          <MdArrowUpward />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === data.resources.length - 1 || busy}
+                          onClick={() => moveResource(index, 1)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30"
+                          title="Move down"
+                        >
+                          <MdArrowDownward />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeResourceFromJourney(resItem)}
+                          className="rounded-lg p-1.5 text-rose-500 hover:bg-rose-50"
+                          title="Remove from journey"
+                        >
+                          <MdDelete />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
         <div className="text-right">
           <Link to={`${courseDetailPath}/lessons/${lesson.id}`} className="text-sm text-slate-400 hover:text-slate-600">
             Permanent link to this lesson →
@@ -623,6 +779,108 @@ export default function InstructorLessonDetail() {
         quiz={modal.item}
         onSaved={load}
       />
+
+      {/* Add Learning Card Modal */}
+      <Modal open={cardModalOpen} onClose={() => setCardModalOpen(false)} title="Add Learning Flashcard">
+        <form onSubmit={handleCreateCard} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase">Symbol / Letter / Number *</label>
+            <input
+              type="text"
+              value={cardForm.symbol}
+              onChange={(e) => setCardForm({ ...cardForm, symbol: e.target.value })}
+              placeholder="e.g. A, 5, or ሀ"
+              className="mt-1 w-full rounded-xl border border-slate-300 p-2.5 text-lg font-bold text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase">Word / Name</label>
+            <input
+              type="text"
+              value={cardForm.word}
+              onChange={(e) => setCardForm({ ...cardForm, word: e.target.value })}
+              placeholder="e.g. Apple or Ha"
+              className="mt-1 w-full rounded-xl border border-slate-300 p-2.5 text-sm text-slate-800"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase">Translation / Meaning</label>
+            <input
+              type="text"
+              value={cardForm.translation}
+              onChange={(e) => setCardForm({ ...cardForm, translation: e.target.value })}
+              placeholder="e.g. ፖም"
+              className="mt-1 w-full rounded-xl border border-slate-300 p-2.5 text-sm text-slate-800"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase">Audio Pronunciation URL</label>
+            <input
+              type="text"
+              value={cardForm.audio_url}
+              onChange={(e) => setCardForm({ ...cardForm, audio_url: e.target.value })}
+              placeholder="https://... or uploaded audio link"
+              className="mt-1 w-full rounded-xl border border-slate-300 p-2.5 text-sm text-slate-800"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase">Notes / Instruction</label>
+            <textarea
+              rows={2}
+              value={cardForm.description}
+              onChange={(e) => setCardForm({ ...cardForm, description: e.target.value })}
+              placeholder="Optional notes for students"
+              className="mt-1 w-full rounded-xl border border-slate-300 p-2.5 text-sm text-slate-800"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setCardModalOpen(false)}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {busy ? 'Saving...' : 'Add Flashcard'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Child Experience Preview Modal */}
+      {previewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="relative flex h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-purple-700 px-6 py-4 text-white">
+              <div>
+                <span className="rounded-full bg-purple-500/50 px-2.5 py-0.5 text-xs font-bold tracking-wide uppercase">
+                  Child View Preview Mode
+                </span>
+                <h3 className="text-lg font-bold">{lesson.title}</h3>
+              </div>
+              <button
+                onClick={() => setPreviewOpen(false)}
+                className="rounded-xl bg-white/20 px-3 py-1.5 text-sm font-bold text-white hover:bg-white/30"
+              >
+                Close Preview
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+              <BasicChildLessonExperience
+                lesson={lesson}
+                resources={data.resources || []}
+                onComplete={() => alert('Lesson completed in preview mode!')}
+                previewMode={true}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </InstructorLayout>
   );
 }

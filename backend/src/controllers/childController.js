@@ -108,9 +108,9 @@ async function getProfile(req, res, next) {
     let siblingChildren = [];
     if (req.user.role === 'parent' && child.parent_db_id) {
       const sibRes = await query(
-        `SELECT id, full_name, profile_image_url, grade, section, date_of_birth,
+        `SELECT s.id, s.full_name, s.profile_image_url, s.grade, s.section, s.date_of_birth,
                 gl.name as grade_level_name, gl.code as grade_code,
-                COALESCE(EXTRACT(YEAR FROM age(date_of_birth)), 7)::int as age
+                COALESCE(EXTRACT(YEAR FROM age(s.date_of_birth)), 7)::int as age
          FROM students s
          JOIN grade_levels gl ON gl.id = s.grade_level_id
          WHERE s.parent_id = $1 AND s.is_active = TRUE
@@ -1684,7 +1684,7 @@ async function updateCourseProgress(studentId, courseId) {
     await query(
       `INSERT INTO progress (student_id, course_id, lesson_id, status, completion_percentage, last_accessed_at, updated_at)
        VALUES ($1, $2, NULL, $3, $4, now(), now())
-       ON CONFLICT (student_id, course_id, lesson_id)
+       ON CONFLICT (student_id, course_id) WHERE lesson_id IS NULL
        DO UPDATE SET
          status = $3,
          completion_percentage = $4,

@@ -23,6 +23,8 @@ router.post('/reset-password', authRegistrationController.resetPassword);
 // --- Email Verification ---
 router.post('/verify-email', requireAuth, authRegistrationController.sendVerificationToken);
 router.post('/verify-email/confirm', authRegistrationController.verifyEmail);
+router.get('/verify-email/confirm', authRegistrationController.verifyEmail);
+router.post('/verify-email/resend', authRegistrationController.resendVerificationToken);
 
 // --- Google OAuth ---
 const REFRESH_COOKIE_NAME = 'refresh_token';

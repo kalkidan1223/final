@@ -1,5 +1,10 @@
 const { pool, query } = require('../config/db');
 const { signAccessToken, signRefreshToken, hashToken } = require('../utils/jwt');
+const {
+  sendAccountApprovedEmail,
+  sendAccountRejectedEmail,
+  sendStudentAccountApprovedEmail,
+} = require('../services/emailService');
 
 const SALT_ROUNDS = 12;
 const REFRESH_COOKIE_NAME = 'refresh_token';
@@ -95,17 +100,34 @@ async function approveParentRegistration(req, res, next) {
     try {
       await client.query('BEGIN');
 
-      const userResult = await client.query(
-        `INSERT INTO users (email, password_hash, role, full_name, phone, profile_image_url)
-         VALUES ($1, $2, 'parent', $3, $4, $5)
-         RETURNING id, email, full_name, role, is_active`,
-        [reg.email, passwordHash, reg.full_name, reg.phone, reg.profile_image_url || null]
+      let user;
+      const existingUser = await client.query(
+        `SELECT id, email, full_name, role, is_active FROM users WHERE LOWER(email) = LOWER($1)`,
+        [reg.email]
       );
-      const user = userResult.rows[0];
+      if (existingUser.rows.length > 0) {
+        const u = await client.query(
+          `UPDATE users 
+           SET is_active = TRUE, role = 'parent', full_name = $1, phone = $2, email_verified = TRUE, updated_at = now()
+           WHERE id = $3
+           RETURNING id, email, full_name, role, is_active`,
+          [reg.full_name, reg.phone || null, existingUser.rows[0].id]
+        );
+        user = u.rows[0];
+      } else {
+        const userResult = await client.query(
+          `INSERT INTO users (email, password_hash, role, full_name, phone, profile_image_url, is_active, email_verified)
+           VALUES ($1, $2, 'parent', $3, $4, $5, TRUE, TRUE)
+           RETURNING id, email, full_name, role, is_active`,
+          [reg.email.toLowerCase(), passwordHash, reg.full_name, reg.phone, reg.profile_image_url || null]
+        );
+        user = userResult.rows[0];
+      }
 
       await client.query(
         `INSERT INTO parents (user_id, address, emergency_contact, date_of_birth, guardian_relationship)
-         VALUES ($1, $2, $3, $4, 'parent')`,
+         VALUES ($1, $2, $3, $4, 'parent')
+         ON CONFLICT (user_id) DO NOTHING`,
         [user.id, JSON.stringify({
           country: reg.country, region: reg.region, city: reg.city,
           sub_city: reg.sub_city, woreda: reg.woreda, house_number: reg.house_number,
@@ -127,6 +149,16 @@ async function approveParentRegistration(req, res, next) {
       );
 
       await client.query('COMMIT');
+
+      // Send approval notification email to parent
+      sendAccountApprovedEmail({
+        email: reg.email,
+        full_name: reg.full_name,
+        role: 'parent',
+      }).catch(err => {
+        console.error('Failed to send parent approval email:', err);
+      });
+
       res.json({ message: 'Parent registration approved', user: user, registration_id: id });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -174,6 +206,16 @@ async function rejectParentRegistration(req, res, next) {
     await logAudit(null, req.user.id, 'REJECT_PARENT_REGISTRATION', 'registration_request', id,
       { status: 'pending' }, { status: 'rejected', reason }
     );
+
+    // Send rejection email to parent
+    sendAccountRejectedEmail({
+      email: reg.email,
+      full_name: reg.full_name,
+      role: 'parent',
+      reason,
+    }).catch(err => {
+      console.error('Failed to send parent rejection email:', err);
+    });
 
     res.json({ message: 'Registration rejected', registration_id: id });
   } catch (err) {
@@ -375,9 +417,17 @@ async function approveStudentRegistration(req, res, next) {
 
       // Notify parent about approval
       const parentUser = await client.query(
-        `SELECT user_id FROM parents WHERE id = $1`,
+        `SELECT u.id AS user_id, u.email, u.full_name 
+         FROM parents p 
+         JOIN users u ON u.id = p.user_id 
+         WHERE p.id = $1`,
         [parentRow.id]
       );
+      const gradeQuery = await client.query(
+        'SELECT name FROM grade_levels WHERE id = $1',
+        [reg.grade_level_id]
+      );
+
       if (parentUser.rows[0]?.user_id) {
         await client.query(
           `INSERT INTO notifications (user_id, type, title, message)
@@ -397,6 +447,18 @@ async function approveStudentRegistration(req, res, next) {
       );
 
       await client.query('COMMIT');
+
+      if (parentUser.rows[0]?.email) {
+        sendStudentAccountApprovedEmail({
+          parentEmail: parentUser.rows[0].email,
+          parentName: parentUser.rows[0].full_name,
+          studentName: reg.student_full_name,
+          gradeName: gradeQuery.rows[0]?.name || 'Primary Level',
+        }).catch(err => {
+          console.error('Failed to send student approval email to parent:', err);
+        });
+      }
+
       res.json({ message: 'Child registration approved', user, registration_id: id });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -590,6 +652,16 @@ async function approveInstructorRegistration(req, res, next) {
       );
 
       await client.query('COMMIT');
+
+      // Send email notification to instructor
+      sendAccountApprovedEmail({
+        email: reg.email,
+        full_name: reg.full_name,
+        role: 'instructor',
+      }).catch(err => {
+        console.error('Failed to send instructor approval email:', err);
+      });
+
       res.json({ message: 'Instructor registration approved', user, registration_id: id });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -637,6 +709,16 @@ async function rejectInstructorRegistration(req, res, next) {
     await logAudit(null, req.user.id, 'REJECT_INSTRUCTOR_REGISTRATION', 'instructor_registration_request', id,
       { status: 'pending' }, { status: 'rejected', reason }
     );
+
+    // Send email notification to instructor
+    sendAccountRejectedEmail({
+      email: reg.email,
+      full_name: reg.full_name,
+      role: 'instructor',
+      reason,
+    }).catch(err => {
+      console.error('Failed to send instructor rejection email:', err);
+    });
 
     res.json({ message: 'Instructor registration rejected', registration_id: id });
   } catch (err) {

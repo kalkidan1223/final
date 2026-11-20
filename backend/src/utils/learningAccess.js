@@ -118,7 +118,7 @@ async function getResourceAccess(studentId, resourceType, resourceId) {
     `SELECT t.lesson_id, l.course_id
      FROM ${table} t
      JOIN lessons l ON l.id = t.lesson_id
-     WHERE t.id = $1 ${statusCondition}`,
+     WHERE t.id = $1 AND t.status = 'active'`,
     [resourceId]
   );
   if (srcRes.rows.length === 0) return { exists: false, isLocked: true };

@@ -856,9 +856,28 @@ async function getStudentProgress(req, res, next) {
          gl.name AS grade_level_name,
          c.id AS course_id,
          c.title AS course_title,
-         COALESCE(p.status, 'not_started') AS progress_status,
-         COALESCE(p.completion_percentage, 0)::numeric(5,1) AS completion_percentage,
-         p.last_accessed_at,
+         COUNT(DISTINCT l.id)::int AS total_lessons,
+         COUNT(DISTINCT l.id) FILTER (WHERE slp.status = 'completed' OR lp.status::text = 'completed')::int AS completed_lessons,
+         COALESCE(
+           cp.status::text,
+           CASE 
+             WHEN COUNT(DISTINCT l.id) > 0 AND COUNT(DISTINCT l.id) FILTER (WHERE slp.status = 'completed' OR lp.status::text = 'completed') >= COUNT(DISTINCT l.id) THEN 'completed'
+             WHEN COUNT(DISTINCT l.id) FILTER (WHERE slp.status = 'completed' OR lp.status::text = 'completed') > 0 THEN 'in_progress'
+             ELSE 'not_started'
+           END
+         ) AS progress_status,
+         COALESCE(
+           cp.completion_percentage,
+           CASE 
+             WHEN COUNT(DISTINCT l.id) > 0 THEN ROUND((COUNT(DISTINCT l.id) FILTER (WHERE slp.status = 'completed' OR lp.status::text = 'completed')::numeric / COUNT(DISTINCT l.id)::numeric) * 100, 1)
+             ELSE 0.0
+           END
+         )::numeric(5,1) AS completion_percentage,
+         COALESCE(
+           cp.last_accessed_at,
+           MAX(slp.last_accessed_at),
+           MAX(lp.last_accessed_at)
+         ) AS last_accessed_at,
          COUNT(DISTINCT sub.id) FILTER (WHERE sub.status IN ('reviewed', 'graded'))::int AS activities_completed,
          COUNT(DISTINCT qr.id) FILTER (WHERE qr.percentage >= 70)::int AS quizzes_passed,
          COALESCE(AVG(qr.percentage), 0)::numeric(5,1) AS avg_quiz_score,
@@ -871,8 +890,16 @@ async function getStudentProgress(req, res, next) {
        JOIN courses c ON c.id = my_courses.course_id
        JOIN grade_levels gl ON gl.id = my_courses.grade_level_id
        JOIN students s ON s.grade_level_id = my_courses.grade_level_id AND s.is_active = TRUE
-       LEFT JOIN progress p ON p.student_id = s.id AND p.course_id = c.id
+       LEFT JOIN LATERAL (
+         SELECT status, completion_percentage, last_accessed_at
+         FROM progress
+         WHERE student_id = s.id AND course_id = c.id AND lesson_id IS NULL
+         ORDER BY updated_at DESC, id DESC
+         LIMIT 1
+       ) cp ON TRUE
        LEFT JOIN lessons l ON l.course_id = c.id
+       LEFT JOIN student_lesson_progress slp ON slp.lesson_id = l.id AND slp.student_id = s.id
+       LEFT JOIN progress lp ON lp.lesson_id = l.id AND lp.student_id = s.id
        LEFT JOIN activities a ON a.lesson_id = l.id
        LEFT JOIN activity_submissions sub ON sub.activity_id = a.id AND sub.student_id = s.id
        LEFT JOIN quizzes q ON q.lesson_id = l.id
@@ -882,7 +909,7 @@ async function getStudentProgress(req, res, next) {
          AND ($4::varchar IS NULL OR s.section = $4)
          AND ($5::varchar IS NULL OR s.full_name ILIKE '%' || $5 || '%')
        GROUP BY s.id, s.full_name, s.gender, s.grade, s.section, gl.name, c.id, c.title,
-                p.status, p.completion_percentage, p.last_accessed_at
+                cp.status, cp.completion_percentage, cp.last_accessed_at
        ORDER BY c.title ASC, s.full_name ASC`,
       [
         instructorId,

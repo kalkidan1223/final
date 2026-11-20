@@ -75,7 +75,9 @@ async function getLessonDetail(req, res, next) {
       return res.status(404).json({ error: 'Lesson not found' });
     }
 
-    const [materials, videos, quizzes, activities, statsRes] = await Promise.all([
+    await ensureLessonResources(id);
+
+    const [materials, videos, quizzes, activities, statsRes, resourcesRes] = await Promise.all([
       query('SELECT * FROM learning_materials WHERE lesson_id = $1 ORDER BY display_order, created_at', [id]),
       query('SELECT * FROM videos WHERE lesson_id = $1 ORDER BY created_at', [id]),
       query(
@@ -88,6 +90,32 @@ async function getLessonDetail(req, res, next) {
            (SELECT COUNT(*) FROM progress WHERE lesson_id = $1 AND status = 'completed')::int AS completed_students,
            (SELECT COUNT(*) FROM students WHERE grade_level_id = $2 AND is_active = TRUE)::int AS total_students`,
         [id, lessonResult.rows[0].grade_level_id]
+      ),
+      query(
+        `SELECT lr.*,
+                COALESCE(
+                  lr.title,
+                  CASE 
+                    WHEN lr.resource_type = 'video' THEN v.title
+                    WHEN lr.resource_type = 'material' THEN m.title
+                    WHEN lr.resource_type = 'activity' THEN a.title
+                    WHEN lr.resource_type = 'quiz' THEN q.title
+                  END
+                ) as resource_title,
+                CASE 
+                  WHEN lr.resource_type = 'video' THEN v.video_url
+                  WHEN lr.resource_type = 'material' THEN m.file_url
+                  WHEN lr.resource_type = 'activity' THEN a.activity_type::text
+                  WHEN lr.resource_type = 'quiz' THEN NULL::text
+                END as resource_detail
+         FROM lesson_resources lr
+         LEFT JOIN videos v ON lr.resource_type = 'video' AND lr.resource_id = v.id
+         LEFT JOIN learning_materials m ON lr.resource_type = 'material' AND lr.resource_id = m.id
+         LEFT JOIN activities a ON lr.resource_type = 'activity' AND lr.resource_id = a.id
+         LEFT JOIN quizzes q ON lr.resource_type = 'quiz' AND lr.resource_id = q.id
+         WHERE lr.lesson_id = $1
+         ORDER BY lr.display_order, lr.created_at`,
+        [id]
       ),
     ]);
 

@@ -65,7 +65,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await axiosClient.post('/auth/logout');
+    try {
+      await axiosClient.post('/auth/logout');
+    } catch {}
+    if (typeof window !== 'undefined') {
+      sessionStorage.clear();
+    }
     setAccessToken(null);
     setUser(null);
   }, []);

@@ -744,7 +744,12 @@ async function updateInstructorAssignments(req, res, next) {
         )
         : { rows: [] };
 
->>>>>>> Stashed changes
+      if (allowedCourses.rows.length !== new Set(assigned_courses.map(String)).size) {
+        const error = new Error('Every assigned course must match a selected grade level and an active subject-grade pairing');
+        error.status = 400;
+        throw error;
+      }
+
       await client.query(
         `UPDATE instructor_assignments SET status = 'inactive', updated_at = now()
          WHERE instructor_id = $1 AND status = 'active'`, [id]

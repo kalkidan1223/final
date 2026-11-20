@@ -419,7 +419,7 @@ async function getLessonJourney(req, res, next) {
          AND (
            (lr.resource_type = 'material' AND EXISTS (SELECT 1 FROM learning_materials x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
            (lr.resource_type = 'video' AND EXISTS (SELECT 1 FROM videos x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
-           (lr.resource_type = 'activity' AND EXISTS (SELECT 1 FROM activities x WHERE x.id = lr.resource_id AND x.status IN ('active', 'published'))) OR
+           (lr.resource_type = 'activity' AND EXISTS (SELECT 1 FROM activities x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
            (lr.resource_type = 'quiz' AND EXISTS (SELECT 1 FROM quizzes x WHERE x.id = lr.resource_id AND x.status = 'active')) OR
            lr.resource_type NOT IN ('material', 'video', 'activity', 'quiz')
          )

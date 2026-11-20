@@ -128,13 +128,23 @@ async function login(req, res, next) {
 
     if (result.rows.length === 0) {
       const regResult = await query(
-        'SELECT id, status FROM registration_requests WHERE email = $1',
+        'SELECT id, status, email_verified FROM registration_requests WHERE email = $1',
         [email.toLowerCase()]
       );
       if (regResult.rows.length > 0) {
         const reg = regResult.rows[0];
+        if (!reg.email_verified) {
+          return res.status(403).json({
+            error: 'Please verify your email address before continuing. Check your inbox for the verification link.',
+            code: 'EMAIL_NOT_VERIFIED',
+            email: email.toLowerCase()
+          });
+        }
         if (reg.status === 'pending') {
-          return res.status(403).json({ error: 'Account pending administrator approval', code: 'PENDING_APPROVAL' });
+          return res.status(403).json({
+            error: 'Your account is pending administrator approval. Please wait for an administrator to review your registration. You will receive an email notification once approved.',
+            code: 'PENDING_APPROVAL'
+          });
         }
         if (reg.status === 'rejected') {
           return res.status(403).json({ error: 'Your registration was rejected. Please contact the administrator.', code: 'REJECTED' });
@@ -143,17 +153,54 @@ async function login(req, res, next) {
           return res.status(403).json({ error: 'Your account has been suspended.', code: 'SUSPENDED' });
         }
       }
+
+      const instResult = await query(
+        'SELECT id, status, email_verified FROM instructor_registration_requests WHERE email = $1',
+        [email.toLowerCase()]
+      );
+      if (instResult.rows.length > 0) {
+        const inst = instResult.rows[0];
+        if (!inst.email_verified) {
+          return res.status(403).json({
+            error: 'Please verify your email address before continuing. Check your inbox for the verification link.',
+            code: 'EMAIL_NOT_VERIFIED',
+            email: email.toLowerCase()
+          });
+        }
+        if (inst.status === 'pending') {
+          return res.status(403).json({
+            error: 'Your instructor application is pending administrator approval. Please wait for an administrator to review your application. You will receive an email notification once approved.',
+            code: 'PENDING_APPROVAL'
+          });
+        }
+        if (inst.status === 'rejected') {
+          return res.status(403).json({ error: 'Your instructor application was rejected by the administrator.', code: 'REJECTED' });
+        }
+        if (inst.status === 'suspended') {
+          return res.status(403).json({ error: 'Your account has been suspended.', code: 'SUSPENDED' });
+        }
+      }
+
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const user = result.rows[0];
-    if (!user.is_active) {
-      return res.status(403).json({ error: 'This account has been deactivated' });
-    }
 
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatches) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (!user.is_active) {
+      const pReg = await query('SELECT status FROM registration_requests WHERE LOWER(email) = $1', [email.toLowerCase()]);
+      const iReg = await query('SELECT status FROM instructor_registration_requests WHERE LOWER(email) = $1', [email.toLowerCase()]);
+      if ((pReg.rows[0] && pReg.rows[0].status === 'pending') || (iReg.rows[0] && iReg.rows[0].status === 'pending')) {
+        return res.status(403).json({
+          error: 'Your account is pending administrator approval. Please wait for an administrator to review your registration. You will receive an email notification once approved.',
+          code: 'PENDING_APPROVAL',
+        });
+      }
+      return res.status(403).json({ error: 'This account has been deactivated. Please contact support.', code: 'DEACTIVATED' });
     }
 
     await query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);

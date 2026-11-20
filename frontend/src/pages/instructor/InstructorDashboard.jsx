@@ -181,7 +181,7 @@ export default function InstructorDashboard() {
                 {greeting}, {user?.full_name || 'Instructor'}! 👋
               </h1>
               <p className="mt-2 text-indigo-100 text-sm max-w-xl leading-relaxed">
-                Welcome to your teaching hub. Manage course curricula, create interactive Fidel character exercises, grade child submissions, and follow your students' progress.
+                Welcome to your teaching hub. Manage your lesson plans, create engaging activities and visual learning cards, grade student submissions, and follow your learners' progress.
               </p>
             </div>
 

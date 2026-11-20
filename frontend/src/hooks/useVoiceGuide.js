@@ -109,7 +109,8 @@ export default function useVoiceGuide(options = {}) {
    */
   const speak = useCallback(
     (text, override = {}) => {
-      if (!enabled || !isSpeechSupported() || !text) return false;
+      if (!isSpeechSupported() || !text) return false;
+      if (!enabled && !override.force) return false;
 
       const parts = Array.isArray(text) ? text : [{ text: String(text), lang }];
       const clean = parts.filter((part) => part && part.text);
@@ -119,18 +120,44 @@ export default function useVoiceGuide(options = {}) {
       const speechRate = override.rate ?? rate ?? RATE_BY_LANG[utteranceLang.slice(0, 2)] ?? 0.85;
       const speechPitch = override.pitch ?? pitch ?? PITCH_BY_LANG[utteranceLang.slice(0, 2)] ?? 1.05;
 
-      window.speechSynthesis.cancel();
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+        window.speechSynthesis.cancel();
+      } catch (e) {}
 
-      const utterance = new SpeechSynthesisUtterance(clean.map((part) => part.text).join(' '));
-      utterance.lang = utteranceLang;
+      const textString = clean.map((part) => part.text).join(' ');
+      const utterance = new SpeechSynthesisUtterance(textString);
       utterance.rate = speechRate;
       utterance.pitch = speechPitch;
 
-      const voices = window.speechSynthesis.getVoices();
-      const preferred =
-        pickVoice(voices.filter((v) => (v.lang || '').toLowerCase().startsWith(utteranceLang.slice(0, 2)))) ||
-        pickVoice(voices);
-      if (preferred) utterance.voice = preferred;
+      const voices = window.speechSynthesis.getVoices() || [];
+      const amharicVoice = voices.find((v) => (v.lang || '').toLowerCase().startsWith('am'));
+
+      if (utteranceLang.startsWith('am') && !amharicVoice) {
+        // When no native Amharic TTS voice is installed (common on Windows),
+        // fallback to English voice and voice.lang so Chrome doesn't abort with language-unavailable error.
+        const fallbackVoice =
+          pickVoice(voices.filter((v) => (v.lang || '').toLowerCase().startsWith('en'))) ||
+          pickVoice(voices);
+        if (fallbackVoice) {
+          utterance.voice = fallbackVoice;
+          utterance.lang = fallbackVoice.lang || 'en-US';
+        } else {
+          utterance.lang = 'en-US';
+        }
+      } else {
+        const preferred =
+          pickVoice(voices.filter((v) => (v.lang || '').toLowerCase().startsWith(utteranceLang.slice(0, 2)))) ||
+          pickVoice(voices);
+        if (preferred) {
+          utterance.voice = preferred;
+          utterance.lang = preferred.lang || utteranceLang;
+        } else {
+          utterance.lang = utteranceLang;
+        }
+      }
 
       utterance.onstart = () => {
         if (mountedRef.current) setIsSpeaking(true);
@@ -140,10 +167,26 @@ export default function useVoiceGuide(options = {}) {
         utteranceRef.current = null;
       };
       utterance.onend = finish;
-      utterance.onerror = finish;
+      utterance.onerror = (err) => {
+        finish();
+      };
 
       utteranceRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
+      if (typeof window !== 'undefined') {
+        window._activeSpeechUtterance = utterance; // Prevent garbage collection in Chromium
+      }
+
+      setTimeout(() => {
+        try {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+          window.speechSynthesis.speak(utterance);
+        } catch (e) {
+          // ignore speak error
+        }
+      }, 40);
+
       return true;
     },
     [enabled, lang, rate, pitch]

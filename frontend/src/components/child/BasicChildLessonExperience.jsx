@@ -51,7 +51,10 @@ export default function BasicChildLessonExperience({
   // Play audio or speak text
   const speakCurrent = (textToSpeak) => {
     if (textToSpeak) {
-      voice.speak(textToSpeak, { lang: /[\u1200-\u137F]/.test(textToSpeak) ? 'am' : 'en' });
+      voice.speak(textToSpeak, {
+        force: true,
+        lang: /[\u1200-\u137F]/.test(textToSpeak) ? 'am' : 'en',
+      });
     }
   };
 
@@ -264,6 +267,7 @@ export default function BasicChildLessonExperience({
               ) : currentResource?.resource_type === 'activity' ? (
                 <ActivityStage
                   resource={currentResource}
+                  allResources={resources}
                   activityAnswer={activityAnswer}
                   setActivityAnswer={setActivityAnswer}
                   activityFeedback={activityFeedback}
@@ -370,20 +374,57 @@ export default function BasicChildLessonExperience({
 // LEARNING CARD STAGE (Fidel, Number, Vocabulary, or Picture card)
 // ----------------------------------------------------------------------------
 function LearningCardStage({ card, content, speakCurrent, onDone }) {
-  const symbol = card?.symbol || card?.character || card?.number || card?.word || '';
+  const symbol = card?.symbol || card?.character || card?.number || '';
+  const word = card?.word || card?.english || card?.meaning || '';
+  const translation = card?.translation || card?.amharic || '';
   const sound = card?.sound || card?.romanized || card?.pronunciation || '';
-  const english = card?.english || card?.meaning || '';
-  const amharic = card?.amharic || '';
-  const imageUrl = resolveFileUrl(card?.image_url || content?.thumbnail_url || content?.file_url);
-  const audioUrl = resolveFileUrl(card?.audio_url || content?.file_url);
+  const description = card?.description || content?.text_content || '';
+  const imageUrl = resolveFileUrl(card?.image_url || card?.file_url || content?.thumbnail_url || (content?.material_type === 'image' ? content?.file_url : null));
+  const audioUrl = resolveFileUrl(card?.audio_url || (content?.material_type === 'audio' ? content?.file_url : null));
+
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+
+  const speakCard = () => {
+    let toSpeak = '';
+    if (symbol && word) {
+      toSpeak = `${symbol}. ${word}`;
+    } else if (symbol) {
+      toSpeak = sound ? `${symbol}. ${sound}` : symbol;
+    } else if (word) {
+      toSpeak = word;
+    } else if (sound) {
+      toSpeak = sound;
+    } else if (translation) {
+      toSpeak = translation;
+    } else {
+      toSpeak = description || 'Card';
+    }
+
+    if (toSpeak) {
+      speakCurrent(toSpeak);
+    }
+  };
 
   const handleHear = () => {
-    if (audioUrl && (audioUrl.endsWith('.mp3') || audioUrl.endsWith('.wav') || audioUrl.endsWith('.ogg'))) {
+    setIsPlayingAudio(true);
+    setTimeout(() => setIsPlayingAudio(false), 1200);
+
+    // 1. Try uploaded / linked audio file first
+    if (audioUrl && /\.(mp3|wav|ogg|m4a|aac)(\?.*)?$/i.test(audioUrl)) {
       const a = new Audio(audioUrl);
-      a.play().catch(() => speakCurrent(symbol || sound));
-    } else {
-      speakCurrent(symbol || sound);
+      a.play()
+        .then(() => {
+          if (onDone) onDone();
+        })
+        .catch(() => {
+          speakCard();
+          if (onDone) onDone();
+        });
+      return;
     }
+
+    // 2. Play speech synthesis
+    speakCard();
     if (onDone) onDone();
   };
 
@@ -394,7 +435,7 @@ function LearningCardStage({ card, content, speakCurrent, onDone }) {
         {imageUrl && (
           <img
             src={imageUrl}
-            alt={symbol || 'Learning item'}
+            alt={symbol || word || 'Learning item'}
             className="mb-4 h-36 w-36 object-contain rounded-2xl shadow-sm"
           />
         )}
@@ -405,26 +446,35 @@ function LearningCardStage({ card, content, speakCurrent, onDone }) {
           </span>
         )}
 
-        {sound && (
+        {word && (
+          <span className="mt-2 text-2xl font-black text-indigo-700 capitalize tracking-wide">
+            {word}
+          </span>
+        )}
+
+        {sound && !word && (
           <span className="mt-2 text-xl font-black text-indigo-600 uppercase tracking-widest">
             {sound}
           </span>
         )}
 
-        {(english || amharic) && (
+        {(translation || description) && (
           <div className="mt-3 rounded-xl bg-white/80 px-4 py-1.5 border border-slate-200 text-sm font-bold text-slate-700">
-            {amharic && <span className="mr-2 font-black text-slate-900">{amharic}</span>}
-            {english && <span>{english}</span>}
+            {translation && <span className="font-black text-slate-900 mr-2">{translation}</span>}
+            {description && <span className="text-slate-500 font-medium">{description}</span>}
           </div>
         )}
 
         {/* Large audio trigger */}
         <button
+          type="button"
           onClick={handleHear}
-          className="mt-6 flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 font-black text-white shadow-lg transition hover:bg-indigo-700 active:scale-95"
+          className={`mt-6 flex items-center gap-2 rounded-2xl px-6 py-3 font-black text-white shadow-lg transition active:scale-95 cursor-pointer ${
+            isPlayingAudio ? 'bg-emerald-600 scale-105' : 'bg-indigo-600 hover:bg-indigo-700'
+          }`}
         >
           <MdVolumeUp className="text-2xl" />
-          <span>Say It!</span>
+          <span>{isPlayingAudio ? 'Speaking...' : 'Say It!'}</span>
         </button>
       </div>
     </div>
@@ -456,11 +506,12 @@ function MaterialStage({ resource, speakCurrent, onDone }) {
             />
           ) : (
             <button
+              type="button"
               onClick={() => {
-                speakCurrent(resource.title);
+                speakCurrent(textContent || resource.title);
                 if (onDone) onDone();
               }}
-              className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white shadow-md hover:bg-emerald-700 active:scale-95"
+              className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white shadow-md hover:bg-emerald-700 active:scale-95 cursor-pointer"
             >
               🔊 Play Voice Guide
             </button>
@@ -474,12 +525,33 @@ function MaterialStage({ resource, speakCurrent, onDone }) {
             className="max-h-80 w-auto rounded-3xl border-4 border-slate-100 object-contain shadow-lg"
           />
           {textContent && (
-            <p className="max-w-xl text-center text-base font-bold text-slate-700">{textContent}</p>
+            <div className="flex flex-col items-center gap-2">
+              <p className="max-w-xl text-center text-base font-bold text-slate-700">{textContent}</p>
+              <button
+                type="button"
+                onClick={() => speakCurrent(textContent)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 cursor-pointer"
+              >
+                🔊 Read Text
+              </button>
+            </div>
           )}
         </div>
       ) : (
         /* Rich Text / Instruction / Explanation */
         <div className="mx-auto max-w-2xl rounded-3xl border-2 border-indigo-100 bg-indigo-50/40 p-6 sm:p-8 space-y-4">
+          <div className="flex items-center justify-between gap-3 border-b border-indigo-100 pb-3">
+            <h3 className="text-sm font-black text-indigo-900">{resource.title}</h3>
+            {(textContent || resource.description) && (
+              <button
+                type="button"
+                onClick={() => speakCurrent(textContent || resource.description)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 active:scale-95 cursor-pointer"
+              >
+                🔊 Read Aloud
+              </button>
+            )}
+          </div>
           <div className="prose prose-indigo max-w-none text-base sm:text-lg font-medium leading-relaxed text-slate-800 whitespace-pre-line">
             {textContent || resource.description}
           </div>
@@ -545,6 +617,7 @@ function VideoStage({ resource, onDone }) {
 // ----------------------------------------------------------------------------
 function ActivityStage({
   resource,
+  allResources = [],
   activityAnswer,
   setActivityAnswer,
   activityFeedback,
@@ -557,10 +630,26 @@ function ActivityStage({
   const activityType = content.activity_type || 'multiple_choice';
   const instructions = content.instructions || resource.description || 'Answer the exercise!';
 
+  // Helper to extract learning cards from all resources
+  const getLessonCardItems = () => {
+    return (allResources || [])
+      .filter((r) => r.content?.metadata?.symbol)
+      .map((r) => ({
+        symbol: r.content.metadata.symbol,
+        word: r.content.metadata.word || '',
+        translation: r.content.metadata.translation || '',
+      }));
+  };
+
   // Multiple Choice / True False
   if (activityType === 'multiple_choice' || activityType === 'true_false') {
-    const question = config.question || config.prompt || resource.title;
-    const options = config.options || ['Option A', 'Option B', 'Option C'];
+    const cards = getLessonCardItems();
+    const fallbackQuestion = cards.length > 0 ? `Which item represents ${cards[0].word || cards[0].symbol}?` : 'Choose the correct answer:';
+    const fallbackOptions = cards.length >= 2 ? cards.slice(0, 4).map(c => c.symbol || c.word) : ['Option A', 'Option B', 'Option C'];
+
+    const question = config.question || config.prompt || resource.title || fallbackQuestion;
+    const rawOptions = (config.options || []).filter(o => typeof o === 'string' && o.trim().length > 0);
+    const options = rawOptions.length >= 2 ? rawOptions : fallbackOptions;
     const correctAnswer = config.correctAnswer || config.correct_answer || options[0];
 
     const handleSelectOption = async (option) => {
@@ -572,7 +661,6 @@ function ActivityStage({
         setActivityFeedback({ correct: true, message: '🎉 Excellent! That is correct!' });
         if (onDone) onDone();
 
-        // Submit to backend
         try {
           await axiosClient.post(`/child/activities/${resource.resource_id}/submit`, {
             submission_text: String(option),
@@ -632,13 +720,60 @@ function ActivityStage({
     );
   }
 
-  // Matching Activity (e.g. Word to Picture or Letter to Sound)
-  if (activityType === 'matching' || activityType === 'drag_and_drop') {
-    const pairs = config.pairs || [
-      { left: 'ሀ', right: 'ሀብት' },
-      { left: 'ለ', right: 'ሎሚ' },
-      { left: 'ሐ', right: 'ሐምሌ' },
-    ];
+  // Drag and Drop / Put in Order Activity
+  if (activityType === 'drag_and_drop') {
+    let rawItems = (config.items || []).filter((s) => typeof s === 'string' && s.trim().length > 0);
+    let rawOrder = (config.correct_order || config.correctOrder || []).filter((s) => typeof s === 'string' && s.trim().length > 0);
+
+    // If items were empty, auto-populate from lesson cards!
+    if (rawItems.length < 2) {
+      const cards = getLessonCardItems();
+      if (cards.length >= 2) {
+        rawItems = cards.slice(0, 5).map((c) => c.symbol);
+        rawOrder = [...rawItems];
+      } else {
+        rawItems = ['ሀ', 'ሁ', 'ሂ', 'ሃ'];
+        rawOrder = ['ሀ', 'ሁ', 'ሂ', 'ሃ'];
+      }
+    }
+
+    if (rawOrder.length < 2) {
+      rawOrder = [...rawItems];
+    }
+
+    return (
+      <InteractiveOrderingPlayer
+        items={rawItems}
+        correctOrder={rawOrder}
+        activityId={resource.resource_id}
+        maxScore={content.max_score || 100}
+        playSoundEffect={playSoundEffect}
+        onDone={onDone}
+      />
+    );
+  }
+
+  // Matching Activity (e.g. Word to Picture or Letter to Word)
+  if (activityType === 'matching') {
+    let pairs = (config.pairs || []).filter(
+      (p) => (p.left && String(p.left).trim().length > 0) || (p.right && String(p.right).trim().length > 0)
+    );
+
+    if (pairs.length === 0) {
+      const cards = getLessonCardItems();
+      if (cards.length >= 2) {
+        pairs = cards.slice(0, 4).map((c) => ({
+          left: c.symbol,
+          right: c.word || c.translation || c.symbol,
+        }));
+      } else {
+        pairs = [
+          { left: 'ሀ', right: 'ሀገር' },
+          { left: 'ለ', right: 'ሎሚ' },
+          { left: 'መ', right: 'መርከብ' },
+        ];
+      }
+    }
 
     return (
       <InteractiveMatchingPlayer
@@ -653,15 +788,17 @@ function ActivityStage({
 
   // Counting Activity
   if (activityType === 'counting') {
-    const targetCount = Number(config.targetCount || config.count || 5);
-    const itemEmoji = config.itemEmoji || '🍎';
-    const options = [targetCount - 1, targetCount, targetCount + 2, targetCount + 1].sort(
+    const targetCount = Number(config.targetCount || config.count || config.target_count || 4);
+    const itemEmoji = config.itemEmoji || config.emoji || '🍎';
+    const safeCount = targetCount > 0 ? targetCount : 4;
+    const rawOptions = (config.options || []).map((o) => Number(o)).filter((n) => !isNaN(n));
+    const options = rawOptions.length >= 2 ? rawOptions : [safeCount - 1, safeCount, safeCount + 2, safeCount + 1].sort(
       () => Math.random() - 0.5
     );
 
     return (
       <InteractiveCountingPlayer
-        targetCount={targetCount}
+        targetCount={safeCount}
         itemEmoji={itemEmoji}
         options={options}
         activityId={resource.resource_id}
@@ -672,13 +809,14 @@ function ActivityStage({
     );
   }
 
-  // Generic Practice View
+  // Generic Practice Fallback
   return (
     <div className="mx-auto max-w-lg rounded-3xl border-2 border-indigo-100 bg-indigo-50/50 p-8 text-center space-y-4">
       <span className="text-5xl block animate-bounce">🎯</span>
       <h3 className="text-xl font-black text-slate-900">{resource.title}</h3>
       <p className="text-sm font-semibold text-slate-600 leading-relaxed">{instructions}</p>
       <button
+        type="button"
         onClick={() => {
           playSoundEffect('success');
           if (onDone) onDone();
@@ -692,15 +830,185 @@ function ActivityStage({
 }
 
 // ----------------------------------------------------------------------------
+// INTERACTIVE ORDERING COMPONENT (Put in Order / Drag & Drop)
+// ----------------------------------------------------------------------------
+function InteractiveOrderingPlayer({ items = [], correctOrder = [], activityId, maxScore, playSoundEffect, onDone }) {
+  const [available, setAvailable] = useState(() => {
+    const list = items.map((text, idx) => ({ id: `order-${idx}-${text}`, text }));
+    // Shuffle if more than 1 item
+    return [...list].sort(() => Math.random() - 0.5);
+  });
+  const [placed, setPlaced] = useState([]);
+  const [feedback, setFeedback] = useState(null);
+  const [isCompleted, setIsCompleted] = useState(false);
+
+  const handlePlace = (item) => {
+    if (isCompleted) return;
+    setFeedback(null);
+    const nextPlaced = [...placed, item];
+    const nextAvail = available.filter((x) => x.id !== item.id);
+    setPlaced(nextPlaced);
+    setAvailable(nextAvail);
+
+    if (nextPlaced.length === items.length) {
+      const placedTexts = nextPlaced.map((x) => String(x.text).trim().toLowerCase());
+      const targetTexts = correctOrder.map((x) => String(x).trim().toLowerCase());
+      const isCorrect = placedTexts.every((txt, i) => txt === targetTexts[i]);
+
+      if (isCorrect) {
+        playSoundEffect('success');
+        setIsCompleted(true);
+        setFeedback({
+          correct: true,
+          message: '🌟 Fantastic! You put everything in perfect order! 🎉',
+        });
+        if (onDone) onDone();
+        try {
+          axiosClient.post(`/child/activities/${activityId}/submit`, {
+            submission_text: JSON.stringify({ completed: true, order: placedTexts }),
+            score: maxScore,
+            auto_graded: true,
+          });
+        } catch {
+          // silent
+        }
+      } else {
+        playSoundEffect('error');
+        setFeedback({
+          correct: false,
+          message: '🤔 Not quite in the right order yet. Tap an item in the slot to return it, or click Reset!',
+        });
+      }
+    }
+  };
+
+  const handleRemove = (item) => {
+    if (isCompleted) return;
+    setFeedback(null);
+    setPlaced(placed.filter((x) => x.id !== item.id));
+    setAvailable([...available, item]);
+  };
+
+  const handleReset = () => {
+    if (isCompleted) return;
+    setPlaced([]);
+    setAvailable([...items.map((text, idx) => ({ id: `order-${idx}-${text}`, text }))].sort(() => Math.random() - 0.5));
+    setFeedback(null);
+  };
+
+  const totalSlots = items.length;
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="text-center space-y-1">
+        <p className="text-base font-black text-slate-800">
+          Tap the pieces below in the correct order:
+        </p>
+        <p className="text-xs font-semibold text-slate-500">
+          (Tap a placed piece in any slot if you want to put it back)
+        </p>
+      </div>
+
+      {/* Target Slots */}
+      <div className="bg-amber-50/70 border-2 border-amber-200/90 rounded-3xl p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {Array.from({ length: totalSlots }).map((_, slotIdx) => {
+            const placedItem = placed[slotIdx];
+            return (
+              <div key={slotIdx} className="flex flex-col items-center">
+                <span className="text-[11px] font-black text-amber-800/70 mb-1">
+                  #{slotIdx + 1}
+                </span>
+                {placedItem ? (
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(placedItem)}
+                    disabled={isCompleted}
+                    className={`h-16 min-w-16 px-4 rounded-2xl font-black text-2xl flex items-center justify-center transition shadow-md active:scale-95 ${
+                      isCompleted
+                        ? 'bg-emerald-500 text-white border-2 border-emerald-400'
+                        : 'bg-white text-indigo-900 border-2 border-indigo-400 hover:border-rose-400 hover:bg-rose-50'
+                    }`}
+                    title="Tap to remove"
+                  >
+                    {placedItem.text}
+                  </button>
+                ) : (
+                  <div className="h-16 min-w-16 px-4 rounded-2xl border-2 border-dashed border-amber-300 bg-white/60 flex items-center justify-center text-amber-500 font-bold text-sm">
+                    Slot {slotIdx + 1}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Available choices to tap */}
+      <div>
+        <div className="flex items-center justify-between mb-2 px-1">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+            Available pieces ({available.length} remaining):
+          </span>
+          {placed.length > 0 && !isCompleted && (
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 underline"
+            >
+              ↺ Reset Pieces
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 min-h-24">
+          {available.length === 0 && !isCompleted && (
+            <span className="text-xs font-bold text-slate-400">All pieces placed! Checking order...</span>
+          )}
+          {available.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => handlePlace(item)}
+              disabled={isCompleted}
+              className="h-16 min-w-16 px-4 rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/70 text-slate-900 font-black text-2xl shadow-sm transition active:scale-95"
+            >
+              {item.text}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Feedback banner */}
+      {feedback && (
+        <div
+          className={`rounded-2xl p-4 text-center font-black text-base shadow-sm animate-fade-in ${
+            feedback.correct
+              ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
+              : 'bg-rose-100 text-rose-950 border border-rose-300'
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // INTERACTIVE MATCHING COMPONENT
 // ----------------------------------------------------------------------------
-function InteractiveMatchingPlayer({ pairs, activityId, maxScore, playSoundEffect, onDone }) {
+function InteractiveMatchingPlayer({ pairs = [], activityId, maxScore, playSoundEffect, onDone }) {
   const [selectedLeft, setSelectedLeft] = useState(null);
   const [matched, setMatched] = useState(new Set());
   const [feedback, setFeedback] = useState(null);
 
   const leftItems = pairs.map((p, idx) => ({ id: idx, text: p.left || p.character || p.source }));
-  const rightItems = pairs.map((p, idx) => ({ id: idx, text: p.right || p.target || p.word }));
+  // Shuffled right column so it's a real puzzle
+  const [rightItems] = useState(() => {
+    const list = pairs.map((p, idx) => ({ id: idx, text: p.right || p.target || p.word }));
+    return [...list].sort(() => Math.random() - 0.5);
+  });
 
   const handleSelectLeft = (id) => {
     if (matched.has(id)) return;

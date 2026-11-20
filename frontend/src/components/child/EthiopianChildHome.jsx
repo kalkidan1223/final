@@ -20,13 +20,22 @@ export default function EthiopianChildHome({ data, loading, error, onRetry }) {
   const firstName = child.full_name?.split(' ')[0] || 'friend';
 
   useEffect(() => {
-    if (child.full_name) voice.speakOnce(`home-greet-${child.full_name}`, [
+    if (!child.full_name) return;
+    const sessionGreetingKey = `brana_greeted_${child.id || child.full_name}`;
+    if (typeof window !== 'undefined') {
+      if (sessionStorage.getItem(sessionGreetingKey)) {
+        return; // Already welcomed this child during this login session
+      }
+      sessionStorage.setItem(sessionGreetingKey, 'true');
+    }
+
+    voice.speak([
       { text: greeting.amharic, lang: 'am' },
-      { text: child.full_name, lang: 'am' },
+      { text: firstName || child.full_name, lang: 'am' },
     ]);
-    // Speak once when a new child profile is loaded.
+    // Speak once per login session
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [child.full_name]);
+  }, [child.full_name, child.id]);
 
   if (loading) {
     return (

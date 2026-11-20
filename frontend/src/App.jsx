@@ -9,6 +9,7 @@ import SignupInstructor from './pages/SignupInstructor';
 import GoogleRoleSelection from './pages/GoogleRoleSelection';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
+import VerifyEmail from './pages/auth/VerifyEmail';
 import OAuthCallback from './pages/auth/OAuthCallback';
 import Unauthorized from './pages/Unauthorized';
 import Home from './pages/Home';
@@ -116,6 +117,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       {/* Sign up flow */}
       <Route path="/signup" element={<Signup />} />
       <Route path="/signup/parent" element={<RegisterParent />} />

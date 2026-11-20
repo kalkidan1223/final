@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DateOfBirthField from '../components/DateOfBirthField';
@@ -291,9 +291,27 @@ export default function RegisterParent() {
               {submitted ? (
                 <div className="text-center py-10 slide-up">
                   <div className="text-6xl mb-4">📬</div>
-                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Registration Submitted!</h2>
-                  <p className="text-slate-600 mb-6">Your parent account is now pending administrator approval. You will be able to log in once an admin reviews and approves your registration.</p>
-                  <Link to="/login" className="inline-block rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-8 py-3 font-bold text-white shadow-lg transition hover:scale-105">Go to Login</Link>
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Check Your Email to Verify!</h2>
+                  <p className="text-slate-600 mb-2 max-w-md mx-auto">
+                    We've sent a verification link and confirmation code to <strong>{form.email}</strong>.
+                  </p>
+                  <p className="text-slate-500 text-sm mb-6 max-w-md mx-auto">
+                    Please verify your email address to complete your registration. Once verified, your application will be submitted to the administrator for review and approval.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Link
+                      to={`/verify-email?email=${encodeURIComponent(form.email)}`}
+                      className="rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-6 py-3 font-bold text-white shadow-lg transition hover:scale-105"
+                    >
+                      Enter Verification Code →
+                    </Link>
+                    <Link
+                      to="/login"
+                      className="rounded-2xl bg-slate-100 px-6 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition"
+                    >
+                      Go to Login
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <>

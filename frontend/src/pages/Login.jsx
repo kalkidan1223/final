@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_HOME } from '../utils/roles';
@@ -46,12 +46,17 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const errorParam = searchParams.get('error');
     const messageParam = searchParams.get('message');
-    if (errorParam) {
+    const statusParam = searchParams.get('status');
+    if (statusParam === 'pending') {
+      setErrorCode('PENDING_APPROVAL');
+      setError('Your account is pending administrator approval. You will receive an email once approved.');
+    } else if (errorParam) {
       if (errorParam === 'google_auth_failed') {
         setError('Google authentication failed. Please try again.');
       } else {
@@ -65,16 +70,16 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setErrorCode('');
     setSubmitting(true);
     try {
       const loggedInUser = await login(email, password);
       navigate(ROLE_HOME[loggedInUser.role] || '/');
     } catch (err) {
+      const code = err.response?.data?.code || '';
       const msg = err.response?.data?.error || 'Something went wrong. Please try again.';
+      setErrorCode(code);
       setError(msg);
-      if (err.response?.data?.code === 'PENDING_APPROVAL') {
-        setError('Your account is pending administrator approval. Please wait for confirmation.');
-      }
     } finally {
       setSubmitting(false);
     }
@@ -158,12 +163,42 @@ export default function Login() {
             </div>
 
             <div className="rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl p-8 md:p-10 shadow-2xl border border-white/30 dark:border-slate-800 slide-up-delay-1">
-              {error && (
+              {errorCode === 'PENDING_APPROVAL' ? (
+                <div className="mb-6 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-5 text-sm text-amber-900 dark:text-amber-200">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl flex-shrink-0">⏳</span>
+                    <div>
+                      <h3 className="font-bold text-base mb-1">Awaiting Administrator Approval</h3>
+                      <p className="text-amber-800 dark:text-amber-300 text-xs leading-relaxed">
+                        Your registration has been submitted and verified. It is currently under review by the administrator. You will receive an email notification as soon as your account is approved.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : errorCode === 'EMAIL_NOT_VERIFIED' ? (
+                <div className="mb-6 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-5 text-sm text-blue-900 dark:text-blue-200">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl flex-shrink-0">✉️</span>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-base mb-1">Email Verification Required</h3>
+                      <p className="text-blue-800 dark:text-blue-300 text-xs leading-relaxed mb-3">
+                        Please verify your email address to complete your registration.
+                      </p>
+                      <Link
+                        to={`/verify-email?email=${encodeURIComponent(email)}`}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl px-4 py-2 shadow transition"
+                      >
+                        Enter Verification Code →
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ) : error ? (
                 <div className="mb-5 rounded-2xl bg-red-50 border border-red-200 p-4 text-sm text-red-600 flex items-start gap-3">
                   <span className="text-xl mt-0.5">⚠️</span>
                   <span>{error}</span>
                 </div>
-              )}
+              ) : null}
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>

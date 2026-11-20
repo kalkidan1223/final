@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axiosClient from '../api/axiosClient';
@@ -209,17 +209,27 @@ export default function SignupInstructor() {
               {submitted ? (
                 <div className="text-center py-10">
                   <div className="text-6xl mb-4">📬</div>
-                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Application Submitted!</h2>
-                  <p className="text-slate-500 mb-6 max-w-sm mx-auto">
-                    Your instructor account is pending administrator review. You will receive access
-                    once an admin approves your application.
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Check Your Email to Verify!</h2>
+                  <p className="text-slate-600 mb-2 max-w-sm mx-auto">
+                    We've sent a verification link and confirmation code to <strong>{form.email}</strong>.
                   </p>
-                  <Link
-                    to="/login"
-                    className="inline-block rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-3 font-bold text-white shadow-lg hover:scale-105 transition-transform"
-                  >
-                    Go to Login
-                  </Link>
+                  <p className="text-slate-500 text-sm mb-6 max-w-sm mx-auto">
+                    Please verify your email address to complete your application. Once verified, it will be reviewed by an administrator.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Link
+                      to={`/verify-email?email=${encodeURIComponent(form.email)}`}
+                      className="inline-block rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-3 font-bold text-white shadow-lg hover:scale-105 transition-transform"
+                    >
+                      Enter Verification Code →
+                    </Link>
+                    <Link
+                      to="/login"
+                      className="inline-block rounded-2xl bg-slate-100 px-6 py-3 font-semibold text-slate-700 hover:bg-slate-200 transition"
+                    >
+                      Go to Login
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-5">

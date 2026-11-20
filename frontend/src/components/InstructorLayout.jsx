@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -12,52 +12,43 @@ import {
 import axiosClient from '../api/axiosClient';
 import ThemeToggle from './ThemeToggle';
 
-const NAV_GROUPS = [
-  {
-    title: 'Overview',
-    items: [
-      { label: 'Dashboard', to: '/instructor/dashboard', icon: MdDashboard, end: true },
-    ]
-  },
-  {
-    title: 'Teaching & Content',
-    items: [
-      { label: 'My Subject Assignments', to: '/instructor/subjects', icon: MdMenuBook },
-      { label: 'Lessons', to: '/instructor/lessons', icon: MdAutoStories },
-      { label: 'Fidel Family Lessons', to: '/instructor/fidel-lessons', icon: MdTranslate },
-      { label: 'Materials', to: '/instructor/materials', icon: MdLibraryBooks },
-      { label: 'Activities', to: '/instructor/activities', icon: MdExtension },
-      { label: 'Quizzes', to: '/instructor/quizzes', icon: MdQuiz },
-    ]
-  },
-  {
-    title: 'Students & Grading',
-    items: [
-      { label: 'Student Questions', to: '/instructor/questions', icon: MdQuestionAnswer },
-      { label: 'Submissions', to: '/instructor/submissions', icon: MdGrading, hasBadge: true },
-      { label: 'Student Progress', to: '/instructor/progress', icon: MdTrendingUp },
-      { label: 'Results & Analytics', to: '/instructor/results', icon: MdSchool },
-      { label: 'My Students', to: '/instructor/students', icon: MdPeople },
-    ]
-  },
-  {
-    title: 'Kids Learning Hub',
-    items: [
-      { label: 'Child Home (Preview)', to: '/instructor/child-home', icon: MdChildCare },
-      { label: 'Vocabulary Bank', to: '/instructor/vocabulary', icon: MdTranslate },
-    ]
-  },
-  {
-    title: 'Account',
-    items: [
-      { label: 'Messages', to: '/instructor/messages', icon: MdMessage },
-      { label: 'Notifications', to: '/instructor/notifications', icon: MdNotifications },
-      { label: 'Profile', to: '/instructor/profile', icon: MdPerson },
-    ]
-  }
-];
+function getNavGroups() {
+  return [
+    {
+      title: 'Teaching Center',
+      items: [
+        { label: 'Dashboard', to: '/instructor/dashboard', icon: MdDashboard, end: true },
+        { label: 'My Courses', to: '/instructor/courses', icon: MdMenuBook },
+        { label: 'Lessons', to: '/instructor/lessons', icon: MdAutoStories },
+      ]
+    },
+    {
+      title: 'Learning Content',
+      items: [
+        { label: 'Materials & Files', to: '/instructor/materials', icon: MdLibraryBooks },
+        { label: 'Activities & Practice', to: '/instructor/activities', icon: MdExtension },
+        { label: 'Quizzes & Checks', to: '/instructor/quizzes', icon: MdQuiz },
+      ]
+    },
+    {
+      title: 'Students & Grading',
+      items: [
+        { label: 'Submissions', to: '/instructor/submissions', icon: MdGrading, hasBadge: true },
+        { label: 'Student Progress', to: '/instructor/progress', icon: MdTrendingUp },
+        { label: 'Student Questions', to: '/instructor/questions', icon: MdQuestionAnswer },
+        { label: 'My Students', to: '/instructor/students', icon: MdPeople },
+      ]
+    },
+    {
+      title: 'Preview',
+      items: [
+        { label: 'Child Portal Preview', to: '/instructor/child-home', icon: MdChildCare },
+      ]
+    }
+  ];
+}
 
-export const NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items);
+export const NAV_ITEMS = getNavGroups().flatMap(g => g.items);
 
 function NavItem({ item, active, onClick, badgeCount }) {
   return (
@@ -83,6 +74,7 @@ function NavItem({ item, active, onClick, badgeCount }) {
 }
 
 function Sidebar({ open, onClose, pendingCount }) {
+  const navGroups = getNavGroups();
   const location = useLocation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -141,7 +133,7 @@ function Sidebar({ open, onClose, pendingCount }) {
 
         {/* Nav groups */}
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-          {NAV_GROUPS.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.title} className="space-y-1">
               <div className="px-3 text-[11px] font-bold text-slate-400 tracking-wider uppercase">
                 {group.title}
@@ -187,6 +179,20 @@ export default function InstructorLayout({ children }) {
 
   useEffect(() => {
     let mounted = true;
+    // Check if instructor teaches Amharic
+    axiosClient.get('/instructor/courses')
+      .then(res => {
+        if (mounted) {
+          const list = res.data.courses || [];
+          const hasAmharic = list.some(c => 
+            String(c.subject_name || c.course_title || '').toLowerCase().includes('amharic') ||
+            String(c.subject_code || '').toUpperCase() === 'AMH'
+          );
+          setTeachesAmharic(hasAmharic);
+        }
+      })
+      .catch(() => {});
+
     axiosClient.get('/instructor/submissions?status=pending')
       .then(res => {
         if (mounted) setPendingCount(res.data.submissions?.length || 0);

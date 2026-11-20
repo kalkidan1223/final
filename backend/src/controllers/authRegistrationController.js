@@ -1,5 +1,9 @@
-﻿const bcrypt = require('bcrypt');
-const { sendPasswordResetEmail } = require('../services/emailService');
+const bcrypt = require('bcrypt');
+const {
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+  sendRegistrationPendingEmail,
+} = require('../services/emailService');
 const crypto = require('crypto');
 const { pool, query } = require('../config/db');
 const { isValidEmail, isValidPassword, validateRegisterParent, validateLogin } = require('../utils/validators');
@@ -140,8 +144,8 @@ async function registerParent(req, res, next) {
 
         // Create registration request
         const regResult = await client.query(
-          `INSERT INTO registration_requests (user_id, full_name, email, phone, status)
-           VALUES ($1, $2, $3, $4, 'pending')
+          `INSERT INTO registration_requests (user_id, full_name, email, phone, status, email_verified)
+           VALUES ($1, $2, $3, $4, 'pending', TRUE)
            RETURNING id, full_name, email, phone, status`,
           [userId, full_name, email.toLowerCase(), phone]
         );
@@ -157,21 +161,32 @@ async function registerParent(req, res, next) {
         }
 
         await client.query('COMMIT');
+
+        // Send registration pending notification
+        sendRegistrationPendingEmail({ email: email.toLowerCase(), full_name, role: 'parent' }).catch(e => {
+          console.error('Failed to send registration pending email:', e);
+        });
+
         res.status(201).json({
           message: 'Registration submitted successfully. Your account is now pending administrator approval.',
           registration_id: regResult.rows[0].id,
           status: 'pending',
+          email_verified: true,
         });
       } else {
-        // New user - create registration request
+        // New user - generate verification token and 6-digit code
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationExpiry = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_EXPIRY_MS);
+
         const result = await client.query(
           `INSERT INTO registration_requests (
             full_name, email, password_hash, phone, alt_phone, date_of_birth, gender,
             nationality, occupation, relationship_to_child, national_id, profile_image_url,
             country, region, city, sub_city, woreda, house_number, postal_code,
             emergency_contact_name, emergency_contact_relationship, emergency_contact_phone,
-            terms_agreed, guardian_confirmed, status
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending')
+            terms_agreed, guardian_confirmed, status, email_verified
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending', FALSE)
           RETURNING id, full_name, email, phone, status`,
           [
             full_name, email.toLowerCase(), passwordHash, phone, alt_phone || null,
@@ -181,6 +196,12 @@ async function registerParent(req, res, next) {
             emName, emRel, emPhone,
             terms_agreed, guardian_confirmed,
           ]
+        );
+
+        await client.query(
+          `INSERT INTO email_verification_tokens (email, token, code, expires_at)
+           VALUES ($1, $2, $3, $4)`,
+          [email.toLowerCase(), verificationToken, verificationCode, verificationExpiry]
         );
 
         await client.query(
@@ -202,9 +223,22 @@ async function registerParent(req, res, next) {
         }
 
         await client.query('COMMIT');
+
+        // Send verification email to parent
+        sendVerificationEmail({
+          email: email.toLowerCase(),
+          full_name,
+          token: verificationToken,
+          code: verificationCode,
+        }).catch(e => {
+          console.error('Failed to send verification email:', e);
+        });
+
         res.status(201).json({
-          message: 'Registration submitted successfully. Your account is now pending administrator approval.',
+          message: 'Registration received! Please check your email to verify your email address.',
           registration_id: result.rows[0].id,
+          requires_email_verification: true,
+          email: email.toLowerCase(),
           status: 'pending',
         });
       }
@@ -359,16 +393,23 @@ async function resetPassword(req, res, next) {
 async function sendVerificationToken(req, res, next) {
   try {
     const user = req.user;
-    const token = uuidv4();
+    const token = crypto.randomBytes(32).toString('hex');
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_EXPIRY_MS);
 
     await query(
-      'INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
-      [user.id, token, expiresAt]
+      'INSERT INTO email_verification_tokens (user_id, email, token, code, expires_at) VALUES ($1, $2, $3, $4, $5)',
+      [user.id, user.email, token, code, expiresAt]
     );
 
-    // In production, send email with verification link
-    res.json({ message: 'Verification email sent', verification_token: token }); // Remove token in production
+    sendVerificationEmail({
+      email: user.email,
+      full_name: user.full_name,
+      token,
+      code,
+    }).catch(err => console.error('Failed to send verification email:', err));
+
+    res.json({ message: 'Verification email sent. Please check your inbox.' });
   } catch (err) {
     next(err);
   }
@@ -376,22 +417,176 @@ async function sendVerificationToken(req, res, next) {
 
 async function verifyEmail(req, res, next) {
   try {
-    const { token } = req.body;
-    const result = await query(
-      'SELECT * FROM email_verification_tokens WHERE token = $1 AND used = FALSE AND expires_at > now()',
-      [token]
-    );
+    const token = req.body?.token || req.query?.token || (req.body?.token_or_code && req.body.token_or_code.length > 10 ? req.body.token_or_code : null);
+    const code = req.body?.code || (req.body?.token_or_code && req.body.token_or_code.length <= 10 ? req.body.token_or_code : null);
+    const email = req.body?.email ? String(req.body.email).toLowerCase().trim() : null;
 
-    if (result.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired verification token' });
+    if (!token && !code) {
+      return res.status(400).json({ error: 'Verification token or code is required' });
     }
 
-    const record = result.rows[0];
-    await query('UPDATE users SET is_active = TRUE WHERE id = $1', [record.user_id]);
-    await query('UPDATE email_verification_tokens SET verified = TRUE WHERE id = $1', [record.id]);
-    await logAudit(null, record.user_id, 'EMAIL_VERIFIED', 'user', record.user_id, null, {});
+    let tokenResult;
+    if (token) {
+      tokenResult = await query(
+        `SELECT * FROM email_verification_tokens 
+         WHERE token = $1 AND verified = FALSE AND expires_at > now() 
+         ORDER BY created_at DESC LIMIT 1`,
+        [token.trim()]
+      );
+    } else if (code) {
+      const params = [code.trim()];
+      let whereClause = 'code = $1 AND verified = FALSE AND expires_at > now()';
+      if (email) {
+        params.push(email);
+        whereClause += ' AND LOWER(email) = LOWER($2)';
+      }
+      tokenResult = await query(
+        `SELECT * FROM email_verification_tokens 
+         WHERE ${whereClause}
+         ORDER BY created_at DESC LIMIT 1`,
+        params
+      );
+    }
 
-    res.json({ message: 'Email verified successfully' });
+    if (!tokenResult || tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired verification link or code. Please check your code or request a new one.' });
+    }
+
+    const record = tokenResult.rows[0];
+    const targetEmail = (record.email || '').toLowerCase().trim();
+
+    // Mark token verified
+    await query('UPDATE email_verification_tokens SET verified = TRUE WHERE id = $1', [record.id]);
+
+    let applicantName = 'User';
+    let applicantRole = 'user';
+
+    // Update parent registration if exists
+    const parentReg = await query(
+      `UPDATE registration_requests 
+       SET email_verified = TRUE 
+       WHERE LOWER(email) = $1 
+       RETURNING id, full_name, status`,
+      [targetEmail]
+    );
+    if (parentReg.rows.length > 0) {
+      applicantName = parentReg.rows[0].full_name;
+      applicantRole = 'parent';
+    }
+
+    // Update instructor registration if exists
+    const instReg = await query(
+      `UPDATE instructor_registration_requests 
+       SET email_verified = TRUE 
+       WHERE LOWER(email) = $1 
+       RETURNING id, full_name, status`,
+      [targetEmail]
+    );
+    if (instReg.rows.length > 0) {
+      applicantName = instReg.rows[0].full_name;
+      applicantRole = 'instructor';
+    }
+
+    // Update users table if user exists
+    if (record.user_id) {
+      const userRes = await query(
+        `UPDATE users 
+         SET email_verified = TRUE 
+         WHERE id = $1 
+         RETURNING id, full_name, role`,
+        [record.user_id]
+      );
+      if (userRes.rows.length > 0) {
+        applicantName = userRes.rows[0].full_name || applicantName;
+        applicantRole = userRes.rows[0].role || applicantRole;
+      }
+    } else if (targetEmail) {
+      await query(
+        `UPDATE users 
+         SET email_verified = TRUE 
+         WHERE LOWER(email) = $1`,
+        [targetEmail]
+      );
+    }
+
+    await logAudit(null, record.user_id || null, 'EMAIL_VERIFIED', 'email_verification', record.id, null, { email: targetEmail });
+
+    // Send the notification confirming email is verified and registration is pending administrator approval
+    sendRegistrationPendingEmail({
+      email: targetEmail,
+      full_name: applicantName,
+      role: applicantRole,
+    }).catch(err => {
+      console.error('Failed to send registration pending email:', err);
+    });
+
+    res.json({
+      message: 'Email verified successfully! Your registration is submitted and pending administrator approval. You will receive an email once approved.',
+      email: targetEmail,
+      email_verified: true,
+      status: 'pending',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resendVerificationToken(req, res, next) {
+  try {
+    const email = req.body?.email ? String(req.body.email).toLowerCase().trim() : null;
+    if (!email) {
+      return res.status(400).json({ error: 'Email address is required' });
+    }
+
+    const parentReq = await query('SELECT full_name, email_verified FROM registration_requests WHERE LOWER(email) = $1', [email]);
+    const instReq = await query('SELECT full_name, email_verified FROM instructor_registration_requests WHERE LOWER(email) = $1', [email]);
+    const userReq = await query('SELECT full_name, email_verified FROM users WHERE LOWER(email) = $1', [email]);
+
+    let fullName = 'User';
+    let found = false;
+
+    if (parentReq.rows.length > 0) {
+      fullName = parentReq.rows[0].full_name;
+      found = true;
+      if (parentReq.rows[0].email_verified) {
+        return res.json({ message: 'Your email has already been verified and your registration is awaiting administrator approval.' });
+      }
+    } else if (instReq.rows.length > 0) {
+      fullName = instReq.rows[0].full_name;
+      found = true;
+      if (instReq.rows[0].email_verified) {
+        return res.json({ message: 'Your email has already been verified and your application is awaiting administrator approval.' });
+      }
+    } else if (userReq.rows.length > 0) {
+      fullName = userReq.rows[0].full_name;
+      found = true;
+      if (userReq.rows[0].email_verified) {
+        return res.json({ message: 'Your email has already been verified.' });
+      }
+    }
+
+    if (!found) {
+      return res.json({ message: 'If a matching pending registration exists, a verification link has been sent to your inbox.' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_EXPIRY_MS);
+
+    await query(
+      `INSERT INTO email_verification_tokens (email, token, code, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [email, token, code, expiresAt]
+    );
+
+    sendVerificationEmail({
+      email,
+      full_name: fullName,
+      token,
+      code,
+    }).catch(err => console.error('Failed to send verification email:', err));
+
+    res.json({ message: 'A new verification email has been sent. Please check your inbox.' });
   } catch (err) {
     next(err);
   }
@@ -457,11 +652,10 @@ async function registerInstructor(req, res, next) {
           ]
         );
 
-        // Create registration request (no user_id col; password_hash NOT NULL so use placeholder for Google)
-        // ON CONFLICT DO UPDATE handles re-registration via Google
+        // Create registration request
         const regResult = await client.query(
-          `INSERT INTO instructor_registration_requests (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+          `INSERT INTO instructor_registration_requests (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status, email_verified)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', TRUE)
            ON CONFLICT (email) DO UPDATE SET
              full_name = EXCLUDED.full_name, phone = EXCLUDED.phone,
              specialization = EXCLUDED.specialization, education_level = EXCLUDED.education_level,
@@ -489,17 +683,28 @@ async function registerInstructor(req, res, next) {
         }
 
         await client.query('COMMIT');
+
+        // Send registration pending email
+        sendRegistrationPendingEmail({ email: email.toLowerCase(), full_name: full_name.trim(), role: 'instructor' }).catch(e => {
+          console.error('Failed to send instructor registration pending email:', e);
+        });
+
         res.status(201).json({
           message: 'Instructor application submitted. Your account is pending administrator review.',
           registration_id: regResult.rows[0].id,
           status: 'pending',
+          email_verified: true,
         });
       } else {
-        // New user - create registration request
+        // New user - generate verification token and 6-digit code
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationExpiry = new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_EXPIRY_MS);
+
         result = await client.query(
           `INSERT INTO instructor_registration_requests
-             (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
+             (full_name, email, password_hash, phone, specialization, education_level, years_of_experience, bio, terms_agreed, status, email_verified)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending', FALSE)
            RETURNING id, full_name, email, status`,
           [
             full_name.trim(), email.toLowerCase(), passwordHash, phone,
@@ -507,6 +712,12 @@ async function registerInstructor(req, res, next) {
             years_of_experience ? parseInt(years_of_experience, 10) : null,
             bio || null, terms_agreed,
           ]
+        );
+
+        await client.query(
+          `INSERT INTO email_verification_tokens (email, token, code, expires_at)
+           VALUES ($1, $2, $3, $4)`,
+          [email.toLowerCase(), verificationToken, verificationCode, verificationExpiry]
         );
 
         await client.query(
@@ -527,9 +738,22 @@ async function registerInstructor(req, res, next) {
         }
 
         await client.query('COMMIT');
+
+        // Send verification email to instructor
+        sendVerificationEmail({
+          email: email.toLowerCase(),
+          full_name: full_name.trim(),
+          token: verificationToken,
+          code: verificationCode,
+        }).catch(e => {
+          console.error('Failed to send instructor verification email:', e);
+        });
+
         res.status(201).json({
-          message: 'Instructor application submitted. Your account is pending administrator review.',
+          message: 'Instructor application received! Please check your email to verify your email address.',
           registration_id: result.rows[0].id,
+          requires_email_verification: true,
+          email: email.toLowerCase(),
           status: 'pending',
         });
       }
@@ -555,5 +779,6 @@ module.exports = {
   resetPassword,
   sendVerificationToken,
   verifyEmail,
+  resendVerificationToken,
   logAudit,
 };
