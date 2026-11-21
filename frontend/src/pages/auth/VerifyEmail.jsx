@@ -13,29 +13,60 @@ export default function VerifyEmail() {
   const [email, setEmail] = useState(emailParam);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
   const [autoVerifying, setAutoVerifying] = useState(false);
   const [success, setSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [alreadyVerified, setAlreadyVerified] = useState(false);
+  const [pendingInfo, setPendingInfo] = useState(null);
   const [error, setError] = useState('');
   const [resendStatus, setResendStatus] = useState('');
   const [resending, setResending] = useState(false);
 
-  // Auto-verify if token is provided in query params (clicked link in email)
+  // Check registration status if emailParam is provided on load
   useEffect(() => {
     if (tokenParam) {
       handleAutoVerify(tokenParam);
+    } else if (emailParam) {
+      checkEmailStatus(emailParam);
     }
-  }, [tokenParam]);
+  }, [tokenParam, emailParam]);
+
+  async function checkEmailStatus(targetEmail) {
+    if (!targetEmail || !targetEmail.includes('@')) return;
+    setCheckingStatus(true);
+    try {
+      const res = await axiosClient.get(`/auth/registration-status?email=${encodeURIComponent(targetEmail.trim())}`);
+      if (res.data?.email_verified) {
+        setAlreadyVerified(true);
+        setPendingInfo(res.data);
+      }
+    } catch {
+      // Ignore background check failure
+    } finally {
+      setCheckingStatus(false);
+    }
+  }
 
   async function handleAutoVerify(token) {
     setAutoVerifying(true);
     setError('');
     try {
       const res = await axiosClient.post('/auth/verify-email/confirm', { token });
-      setSuccess(true);
-      setSuccessMessage(res.data?.message || 'Email verified successfully! Your account is now pending administrator review.');
+      if (res.data?.already_verified) {
+        setAlreadyVerified(true);
+        setPendingInfo(res.data);
+      } else {
+        setSuccess(true);
+        setSuccessMessage(res.data?.message || 'Email verified successfully! Your account is now pending administrator review.');
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Verification link is invalid or has expired. Please enter your code or request a new one.');
+      if (err.response?.data?.already_verified) {
+        setAlreadyVerified(true);
+        setPendingInfo(err.response.data);
+      } else {
+        setError(err.response?.data?.error || 'Verification link is invalid or has expired. Please enter your code or request a new one.');
+      }
     } finally {
       setAutoVerifying(false);
     }
@@ -54,10 +85,20 @@ export default function VerifyEmail() {
         code: code.trim(),
         email: email ? email.trim() : undefined,
       });
-      setSuccess(true);
-      setSuccessMessage(res.data?.message || 'Email verified successfully! Your registration is now pending administrator approval.');
+      if (res.data?.already_verified) {
+        setAlreadyVerified(true);
+        setPendingInfo(res.data);
+      } else {
+        setSuccess(true);
+        setSuccessMessage(res.data?.message || 'Email verified successfully! Your registration is now pending administrator approval.');
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Invalid or expired verification code.');
+      if (err.response?.data?.already_verified) {
+        setAlreadyVerified(true);
+        setPendingInfo(err.response.data);
+      } else {
+        setError(err.response?.data?.error || 'Invalid or expired verification code.');
+      }
     } finally {
       setLoading(false);
     }
@@ -73,7 +114,12 @@ export default function VerifyEmail() {
     setError('');
     try {
       const res = await axiosClient.post('/auth/verify-email/resend', { email: email.trim() });
-      setResendStatus(res.data?.message || 'A new verification email has been sent. Please check your inbox.');
+      if (res.data?.already_verified || res.data?.email_verified) {
+        setAlreadyVerified(true);
+        setPendingInfo(res.data);
+      } else {
+        setResendStatus(res.data?.message || 'A new verification email has been sent. Please check your inbox.');
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to resend verification email.');
     } finally {
@@ -111,24 +157,86 @@ export default function VerifyEmail() {
 
       {/* Main card */}
       <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-lg">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/10 border border-white/20 text-3xl mb-4 backdrop-blur-md shadow-inner">
-              ✉️
+              {alreadyVerified ? '⏳' : success ? '🎉' : '✉️'}
             </div>
-            <h1 className="text-3xl font-extrabold text-white mb-2">Verify Your Email</h1>
+            <h1 className="text-3xl font-extrabold text-white mb-2">
+              {alreadyVerified
+                ? 'Registration Submitted!'
+                : success
+                ? 'Email Verified!'
+                : 'Verify Your Email'}
+            </h1>
             <p className="text-indigo-200 text-sm">
-              Confirm your email address to complete your registration
+              {alreadyVerified
+                ? 'Your email is verified and your account is awaiting administrator review'
+                : success
+                ? 'Your email address has been confirmed'
+                : 'Confirm your email address to complete your registration'}
             </p>
           </div>
 
           <div className="rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl p-8 shadow-2xl border border-white/30 dark:border-slate-800">
-            {autoVerifying ? (
+            {autoVerifying || checkingStatus ? (
               <div className="text-center py-10">
                 <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mb-4" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Verifying your email...</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Please hold on while we validate your link.</p>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Checking verification status...</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Please hold on while we validate your account.</p>
+              </div>
+            ) : alreadyVerified ? (
+              /* Dedicated Pending Admin Approval Screen - NO verification code required! */
+              <div className="text-center py-2 space-y-5">
+                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-4 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                  <span>✅</span>
+                  <span>Email Verified Successfully</span>
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-5 text-left border border-slate-200 dark:border-slate-700 space-y-3">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Hello {pendingInfo?.full_name || 'Friend'}! 👋
+                  </h3>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                    Your email address (<strong>{email || pendingInfo?.email}</strong>) has been <strong>verified successfully</strong>.
+                  </p>
+                  <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-900 dark:text-amber-200">
+                    <p className="font-bold flex items-center gap-1.5 mb-1">
+                      <span>💡</span> No verification code is required!
+                    </p>
+                    <p>
+                      You do not need to enter any code. Your application is already confirmed and in the administrator review queue.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-800 p-5 text-left space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                    <span>⏳</span> What Happens Next?
+                  </h4>
+                  <p className="text-xs text-indigo-950 dark:text-indigo-200 leading-relaxed">
+                    Your <strong>{pendingInfo?.role ? (pendingInfo.role.charAt(0).toUpperCase() + pendingInfo.role.slice(1)) : 'Instructor'} registration request</strong> is waiting for administrator review. Our school administrator reviews and approves accounts to ensure a safe learning environment.
+                  </p>
+                  <p className="text-xs text-indigo-950 dark:text-indigo-200 leading-relaxed font-semibold">
+                    As soon as the administrator approves your account, you will receive an approval email notification and can log in immediately.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                  <Link
+                    to="/login"
+                    className="flex-1 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-3.5 font-bold text-white shadow-lg shadow-indigo-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all text-center text-sm"
+                  >
+                    Go to Sign In
+                  </Link>
+                  <Link
+                    to="/"
+                    className="flex-1 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-6 py-3.5 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all text-center text-sm"
+                  >
+                    Return Home
+                  </Link>
+                </div>
               </div>
             ) : success ? (
               <div className="text-center py-6">
@@ -152,7 +260,7 @@ export default function VerifyEmail() {
 
                 <Link
                   to="/login"
-                  className="w-full inline-block rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-3.5 font-bold text-white shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  className="w-full inline-block rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-3.5 font-bold text-white shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all text-center"
                 >
                   Return to Login
                 </Link>
@@ -215,9 +323,9 @@ export default function VerifyEmail() {
                   </button>
                 </form>
 
-                {/* Resend link */}
-                <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                {/* Resend or check status link */}
+                <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-center space-y-2">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Didn't receive the verification code? Check your spam folder or request a new one:
                   </p>
                   <button
@@ -226,7 +334,7 @@ export default function VerifyEmail() {
                     disabled={resending}
                     className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-50"
                   >
-                    {resending ? 'Sending email...' : 'Resend Verification Email'}
+                    {resending ? 'Checking & Sending...' : 'Resend Verification Email'}
                   </button>
                 </div>
               </div>

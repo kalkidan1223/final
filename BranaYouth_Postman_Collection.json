@@ -1,0 +1,982 @@
+{
+  "info": {
+    "name": "BranaYouth API",
+    "_postman_id": "branaYouth-collection-v1",
+    "description": "Complete API collection for BranaYouth Learning Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "instructor_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "parent_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "student_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{admin_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+
+    {
+      "name": "🏥 Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('admin_token', res.access_token);",
+                  "  console.log('Admin token saved!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@brana.edu\",\n  \"password\": \"Admin1234\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api","auth","login"] }
+          }
+        },
+        {
+          "name": "Login as Instructor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('instructor_token', res.access_token);",
+                  "  console.log('Instructor token saved!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"stu12@gmail.com\",\n  \"password\": \"YOUR_PASSWORD_HERE\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api","auth","login"] }
+          }
+        },
+        {
+          "name": "Login as Parent",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('parent_token', res.access_token);",
+                  "  console.log('Parent token saved!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"parent@gmail.com\",\n  \"password\": \"YOUR_PASSWORD_HERE\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api","auth","login"] }
+          }
+        },
+        {
+          "name": "Login as Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('student_token', res.access_token);",
+                  "  console.log('Student token saved!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"student@gmail.com\",\n  \"password\": \"YOUR_PASSWORD_HERE\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api","auth","login"] }
+          }
+        },
+        {
+          "name": "Get Current User (me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/auth/me", "host": ["{{base_url}}"], "path": ["api","auth","me"] }
+          }
+        },
+        {
+          "name": "Register Parent",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Tigist Alemu\",\n  \"email\": \"tigist@gmail.com\",\n  \"password\": \"Parent1234!\",\n  \"phone\": \"0911223344\",\n  \"date_of_birth\": \"1985-06-15\",\n  \"gender\": \"female\",\n  \"nationality\": \"Ethiopian\",\n  \"occupation\": \"Teacher\",\n  \"relationship_to_child\": \"Mother\",\n  \"country\": \"Ethiopia\",\n  \"region\": \"Addis Ababa\",\n  \"city\": \"Addis Ababa\",\n  \"terms_agreed\": true,\n  \"guardian_confirmed\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/register/parent", "host": ["{{base_url}}"], "path": ["api","auth","register","parent"] }
+          }
+        },
+        {
+          "name": "Register Instructor",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Abebe Kebede\",\n  \"email\": \"abebe@school.com\",\n  \"password\": \"Instructor1!\",\n  \"phone\": \"0912345678\",\n  \"specialization\": \"Mathematics\",\n  \"education_level\": \"Bachelor of Education\",\n  \"years_of_experience\": 5,\n  \"bio\": \"Experienced math teacher.\",\n  \"terms_agreed\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/register/instructor", "host": ["{{base_url}}"], "path": ["api","auth","register","instructor"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/auth/logout", "host": ["{{base_url}}"], "path": ["api","auth","logout"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👑 Admin",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/dashboard", "host": ["{{base_url}}"], "path": ["api","admin","dashboard"] }
+          }
+        },
+        {
+          "name": "Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/analytics", "host": ["{{base_url}}"], "path": ["api","admin","analytics"] }
+          }
+        },
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/users", "host": ["{{base_url}}"], "path": ["api","admin","users"] }
+          }
+        },
+        {
+          "name": "List All Students",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/students", "host": ["{{base_url}}"], "path": ["api","admin","students"] }
+          }
+        },
+        {
+          "name": "List All Parents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/parents", "host": ["{{base_url}}"], "path": ["api","admin","parents"] }
+          }
+        },
+        {
+          "name": "List All Instructors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/instructors", "host": ["{{base_url}}"], "path": ["api","admin","instructors"] }
+          }
+        },
+        {
+          "name": "Create Instructor (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Abebe Kebede\",\n  \"email\": \"abebe@school.com\",\n  \"password\": \"Instructor1!\",\n  \"phone\": \"0912345678\",\n  \"qualification\": \"Bachelor of Education\",\n  \"specialty\": \"Mathematics\",\n  \"bio\": \"Experienced math teacher with 5 years in primary education.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/admin/instructors", "host": ["{{base_url}}"], "path": ["api","admin","instructors"] }
+          }
+        },
+        {
+          "name": "Create Parent (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Tigist Alemu\",\n  \"email\": \"tigist@gmail.com\",\n  \"password\": \"Parent1234!\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/admin/parents", "host": ["{{base_url}}"], "path": ["api","admin","parents"] }
+          }
+        },
+        {
+          "name": "List All Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/courses", "host": ["{{base_url}}"], "path": ["api","admin","courses"] }
+          }
+        },
+        {
+          "name": "List All Lessons",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/lessons", "host": ["{{base_url}}"], "path": ["api","admin","lessons"] }
+          }
+        },
+        {
+          "name": "List All Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/progress", "host": ["{{base_url}}"], "path": ["api","admin","progress"] }
+          }
+        },
+        {
+          "name": "Admin Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/notifications", "host": ["{{base_url}}"], "path": ["api","admin","notifications"] }
+          }
+        },
+        {
+          "name": "Reports",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/reports", "host": ["{{base_url}}"], "path": ["api","admin","reports"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "✅ Admin Approval",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "List Parent Registration Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/registration-requests", "host": ["{{base_url}}"], "path": ["api","admin","approval","registration-requests"] }
+          }
+        },
+        {
+          "name": "Approve Parent Registration",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/registration-requests/:id/approve", "host": ["{{base_url}}"], "path": ["api","admin","approval","registration-requests",":id","approve"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Reject Parent Registration",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/registration-requests/:id/reject", "host": ["{{base_url}}"], "path": ["api","admin","approval","registration-requests",":id","reject"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "List Student Registration Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/student-registration-requests", "host": ["{{base_url}}"], "path": ["api","admin","approval","student-registration-requests"] }
+          }
+        },
+        {
+          "name": "Approve Student Registration",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/student-registration-requests/:id/approve", "host": ["{{base_url}}"], "path": ["api","admin","approval","student-registration-requests",":id","approve"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "List Instructor Registration Requests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/instructor-registration-requests", "host": ["{{base_url}}"], "path": ["api","admin","approval","instructor-registration-requests"] }
+          }
+        },
+        {
+          "name": "Approve Instructor Registration",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/instructor-registration-requests/:id/approve", "host": ["{{base_url}}"], "path": ["api","admin","approval","instructor-registration-requests",":id","approve"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/approval/audit-logs", "host": ["{{base_url}}"], "path": ["api","admin","approval","audit-logs"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👨‍🏫 Instructor",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{instructor_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/dashboard", "host": ["{{base_url}}"], "path": ["api","instructor","dashboard"] }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/profile", "host": ["{{base_url}}"], "path": ["api","instructor","profile"] }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Abebe Kebede\",\n  \"bio\": \"Updated bio here\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/instructor/profile", "host": ["{{base_url}}"], "path": ["api","instructor","profile"] }
+          }
+        },
+        {
+          "name": "List My Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/courses", "host": ["{{base_url}}"], "path": ["api","instructor","courses"] }
+          }
+        },
+        {
+          "name": "Get Course Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/courses/:id", "host": ["{{base_url}}"], "path": ["api","instructor","courses",":id"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Get Students in Course",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/courses/:id/students", "host": ["{{base_url}}"], "path": ["api","instructor","courses",":id","students"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "List My Lessons",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/lessons", "host": ["{{base_url}}"], "path": ["api","instructor","lessons"] }
+          }
+        },
+        {
+          "name": "List My Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/activities", "host": ["{{base_url}}"], "path": ["api","instructor","activities"] }
+          }
+        },
+        {
+          "name": "List My Quizzes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/quizzes", "host": ["{{base_url}}"], "path": ["api","instructor","quizzes"] }
+          }
+        },
+        {
+          "name": "Student Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/progress", "host": ["{{base_url}}"], "path": ["api","instructor","progress"] }
+          }
+        },
+        {
+          "name": "Submissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/submissions", "host": ["{{base_url}}"], "path": ["api","instructor","submissions"] }
+          }
+        },
+        {
+          "name": "Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/notifications", "host": ["{{base_url}}"], "path": ["api","instructor","notifications"] }
+          }
+        },
+        {
+          "name": "Results Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/results/overview", "host": ["{{base_url}}"], "path": ["api","instructor","results","overview"] }
+          }
+        },
+        {
+          "name": "Activity Submissions Results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/results/activity-submissions", "host": ["{{base_url}}"], "path": ["api","instructor","results","activity-submissions"] }
+          }
+        },
+        {
+          "name": "Quiz Results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/results/quiz-results", "host": ["{{base_url}}"], "path": ["api","instructor","results","quiz-results"] }
+          }
+        },
+        {
+          "name": "Student Questions (Inbox)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/questions", "host": ["{{base_url}}"], "path": ["api","instructor","questions"] }
+          }
+        },
+        {
+          "name": "Answer a Question",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answer\": \"Great question! The answer is...\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/instructor/questions/:questionId/answer", "host": ["{{base_url}}"], "path": ["api","instructor","questions",":questionId","answer"], "variable": [{ "key": "questionId", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Messages - Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/instructor/messages/conversations", "host": ["{{base_url}}"], "path": ["api","instructor","messages","conversations"] }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_id\": \"2\",\n  \"content\": \"Hello, how are you?\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/instructor/messages", "host": ["{{base_url}}"], "path": ["api","instructor","messages"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📚 Courses",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{instructor_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "List All Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/courses", "host": ["{{base_url}}"], "path": ["api","courses"] }
+          }
+        },
+        {
+          "name": "Get Single Course",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/courses/:id", "host": ["{{base_url}}"], "path": ["api","courses",":id"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Create Course",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Introduction to Math\",\n  \"description\": \"Basic arithmetic for KG1 students\",\n  \"grade_level_id\": 1,\n  \"subject_id\": 1\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/courses", "host": ["{{base_url}}"], "path": ["api","courses"] }
+          }
+        },
+        {
+          "name": "Update Course Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"published\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/courses/:id/status", "host": ["{{base_url}}"], "path": ["api","courses",":id","status"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "List Lessons in Course",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/courses/:courseId/lessons", "host": ["{{base_url}}"], "path": ["api","courses",":courseId","lessons"], "variable": [{ "key": "courseId", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Create Lesson in Course",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Lesson 1 - Numbers 1 to 10\",\n  \"description\": \"Learning to count from 1 to 10\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/courses/:courseId/lessons", "host": ["{{base_url}}"], "path": ["api","courses",":courseId","lessons"], "variable": [{ "key": "courseId", "value": "1" }] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👨‍👩‍👧 Parent",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{parent_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/parent/dashboard-stats", "host": ["{{base_url}}"], "path": ["api","parent","dashboard-stats"] }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/parent/profile", "host": ["{{base_url}}"], "path": ["api","parent","profile"] }
+          }
+        },
+        {
+          "name": "Get My Children",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/parent/children", "host": ["{{base_url}}"], "path": ["api","parent","children"] }
+          }
+        },
+        {
+          "name": "Register a Child",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Liya Alemu\",\n  \"date_of_birth\": \"2018-03-10\",\n  \"gender\": \"female\",\n  \"grade_level\": \"KG1\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/parent/children", "host": ["{{base_url}}"], "path": ["api","parent","children"] }
+          }
+        },
+        {
+          "name": "Child Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/parent/children/:id/courses", "host": ["{{base_url}}"], "path": ["api","parent","children",":id","courses"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Child Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/parent/children/:id/progress", "host": ["{{base_url}}"], "path": ["api","parent","children",":id","progress"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Child Achievements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/parent/children/:id/achievements", "host": ["{{base_url}}"], "path": ["api","parent","children",":id","achievements"], "variable": [{ "key": "id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/parent/notifications", "host": ["{{base_url}}"], "path": ["api","parent","notifications"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👦 Child (Student)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{student_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/dashboard", "host": ["{{base_url}}"], "path": ["api","child","dashboard"] }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/profile", "host": ["{{base_url}}"], "path": ["api","child","profile"] }
+          }
+        },
+        {
+          "name": "My Courses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/courses", "host": ["{{base_url}}"], "path": ["api","child","courses"] }
+          }
+        },
+        {
+          "name": "Get Course",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/courses/:courseId", "host": ["{{base_url}}"], "path": ["api","child","courses",":courseId"], "variable": [{ "key": "courseId", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Get Lesson",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/lessons/:lessonId", "host": ["{{base_url}}"], "path": ["api","child","lessons",":lessonId"], "variable": [{ "key": "lessonId", "value": "1" }] }
+          }
+        },
+        {
+          "name": "My Quizzes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/quizzes", "host": ["{{base_url}}"], "path": ["api","child","quizzes"] }
+          }
+        },
+        {
+          "name": "Start Quiz",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/quizzes/:quizId/start", "host": ["{{base_url}}"], "path": ["api","child","quizzes",":quizId","start"], "variable": [{ "key": "quizId", "value": "1" }] }
+          }
+        },
+        {
+          "name": "Submit Quiz",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    { \"question_id\": 1, \"selected_option\": \"A\" },\n    { \"question_id\": 2, \"selected_option\": \"C\" }\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/child/quizzes/:quizId/submit", "host": ["{{base_url}}"], "path": ["api","child","quizzes",":quizId","submit"], "variable": [{ "key": "quizId", "value": "1" }] }
+          }
+        },
+        {
+          "name": "My Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/activities", "host": ["{{base_url}}"], "path": ["api","child","activities"] }
+          }
+        },
+        {
+          "name": "My Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/progress", "host": ["{{base_url}}"], "path": ["api","child","progress"] }
+          }
+        },
+        {
+          "name": "My Achievements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/achievements", "host": ["{{base_url}}"], "path": ["api","child","achievements"] }
+          }
+        },
+        {
+          "name": "Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/notifications", "host": ["{{base_url}}"], "path": ["api","child","notifications"] }
+          }
+        },
+        {
+          "name": "Ask Teacher a Question",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lesson_id\": 1,\n  \"question_text\": \"I don't understand this part of the lesson.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/child/questions", "host": ["{{base_url}}"], "path": ["api","child","questions"] }
+          }
+        },
+        {
+          "name": "Results Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/child/results/summary", "host": ["{{base_url}}"], "path": ["api","child","results","summary"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📊 Grades & Subjects",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "List Grade Levels",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/grades", "host": ["{{base_url}}"], "path": ["api","grades"] }
+          }
+        },
+        {
+          "name": "List Subjects",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/subjects", "host": ["{{base_url}}"], "path": ["api","subjects"] }
+          }
+        },
+        {
+          "name": "Create Grade Level",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Kindergarten 1\",\n  \"code\": \"KG1\",\n  \"order_index\": 1\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/grades", "host": ["{{base_url}}"], "path": ["api","grades"] }
+          }
+        },
+        {
+          "name": "Create Subject",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mathematics\",\n  \"code\": \"MATH\",\n  \"description\": \"Basic math for early learners\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/subjects", "host": ["{{base_url}}"], "path": ["api","subjects"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "💬 Messages",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "Get Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/messages/conversations", "host": ["{{base_url}}"], "path": ["api","messages","conversations"] }
+          }
+        },
+        {
+          "name": "Get Conversation with User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/messages/conversations/:otherUserId", "host": ["{{base_url}}"], "path": ["api","messages","conversations",":otherUserId"], "variable": [{ "key": "otherUserId", "value": "2" }] }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"receiver_id\": \"2\",\n  \"content\": \"Hello from admin!\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/messages", "host": ["{{base_url}}"], "path": ["api","messages"] }
+          }
+        },
+        {
+          "name": "Get Contacts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/messages/contacts", "host": ["{{base_url}}"], "path": ["api","messages","contacts"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📢 Announcements",
+      "item": [
+        {
+          "name": "Get Announcements (All Users)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/announcements", "host": ["{{base_url}}"], "path": ["api","announcements"] }
+          }
+        }
+      ]
+    }
+
+  ]
+}

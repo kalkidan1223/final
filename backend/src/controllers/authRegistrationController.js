@@ -449,6 +449,30 @@ async function verifyEmail(req, res, next) {
     }
 
     if (!tokenResult || tokenResult.rows.length === 0) {
+      if (email) {
+        const [instCheck, parentCheck, userCheck] = await Promise.all([
+          query('SELECT full_name, email_verified, status FROM instructor_registration_requests WHERE LOWER(email) = $1', [email]),
+          query('SELECT full_name, email_verified, status FROM registration_requests WHERE LOWER(email) = $1', [email]),
+          query('SELECT full_name, email_verified, is_active, role FROM users WHERE LOWER(email) = $1', [email]),
+        ]);
+        if (
+          instCheck.rows[0]?.email_verified ||
+          parentCheck.rows[0]?.email_verified ||
+          userCheck.rows[0]?.email_verified
+        ) {
+          const name = instCheck.rows[0]?.full_name || parentCheck.rows[0]?.full_name || userCheck.rows[0]?.full_name || 'User';
+          const role = instCheck.rows[0] ? 'instructor' : parentCheck.rows[0] ? 'parent' : (userCheck.rows[0]?.role || 'user');
+          return res.json({
+            message: 'Your email address has already been verified and your application is awaiting administrator approval.',
+            already_verified: true,
+            email_verified: true,
+            status: 'pending',
+            role,
+            full_name: name,
+            email
+          });
+        }
+      }
       return res.status(400).json({ error: 'Invalid or expired verification link or code. Please check your code or request a new one.' });
     }
 
@@ -549,19 +573,43 @@ async function resendVerificationToken(req, res, next) {
       fullName = parentReq.rows[0].full_name;
       found = true;
       if (parentReq.rows[0].email_verified) {
-        return res.json({ message: 'Your email has already been verified and your registration is awaiting administrator approval.' });
+        return res.json({
+          message: 'Your email has already been verified and your registration is awaiting administrator approval.',
+          already_verified: true,
+          email_verified: true,
+          status: 'pending',
+          role: 'parent',
+          full_name: fullName,
+          email
+        });
       }
     } else if (instReq.rows.length > 0) {
       fullName = instReq.rows[0].full_name;
       found = true;
       if (instReq.rows[0].email_verified) {
-        return res.json({ message: 'Your email has already been verified and your application is awaiting administrator approval.' });
+        return res.json({
+          message: 'Your email has already been verified and your application is awaiting administrator approval.',
+          already_verified: true,
+          email_verified: true,
+          status: 'pending',
+          role: 'instructor',
+          full_name: fullName,
+          email
+        });
       }
     } else if (userReq.rows.length > 0) {
       fullName = userReq.rows[0].full_name;
       found = true;
       if (userReq.rows[0].email_verified) {
-        return res.json({ message: 'Your email has already been verified.' });
+        return res.json({
+          message: 'Your email has already been verified.',
+          already_verified: true,
+          email_verified: true,
+          status: 'approved',
+          role: userReq.rows[0].role || 'user',
+          full_name: fullName,
+          email
+        });
       }
     }
 
@@ -587,6 +635,67 @@ async function resendVerificationToken(req, res, next) {
     }).catch(err => console.error('Failed to send verification email:', err));
 
     res.json({ message: 'A new verification email has been sent. Please check your inbox.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function checkRegistrationStatus(req, res, next) {
+  try {
+    const email = (req.query?.email || req.body?.email || '').toLowerCase().trim();
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const [userRes, instRes, parentRes] = await Promise.all([
+      query('SELECT id, full_name, role, is_active, email_verified FROM users WHERE LOWER(email) = $1', [email]),
+      query('SELECT id, full_name, status, email_verified FROM instructor_registration_requests WHERE LOWER(email) = $1', [email]),
+      query('SELECT id, full_name, status, email_verified FROM registration_requests WHERE LOWER(email) = $1', [email]),
+    ]);
+
+    if (userRes.rows.length > 0 && userRes.rows[0].is_active) {
+      return res.json({
+        exists: true,
+        status: 'approved',
+        email_verified: true,
+        role: userRes.rows[0].role,
+        full_name: userRes.rows[0].full_name,
+        email,
+        message: 'Your account is active. You can log in immediately.'
+      });
+    }
+
+    if (instRes.rows.length > 0) {
+      const inst = instRes.rows[0];
+      return res.json({
+        exists: true,
+        status: inst.status,
+        email_verified: !!inst.email_verified,
+        role: 'instructor',
+        full_name: inst.full_name,
+        email,
+        message: inst.email_verified
+          ? 'Your email has been verified. Your application is awaiting administrator approval.'
+          : 'Please check your email for the verification code to complete your registration.'
+      });
+    }
+
+    if (parentRes.rows.length > 0) {
+      const parent = parentRes.rows[0];
+      return res.json({
+        exists: true,
+        status: parent.status,
+        email_verified: !!parent.email_verified,
+        role: 'parent',
+        full_name: parent.full_name,
+        email,
+        message: parent.email_verified
+          ? 'Your email has been verified. Your application is awaiting administrator approval.'
+          : 'Please check your email for the verification code to complete your registration.'
+      });
+    }
+
+    return res.json({ exists: false, message: 'No registration request found for this email.' });
   } catch (err) {
     next(err);
   }
@@ -780,5 +889,6 @@ module.exports = {
   sendVerificationToken,
   verifyEmail,
   resendVerificationToken,
+  checkRegistrationStatus,
   logAudit,
 };

@@ -20,11 +20,13 @@ router.get('/me', requireAuth, authController.me);
 router.post('/forgot-password', authRegistrationController.forgotPassword);
 router.post('/reset-password', authRegistrationController.resetPassword);
 
-// --- Email Verification ---
+// --- Email Verification & Registration Status ---
 router.post('/verify-email', requireAuth, authRegistrationController.sendVerificationToken);
 router.post('/verify-email/confirm', authRegistrationController.verifyEmail);
 router.get('/verify-email/confirm', authRegistrationController.verifyEmail);
 router.post('/verify-email/resend', authRegistrationController.resendVerificationToken);
+router.get('/registration-status', authRegistrationController.checkRegistrationStatus);
+router.post('/registration-status', authRegistrationController.checkRegistrationStatus);
 
 // --- Google OAuth ---
 const REFRESH_COOKIE_NAME = 'refresh_token';

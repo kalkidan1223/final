@@ -11,28 +11,43 @@ const isEmailConfigured = () => {
 // Create reusable transporter (only if configured)
 let transporter = null;
 
-if (isEmailConfigured()) {
-  transporter = nodemailer.createTransport({
+function createTransporter() {
+  const isGmail = (process.env.SMTP_HOST || '').includes('gmail.com') ||
+                  (process.env.SMTP_USER || '').endsWith('@gmail.com');
+
+  if (isGmail) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+  }
+
+  const isSecure = process.env.SMTP_SECURE === 'true' || parseInt(process.env.SMTP_PORT) === 465;
+  return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    port: parseInt(process.env.SMTP_PORT) || (isSecure ? 465 : 587),
+    secure: isSecure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    tls: {
+      rejectUnauthorized: false
+    }
   });
+}
+
+if (isEmailConfigured()) {
+  transporter = createTransporter();
 } else {
   console.warn('⚠️  Email service not configured. Emails will not be sent.');
   console.warn('   Set SMTP_USER and SMTP_PASS in .env to enable emails.');
-}
-
-// Verify connection configuration (only if configured)
-if (isEmailConfigured() && transporter) {
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('❌ Email service configuration error:', error.message);
-    }
-  });
 }
 
 /**
@@ -40,9 +55,13 @@ if (isEmailConfigured() && transporter) {
  */
 async function sendEmail({ to, subject, html, text }) {
   try {
-    if (!isEmailConfigured() || !transporter) {
+    if (!isEmailConfigured()) {
       console.warn('⚠️  Email not sent (SMTP not configured):', subject, 'to:', to);
       return { success: false, error: 'SMTP not configured' };
+    }
+
+    if (!transporter) {
+      transporter = createTransporter();
     }
 
     const mailOptions = {
@@ -53,7 +72,23 @@ async function sendEmail({ to, subject, html, text }) {
       html,
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    let info;
+    try {
+      info = await transporter.sendMail(mailOptions);
+    } catch (primaryErr) {
+      console.warn('⚠️ Primary SMTP attempt failed:', primaryErr.message, '— Attempting fallback...');
+      const fallbackTransporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+        tls: { rejectUnauthorized: false }
+      });
+      info = await fallbackTransporter.sendMail(mailOptions);
+      transporter = fallbackTransporter;
+    }
+
     console.log('✅ Email sent:', info.messageId, 'to:', to);
     return { success: true, messageId: info.messageId };
   } catch (error) {
